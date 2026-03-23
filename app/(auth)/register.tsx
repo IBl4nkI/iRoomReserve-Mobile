@@ -25,6 +25,7 @@ export default function RegisterScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
   const router = useRouter();
 
   const roles = [
@@ -93,8 +94,13 @@ export default function RegisterScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}>
 
         {/* Header */}
           <View style={styles.header}>
@@ -122,6 +128,12 @@ export default function RegisterScreen() {
               </TouchableOpacity>
             ))}
           </View>
+
+          {successMessage ? (
+            <View style={styles.successBox}>
+              <Text style={styles.successText}>{successMessage}</Text>
+            </View>
+          ) : null}
 
           {errorMessage ? (
             <View style={styles.errorBox}>
@@ -247,4 +259,6 @@ const styles = StyleSheet.create({
   loginText: { color: '#ffffff66', fontSize: 13 },
   loginLink: { color: '#e11d48', fontWeight: 'bold', fontSize: 13 },
   footer: { textAlign: 'center', color: '#ffffff4d', fontSize: 11, paddingVertical: 16 },
+  successBox: { backgroundColor: '#22c55e20', borderWidth: 1, borderColor: '#22c55e50', borderRadius: 12, padding: 12, marginBottom: 12 },
+  successText: { color: '#86efac', fontSize: 13 },
 });
