@@ -73,6 +73,7 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
+        
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.appName}>iRoomReserve</Text>
@@ -159,7 +160,7 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0f172a' },
   scroll: { flexGrow: 1, justifyContent: 'center', padding: 16 },
-  header: { alignItems: 'center', marginBottom: 32 },
+  header: { alignItems: 'center', marginBottom: 16 },
   appName: { fontSize: 20, fontWeight: 'bold', color: '#ffffff' },
   subtitle: { fontSize: 13, color: '#ffffff99' },
   card: { backgroundColor: '#ffffff0d', borderRadius: 16, padding: 24, borderWidth: 1, borderColor: '#ffffff1a' },
