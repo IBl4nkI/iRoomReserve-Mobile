@@ -11,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import GoogleIcon from '@/components/GoogleIcon';
 import {
   loginWithEmail,
   getAuthErrorMessage,
@@ -166,7 +167,12 @@ export default function LoginScreen() {
             onPress={() => promptAsync()}
             disabled={!request}
           >
-            <Text style={styles.googleButtonText}>Continue with Google</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <GoogleIcon width={20} height={20} />
+              <Text style={[styles.googleButtonText, { marginLeft: 10 }]}>
+                Continue with Google
+              </Text>
+            </View>
           </TouchableOpacity>
 
           <View style={styles.registerRow}>
