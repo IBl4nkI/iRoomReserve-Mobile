@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "iRoomReserve-Mobile",
-    "slug": "iRoomReserve-Mobile",
+    "name": "iRoomReserve",
+    "slug": "iroomreserve-mobile",
     "scheme": "iroomreserve",
     "version": "1.0.0",
     "orientation": "portrait",

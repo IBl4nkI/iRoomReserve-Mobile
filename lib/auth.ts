@@ -188,6 +188,14 @@ export async function saveUserProfile(
   );
 }
 
+export async function resendVerificationEmail(email: string, password: string) {
+  const credential = await signInWithEmailAndPassword(auth, email, password);
+  if (!credential.user.emailVerified) {
+    await sendEmailVerification(credential.user);
+    await signOut(auth);
+  }
+}
+
 export function getAuthErrorMessage(code: string): string {
   const safeMessages: Record<string, string> = {
     "auth/email-already-in-use": "This email is already registered.",

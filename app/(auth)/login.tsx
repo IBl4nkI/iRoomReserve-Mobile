@@ -11,7 +11,14 @@ import {
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { loginWithEmail, getAuthErrorMessage, getUserProfile, useGoogleSignIn, handleGoogleSignInResponse } from '@/lib/auth';
+import {
+  loginWithEmail,
+  getAuthErrorMessage,
+  getUserProfile,
+  useGoogleSignIn,
+  handleGoogleSignInResponse,
+  resendVerificationEmail,
+ } from '@/lib/auth';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -19,6 +26,7 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [showResendButton, setShowResendButton] = useState(false);
   const router = useRouter();
 
   const { request, response, promptAsync } = useGoogleSignIn();
@@ -64,9 +72,23 @@ export default function LoginScreen() {
       }
     } catch (err: unknown) {
       const firebaseError = err as { code?: string };
+      const code = firebaseError.code || '';
+      setErrorMessage(getAuthErrorMessage(code));
+      setShowResendButton(code === 'auth/email-not-verified');
       setErrorMessage(getAuthErrorMessage(firebaseError.code || ''));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    try {
+      await resendVerificationEmail(email, password);
+      setShowResendButton(false);
+      setErrorMessage('Verification email resent! Check your inbox or spam folder.');
+    } catch (err: unknown) {
+      const firebaseError = err as { code?: string };
+      setErrorMessage(getAuthErrorMessage(firebaseError.code || ''));
     }
   };
 
@@ -87,6 +109,11 @@ export default function LoginScreen() {
           {errorMessage ? (
             <View style={styles.errorBox}>
               <Text style={styles.errorText}>{errorMessage}</Text>
+              {showResendButton && (
+                <TouchableOpacity onPress={handleResendVerification} style={styles.resendButton}>
+                  <Text style={styles.resendText}>Resend verification email</Text>
+                </TouchableOpacity>
+              )}
             </View>
           ) : null}
 
@@ -167,6 +194,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: 'bold', color: '#ffffff', textAlign: 'center', marginBottom: 20 },
   errorBox: { backgroundColor: '#ef444420', borderWidth: 1, borderColor: '#ef444450', borderRadius: 12, padding: 12, marginBottom: 12 },
   errorText: { color: '#fca5a5', fontSize: 13 },
+  resendButton: { marginTop: 8 },
+  resendText: { color: '#e11d48', fontWeight: 'bold', fontSize: 13 },
   label: { fontSize: 13, fontWeight: 'bold', color: '#ffffffb3', marginBottom: 6 },
   input: { backgroundColor: '#ffffff0d', borderWidth: 1, borderColor: '#ffffff1a', borderRadius: 12, padding: 14, color: '#ffffff', marginBottom: 14 },
   passwordContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff0d', borderWidth: 1, borderColor: '#ffffff1a', borderRadius: 12, paddingHorizontal: 14, marginBottom: 8 },
