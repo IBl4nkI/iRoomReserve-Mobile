@@ -29,7 +29,8 @@
     },
     "plugins": [
       "expo-web-browser",
-      "expo-router"
+      "expo-router",
+      "expo-font"
     ]
   }
 }

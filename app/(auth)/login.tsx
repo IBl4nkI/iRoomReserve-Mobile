@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import GoogleIcon from '@/components/GoogleIcon';
+import { colors, fonts } from '@/constants/theme';
 import {
   loginWithEmail,
   getAuthErrorMessage,
@@ -122,7 +123,7 @@ export default function LoginScreen() {
           <TextInput
             style={styles.input}
             placeholder="Enter your email"
-            placeholderTextColor="#ffffff40"
+            placeholderTextColor={colors.mutedText}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -134,7 +135,7 @@ export default function LoginScreen() {
             <TextInput
               style={styles.passwordInput}
               placeholder="Enter your password"
-              placeholderTextColor="#ffffff40"
+              placeholderTextColor={colors.mutedText}
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
@@ -191,33 +192,33 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a' },
+  container: { flex: 1, backgroundColor: colors.background },
   scroll: { flexGrow: 1, justifyContent: 'center', padding: 16 },
   header: { alignItems: 'center', marginBottom: 16 },
-  appName: { fontSize: 20, fontWeight: 'bold', color: '#ffffff' },
-  subtitle: { fontSize: 13, color: '#ffffff99' },
-  card: { backgroundColor: '#ffffff0d', borderRadius: 16, padding: 24, borderWidth: 1, borderColor: '#ffffff1a' },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#ffffff', textAlign: 'center', marginBottom: 20 },
-  errorBox: { backgroundColor: '#ef444420', borderWidth: 1, borderColor: '#ef444450', borderRadius: 12, padding: 12, marginBottom: 12 },
-  errorText: { color: '#fca5a5', fontSize: 13 },
+  appName: { fontSize: 20, fontFamily: fonts.bold, color: colors.primary },
+  subtitle: { fontSize: 13, fontFamily: fonts.regular, color: colors.secondary },
+  card: { backgroundColor: colors.surface, borderRadius: 16, padding: 24, borderWidth: 1, borderColor: colors.border },
+  title: { fontSize: 24, fontFamily: fonts.bold, color: colors.text, textAlign: 'center', marginBottom: 20 },
+  errorBox: { backgroundColor: colors.dangerBackground, borderWidth: 1, borderColor: colors.dangerBorder, borderRadius: 12, padding: 12, marginBottom: 12 },
+  errorText: { color: colors.dangerText, fontSize: 13, fontFamily: fonts.regular },
   resendButton: { marginTop: 8 },
-  resendText: { color: '#e11d48', fontWeight: 'bold', fontSize: 13 },
-  label: { fontSize: 13, fontWeight: 'bold', color: '#ffffffb3', marginBottom: 6 },
-  input: { backgroundColor: '#ffffff0d', borderWidth: 1, borderColor: '#ffffff1a', borderRadius: 12, padding: 14, color: '#ffffff', marginBottom: 14 },
-  passwordContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff0d', borderWidth: 1, borderColor: '#ffffff1a', borderRadius: 12, paddingHorizontal: 14, marginBottom: 8 },
-  passwordInput: { flex: 1, padding: 14, color: '#ffffff' },
-  eyeIcon: { fontSize: 18, padding: 4 },
+  resendText: { color: colors.primary, fontFamily: fonts.bold, fontSize: 13 },
+  label: { fontSize: 13, fontFamily: fonts.bold, color: colors.text, marginBottom: 6 },
+  input: { backgroundColor: colors.subtleBackground, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 14, color: colors.text, marginBottom: 14, fontFamily: fonts.regular },
+  passwordContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.subtleBackground, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingRight: 14, marginBottom: 8 },
+  passwordInput: { flex: 1, padding: 14, color: colors.text, fontFamily: fonts.regular },
+  eyeIcon: { fontSize: 18, padding: 4, marginLeft: 8 },
   forgotPassword: { alignItems: 'flex-end', marginBottom: 16 },
-  forgotPasswordText: { fontSize: 13, color: '#ffffff80', fontWeight: 'bold' },
-  primaryButton: { backgroundColor: '#e11d48', borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 16 },
-  primaryButtonText: { color: '#ffffff', fontWeight: 'bold', fontSize: 15 },
+  forgotPasswordText: { fontSize: 13, color: colors.secondary, fontFamily: fonts.bold },
+  primaryButton: { backgroundColor: colors.primary, borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 16 },
+  primaryButtonText: { color: colors.white, fontFamily: fonts.bold, fontSize: 15 },
   divider: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: '#ffffff1a' },
-  dividerText: { color: '#ffffff4d', fontSize: 13, marginHorizontal: 8 },
-  googleButton: { backgroundColor: '#ffffff0d', borderWidth: 1, borderColor: '#ffffff26', borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 16 },
-  googleButtonText: { color: '#ffffffcc', fontWeight: 'bold', fontSize: 15 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { color: colors.secondary, fontSize: 13, marginHorizontal: 8, fontFamily: fonts.regular },
+  googleButton: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 16 },
+  googleButtonText: { color: colors.text, fontFamily: fonts.bold, fontSize: 15 },
   registerRow: { flexDirection: 'row', justifyContent: 'center' },
-  registerText: { color: '#ffffff66', fontSize: 13 },
-  registerLink: { color: '#e11d48', fontWeight: 'bold', fontSize: 13 },
-  footer: { textAlign: 'center', color: '#ffffff4d', fontSize: 11, paddingVertical: 16 },
+  registerText: { color: colors.secondary, fontSize: 13, fontFamily: fonts.regular },
+  registerLink: { color: colors.primary, fontFamily: fonts.bold, fontSize: 13 },
+  footer: { textAlign: 'center', color: colors.secondary, fontSize: 11, paddingVertical: 16, fontFamily: fonts.regular },
 });

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { registerWithEmail, getAuthErrorMessage } from '@/lib/auth';
+import { colors, fonts } from '@/constants/theme';
 
 export default function RegisterScreen() {
   const [selectedRole, setSelectedRole] = useState('student');
@@ -25,7 +26,7 @@ export default function RegisterScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const [successMessage] = useState('');
   const router = useRouter();
 
   const roles = [
@@ -148,7 +149,7 @@ export default function RegisterScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="First name"
-                placeholderTextColor="#ffffff40"
+                placeholderTextColor={colors.mutedText}
                 value={firstName}
                 onChangeText={setFirstName}
               />
@@ -158,7 +159,7 @@ export default function RegisterScreen() {
               <TextInput
                 style={styles.input}
                 placeholder="Last name"
-                placeholderTextColor="#ffffff40"
+                placeholderTextColor={colors.mutedText}
                 value={lastName}
                 onChangeText={setLastName}
               />
@@ -169,7 +170,7 @@ export default function RegisterScreen() {
           <TextInput
             style={styles.input}
             placeholder="Enter your email"
-            placeholderTextColor="#ffffff40"
+            placeholderTextColor={colors.mutedText}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -181,7 +182,7 @@ export default function RegisterScreen() {
             <TextInput
               style={styles.passwordInput}
               placeholder="Create a password"
-              placeholderTextColor="#ffffff40"
+              placeholderTextColor={colors.mutedText}
               value={password}
               onChangeText={setPassword}
               secureTextEntry={!showPassword}
@@ -197,7 +198,7 @@ export default function RegisterScreen() {
             <TextInput
               style={styles.passwordInput}
               placeholder="Confirm your password"
-              placeholderTextColor="#ffffff40"
+              placeholderTextColor={colors.mutedText}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               secureTextEntry={!showConfirmPassword}
@@ -230,35 +231,35 @@ export default function RegisterScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0f172a' },
+  container: { flex: 1, backgroundColor: colors.background },
   scroll: { flexGrow: 1, justifyContent: 'center', padding: 16 },
   header: { alignItems: 'center', marginBottom: 16 },
-  appName: { fontSize: 20, fontWeight: 'bold', color: '#ffffff' },
-  subtitle: { fontSize: 13, color: '#ffffff99' },
-  card: { backgroundColor: '#ffffff0d', borderRadius: 16, padding: 24, borderWidth: 1, borderColor: '#ffffff1a' },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#ffffff', textAlign: 'center', marginBottom: 4 },
-  description: { fontSize: 13, color: '#ffffff80', textAlign: 'center', marginBottom: 16 },
-  tabContainer: { flexDirection: 'row', backgroundColor: '#ffffff0d', borderRadius: 12, padding: 4, borderWidth: 1, borderColor: '#ffffff1a', marginBottom: 16 },
+  appName: { fontSize: 20, fontFamily: fonts.bold, color: colors.primary },
+  subtitle: { fontSize: 13, fontFamily: fonts.regular, color: colors.secondary },
+  card: { backgroundColor: colors.surface, borderRadius: 16, padding: 24, borderWidth: 1, borderColor: colors.border },
+  title: { fontSize: 24, fontFamily: fonts.bold, color: colors.text, textAlign: 'center', marginBottom: 4 },
+  description: { fontSize: 13, fontFamily: fonts.regular, color: colors.secondary, textAlign: 'center', marginBottom: 16 },
+  tabContainer: { flexDirection: 'row', backgroundColor: colors.subtleBackground, borderRadius: 12, padding: 4, borderWidth: 1, borderColor: colors.border, marginBottom: 16 },
   tab: { flex: 1, paddingVertical: 8, paddingHorizontal: 4, borderRadius: 8, alignItems: 'center' },
-  activeTab: { backgroundColor: '#e11d48' },
-  tabText: { fontSize: 12, fontWeight: 'bold', color: '#ffffff80' },
-  activeTabText: { color: '#ffffff' },
-  errorBox: { backgroundColor: '#ef444420', borderWidth: 1, borderColor: '#ef444450', borderRadius: 12, padding: 12, marginBottom: 12 },
-  errorText: { color: '#fca5a5', fontSize: 13 },
+  activeTab: { backgroundColor: colors.primary },
+  tabText: { fontSize: 12, fontFamily: fonts.bold, color: colors.secondary },
+  activeTabText: { color: colors.white },
+  errorBox: { backgroundColor: colors.dangerBackground, borderWidth: 1, borderColor: colors.dangerBorder, borderRadius: 12, padding: 12, marginBottom: 12 },
+  errorText: { color: colors.dangerText, fontSize: 13, fontFamily: fonts.regular },
   nameRow: { flexDirection: 'row', gap: 8, marginBottom: 0 },
   nameField: { flex: 1 },
-  label: { fontSize: 13, fontWeight: 'bold', color: '#ffffffb3', marginBottom: 6, marginTop: 8 },
-  input: { backgroundColor: '#ffffff0d', borderWidth: 1, borderColor: '#ffffff1a', borderRadius: 12, padding: 14, color: '#ffffff', marginBottom: 4 },
-  passwordContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ffffff0d', borderWidth: 1, borderColor: '#ffffff1a', borderRadius: 12, paddingHorizontal: 14, marginBottom: 4 },
-  passwordInput: { flex: 1, padding: 14, color: '#ffffff' },
+  label: { fontSize: 13, fontFamily: fonts.bold, color: colors.text, marginBottom: 6, marginTop: 8 },
+  input: { backgroundColor: colors.subtleBackground, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 14, color: colors.text, marginBottom: 4, fontFamily: fonts.regular },
+  passwordContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.subtleBackground, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 14, marginBottom: 4 },
+  passwordInput: { flex: 1, padding: 14, color: colors.text, fontFamily: fonts.regular },
   eyeIcon: { fontSize: 18, padding: 4 },
-  passwordHint: { fontSize: 11, color: '#ffffff4d', marginBottom: 8 },
-  primaryButton: { backgroundColor: '#e11d48', borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 16 },
-  primaryButtonText: { color: '#ffffff', fontWeight: 'bold', fontSize: 15 },
+  passwordHint: { fontSize: 11, color: colors.secondary, marginBottom: 8, fontFamily: fonts.regular },
+  primaryButton: { backgroundColor: colors.primary, borderRadius: 12, padding: 16, alignItems: 'center', marginTop: 16 },
+  primaryButtonText: { color: colors.white, fontFamily: fonts.bold, fontSize: 15 },
   loginRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 16 },
-  loginText: { color: '#ffffff66', fontSize: 13 },
-  loginLink: { color: '#e11d48', fontWeight: 'bold', fontSize: 13 },
-  footer: { textAlign: 'center', color: '#ffffff4d', fontSize: 11, paddingVertical: 16 },
-  successBox: { backgroundColor: '#22c55e20', borderWidth: 1, borderColor: '#22c55e50', borderRadius: 12, padding: 12, marginBottom: 12 },
-  successText: { color: '#86efac', fontSize: 13 },
+  loginText: { color: colors.secondary, fontSize: 13, fontFamily: fonts.regular },
+  loginLink: { color: colors.primary, fontFamily: fonts.bold, fontSize: 13 },
+  footer: { textAlign: 'center', color: colors.secondary, fontSize: 11, paddingVertical: 16, fontFamily: fonts.regular },
+  successBox: { backgroundColor: colors.successBackground, borderWidth: 1, borderColor: colors.successBorder, borderRadius: 12, padding: 12, marginBottom: 12 },
+  successText: { color: colors.successText, fontSize: 13, fontFamily: fonts.regular },
 });
