@@ -305,7 +305,7 @@ export function getAuthErrorMessage(code: string): string {
   }
 
   if (code) {
-    return `Sign-in failed (${code}).`;
+    return `Invalid email or password.`;
   }
 
   return "Sign-in failed.";
