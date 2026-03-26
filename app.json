@@ -2,6 +2,7 @@
   "expo": {
     "name": "iRoomReserve",
     "slug": "iroomreserve-mobile",
+    "owner": "iroomreserve.group4",
     "scheme": "iroomreserve",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,9 +14,11 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.iroomreserve.mobile"
     },
     "android": {
+      "package": "com.iroomreserve.mobile",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -28,9 +31,22 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "expo-dev-client",
       "expo-web-browser",
       "expo-router",
-      "expo-font"
-    ]
+      "expo-font",
+      [
+        "@react-native-google-signin/google-signin",
+        {
+          "iosUrlScheme": "com.googleusercontent.apps.735804203844-aiipvcr0a2crkv3qr1qiqphb7t9ntaj1"
+        }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "84c56fc5-91ad-4be1-8ca2-12250f0d417c"
+      }
+    }
   }
 }
