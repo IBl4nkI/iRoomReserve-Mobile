@@ -1,5 +1,4 @@
 import { Platform } from "react-native";
-import { GoogleSignin } from "@react-native-google-signin/google-signin";
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -20,15 +19,31 @@ const GOOGLE_IOS_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? GOOGLE_WEB_CLIENT_ID;
 
 let googleConfigured = false;
+let googleSigninModule: any = null;
 
 export function isAllowedEmail(email: string): boolean {
   return email.toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`);
+}
+
+function getGoogleSignin() {
+  if (googleSigninModule) {
+    return googleSigninModule;
+  }
+
+  try {
+    googleSigninModule = require("@react-native-google-signin/google-signin").GoogleSignin;
+    return googleSigninModule;
+  } catch {
+    throw { code: "auth/google-requires-dev-build" };
+  }
 }
 
 function ensureGoogleConfigured() {
   if (googleConfigured || Platform.OS === "web") {
     return;
   }
+
+  const GoogleSignin = getGoogleSignin();
 
   GoogleSignin.configure({
     webClientId: GOOGLE_WEB_CLIENT_ID,
@@ -44,6 +59,7 @@ export async function signInWithGoogle() {
   }
 
   ensureGoogleConfigured();
+  const GoogleSignin = getGoogleSignin();
 
   if (Platform.OS === "android") {
     await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
@@ -214,6 +230,7 @@ export async function logout() {
   if (Platform.OS !== "web") {
     try {
       ensureGoogleConfigured();
+      const GoogleSignin = getGoogleSignin();
       await GoogleSignin.signOut();
     } catch {
       // Ignore Google session cleanup failures and still sign out from Firebase.
@@ -271,6 +288,8 @@ export function getAuthErrorMessage(code: string): string {
     "auth/unauthorized-domain": "Please use your SDCA email address.",
     "auth/google-native-only":
       "Google Sign-In is only available in the native development build.",
+    "auth/google-requires-dev-build":
+      "Google Sign-In is unavailable in Expo Go. Use the installed development build instead.",
     "auth/popup-closed-by-user": "Google Sign-In was cancelled.",
     "auth/missing-id-token":
       "Google Sign-In did not return an ID token. Please try again.",
