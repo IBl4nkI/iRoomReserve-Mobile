@@ -10,9 +10,7 @@ function getApiBaseUrl() {
   const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim().replace(/\/$/, "");
 
   if (!baseUrl) {
-    throw new Error(
-      "EXPO_PUBLIC_API_BASE_URL is not set. Point it to the deployed web app URL."
-    );
+    throw new Error("Reservation service is not configured for this app.");
   }
 
   return baseUrl;

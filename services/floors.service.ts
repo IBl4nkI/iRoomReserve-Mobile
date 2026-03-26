@@ -13,32 +13,39 @@ function formatOrdinalFloor(level: number) {
   }
 }
 
+export function normalizeFloorLabel(label?: string | null) {
+  const trimmed = label?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed === "Basement Floor") {
+    return "Basement";
+  }
+
+  if (trimmed === "Ground Floor") {
+    return null;
+  }
+
+  return trimmed;
+}
+
 export function getBuildingFloorOptions(buildingId?: string, buildingFloors?: number) {
   switch ((buildingId ?? "").toLowerCase()) {
     case "gd1":
       return [
-        "Basement Floor",
-        "Ground Floor",
+        "Basement",
         ...Array.from({ length: 7 }, (_, index) => formatOrdinalFloor(index + 2)),
       ];
     case "gd2":
-      return [
-        "Ground Floor",
-        ...Array.from({ length: 9 }, (_, index) => formatOrdinalFloor(index + 2)),
-      ];
+      return Array.from({ length: 10 }, (_, index) => formatOrdinalFloor(index + 1));
     case "gd3":
-      return [
-        "Ground Floor",
-        ...Array.from({ length: 10 }, (_, index) => formatOrdinalFloor(index + 2)),
-      ];
+      return Array.from({ length: 11 }, (_, index) => formatOrdinalFloor(index + 1));
     default:
-      return Array.from({ length: buildingFloors || 5 }, (_, index) => {
-        if (index === 0) {
-          return "Ground Floor";
-        }
-
-        return formatOrdinalFloor(index + 1);
-      });
+      return Array.from({ length: buildingFloors || 5 }, (_, index) =>
+        formatOrdinalFloor(index + 1)
+      );
   }
 }
 
@@ -64,11 +71,24 @@ export function getFloorSortOrder(label: string) {
 }
 
 function dedupeFloorLabels(labels: string[]) {
-  return [...new Set(labels.filter(Boolean))].sort(
+  const normalizedLabels = labels.reduce<string[]>((result, label) => {
+    const normalizedLabel = normalizeFloorLabel(label);
+
+    if (normalizedLabel) {
+      result.push(normalizedLabel);
+    }
+
+    return result;
+  }, []);
+
+  return [...new Set(normalizedLabels)].sort(
     (left, right) =>
-      getFloorSortOrder(left) - getFloorSortOrder(right) ||
-      left.localeCompare(right)
+      getFloorSortOrder(left) - getFloorSortOrder(right) || left.localeCompare(right)
   );
+}
+
+export function isRoomOnFloor(room: Room, floorLabel: string) {
+  return normalizeFloorLabel(room.floor) === floorLabel;
 }
 
 export function buildBuildingFloorOptions(
@@ -83,7 +103,7 @@ export function buildBuildingFloorOptions(
   return floorLabels.map((label) => ({
     id: createFloorId(label),
     label,
-    roomCount: rooms.filter((room) => room.floor === label).length,
+    roomCount: rooms.filter((room) => isRoomOnFloor(room, label)).length,
   }));
 }
 
@@ -101,7 +121,7 @@ export function buildCampusFloorOptions(
   return floorLabels.map((label) => ({
     id: createFloorId(label),
     label,
-    roomCount: rooms.filter((room) => room.floor === label).length,
+    roomCount: rooms.filter((room) => isRoomOnFloor(room, label)).length,
   }));
 }
 

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -9,11 +8,13 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+import SelectionScreenLayout from "@/components/SelectionScreenLayout";
 import { colors, fonts } from "@/constants/theme";
 import { getBuildingById } from "@/services/buildings.service";
 import {
   buildBuildingFloorOptions,
   getFloorLabelById,
+  isRoomOnFloor,
 } from "@/services/floors.service";
 import { getRoomsByBuilding } from "@/services/rooms.service";
 import type { Building, Room } from "@/types/reservation";
@@ -63,7 +64,7 @@ export default function MainFloorRoomsScreen() {
 
         setBuilding(buildingResult);
         setFloorLabel(label);
-        setRooms(buildingRooms.filter((room) => room.floor === label));
+        setRooms(buildingRooms.filter((room) => isRoomOnFloor(room, label)));
         setError(null);
       })
       .catch((caughtError) => {
@@ -87,101 +88,49 @@ export default function MainFloorRoomsScreen() {
   }, [resolvedBuildingId, resolvedFloorId]);
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <TouchableOpacity style={styles.backIconButton} onPress={() => router.back()}>
-        <Text style={styles.backIconText}>{"<"}</Text>
-      </TouchableOpacity>
-
-      <View style={styles.card}>
-        <Text style={styles.appName}>iRoomReserve</Text>
-        <Text style={styles.title}>Select Room</Text>
-        <Text style={styles.subtitle}>{floorLabel ?? building?.name ?? "Selected Floor"}</Text>
-
+    <SelectionScreenLayout
+      title={floorLabel ?? building?.name ?? "Selected Floor"}
+      subtitle="Select Room"
+      onBackPress={() => router.back()}
+    >
+      {loading ? (
+        <ActivityIndicator color={colors.primary} style={styles.statusSpacing} />
+      ) : error ? (
+        <Text style={styles.statusText}>{error}</Text>
+      ) : (
         <View style={styles.roomGrid}>
-          {loading ? (
-            <ActivityIndicator color={colors.primary} style={styles.statusSpacing} />
-          ) : error ? (
-            <Text style={styles.statusText}>{error}</Text>
-          ) : (
-            rooms.map((room) => (
-              <TouchableOpacity
-                key={room.id}
-                style={styles.roomButton}
-                onPress={() =>
-                  router.push({
-                    pathname: "/(main)/rooms/[roomId]",
-                    params: {
-                      roomId: room.id,
-                      buildingId: resolvedBuildingId,
-                      floorId: resolvedFloorId,
-                    },
-                  })
-                }
-              >
-                <Text style={styles.roomLabel}>{room.name}</Text>
-              </TouchableOpacity>
-            ))
-          )}
+          {rooms.map((room) => (
+            <TouchableOpacity
+              key={room.id}
+              style={styles.roomButton}
+              onPress={() =>
+                router.push({
+                  pathname: "/(main)/rooms/[roomId]",
+                  params: {
+                    roomId: room.id,
+                    buildingId: resolvedBuildingId,
+                    floorId: resolvedFloorId,
+                  },
+                })
+              }
+            >
+              <Text style={styles.roomLabel}>{room.name}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
+      )}
 
-        <TouchableOpacity
-          style={styles.linkButton}
-          onPress={() => router.push("/(main)/dashboard")}
-        >
-          <Text style={styles.linkText}>Dashboard</Text>
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+      <TouchableOpacity
+        style={styles.linkButton}
+        onPress={() => router.push("/(main)/dashboard")}
+      >
+        <Text style={styles.linkText}>Dashboard</Text>
+      </TouchableOpacity>
+    </SelectionScreenLayout>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flexGrow: 1,
-    justifyContent: "center",
-    padding: 16,
-    backgroundColor: colors.background,
-  },
-  backIconButton: {
-    alignSelf: "flex-start",
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-  backIconText: {
-    color: colors.primary,
-    fontFamily: fonts.bold,
-    fontSize: 20,
-    lineHeight: 20,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  appName: {
-    fontSize: 20,
-    fontFamily: fonts.bold,
-    color: colors.primary,
-    textAlign: "center",
-    marginBottom: 4,
-  },
-  title: { fontSize: 24, fontFamily: fonts.bold, color: colors.text, textAlign: "center" },
-  subtitle: {
-    fontSize: 16,
-    fontFamily: fonts.regular,
-    color: colors.secondary,
-    textAlign: "center",
-    marginBottom: 20,
-  },
   roomGrid: {
     flexDirection: "row",
     flexWrap: "wrap",

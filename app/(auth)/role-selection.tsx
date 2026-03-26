@@ -2,13 +2,13 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { useRouter } from "expo-router";
+import SelectionScreenLayout from "@/components/SelectionScreenLayout";
 import { auth } from "@/lib/firebase";
 import { getUserProfile, isAllowedEmail, logout, saveUserProfile } from "@/lib/auth";
 import { colors, fonts } from "@/constants/theme";
@@ -145,50 +145,46 @@ export default function RoleSelectionScreen() {
   }
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>Select Your Role</Text>
-        <Text style={styles.subtitle}>
-          Choose the role that best describes you.
-        </Text>
+    <SelectionScreenLayout
+      title="Select Your Role"
+      subtitle="Choose the role that best describes you."
+    >
+      {ROLE_OPTIONS.map((option) => {
+        const isSelected = selectedRole === option.value;
 
-        {ROLE_OPTIONS.map((option) => {
-          const isSelected = selectedRole === option.value;
-
-          return (
-            <TouchableOpacity
-              key={option.value}
-              style={[styles.option, isSelected && styles.optionSelected]}
-              onPress={() => setSelectedRole(option.value)}
+        return (
+          <TouchableOpacity
+            key={option.value}
+            style={[styles.option, isSelected && styles.optionSelected]}
+            onPress={() => setSelectedRole(option.value)}
+          >
+            <Text style={[styles.optionTitle, isSelected && styles.optionTitleSelected]}>
+              {option.label}
+            </Text>
+            <Text
+              style={[
+                styles.optionDescription,
+                isSelected && styles.optionDescriptionSelected,
+              ]}
             >
-              <Text style={[styles.optionTitle, isSelected && styles.optionTitleSelected]}>
-                {option.label}
-              </Text>
-              <Text
-                style={[
-                  styles.optionDescription,
-                  isSelected && styles.optionDescriptionSelected,
-                ]}
-              >
-                {option.description}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
+              {option.description}
+            </Text>
+          </TouchableOpacity>
+        );
+      })}
 
-        <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
-          onPress={handleContinue}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color={colors.white} />
-          ) : (
-            <Text style={styles.buttonText}>Confirm Role</Text>
-          )}
-        </TouchableOpacity>
-      </View>
-    </ScrollView>
+      <TouchableOpacity
+        style={[styles.button, loading && styles.buttonDisabled]}
+        onPress={handleContinue}
+        disabled={loading}
+      >
+        {loading ? (
+          <ActivityIndicator color={colors.white} />
+        ) : (
+          <Text style={styles.buttonText}>Confirm Role</Text>
+        )}
+      </TouchableOpacity>
+    </SelectionScreenLayout>
   );
 }
 
@@ -198,33 +194,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.background,
-  },
-  container: {
-    flexGrow: 1,
-    justifyContent: "center",
-    padding: 16,
-    backgroundColor: colors.background,
-  },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  title: {
-    fontSize: 24,
-    fontFamily: fonts.bold,
-    color: colors.text,
-    textAlign: "center",
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    fontFamily: fonts.regular,
-    color: colors.secondary,
-    textAlign: "center",
-    marginBottom: 20,
   },
   option: {
     borderWidth: 1,
