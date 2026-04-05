@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import GoogleIcon from "@/components/GoogleIcon";
+import { useToast } from "@/components/toast-provider";
 import { colors, fonts } from "@/constants/theme";
 import {
   loginWithEmail,
@@ -30,6 +31,7 @@ export default function LoginScreen() {
   const [errorMessage, setErrorMessage] = useState("");
   const [showResendButton, setShowResendButton] = useState(false);
   const router = useRouter();
+  const { showToast } = useToast();
   const params = useLocalSearchParams<{ pending?: string }>();
   const isPending = params.pending === "true";
 
@@ -46,6 +48,7 @@ export default function LoginScreen() {
         await logout();
         router.replace("/(auth)/login?pending=true");
       } else {
+        showToast("Login successful!");
         router.replace("/(main)/campus-select");
       }
     } catch (err: unknown) {
@@ -70,6 +73,7 @@ export default function LoginScreen() {
         await logout();
         router.replace("/(auth)/login?pending=true");
       } else {
+        showToast("Login successful!");
         router.replace("/(main)/campus-select");
       }
     } catch (err: unknown) {
