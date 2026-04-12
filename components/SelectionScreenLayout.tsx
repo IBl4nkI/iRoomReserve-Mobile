@@ -7,47 +7,54 @@ import {
   View,
 } from "react-native";
 
+import SelectionRoomSearch from "@/components/SelectionRoomSearch";
 import { colors, fonts } from "@/constants/theme";
 
 interface SelectionScreenLayoutProps {
   children: React.ReactNode;
+  enableRoomSearch?: boolean;
+  footer?: React.ReactNode;
   onBackPress?: () => void;
-  title: string;
   subtitle?: string;
+  title: string;
 }
 
 export default function SelectionScreenLayout({
   children,
+  enableRoomSearch = false,
+  footer,
   onBackPress,
-  title,
   subtitle,
+  title,
 }: SelectionScreenLayoutProps) {
+  const cardContent = (
+    <View style={styles.card}>
+      <Text style={styles.appName}>iRoomReserve</Text>
+      <Text style={styles.title}>{title}</Text>
+      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+
+      <View style={styles.content}>{children}</View>
+      {footer ? <View style={styles.footer}>{footer}</View> : null}
+    </View>
+  );
+
   return (
-    <ScrollView contentContainerStyle={styles.scroll}>
+    <ScrollView
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={styles.container}
+    >
       {onBackPress ? (
         <TouchableOpacity style={styles.backIconButton} onPress={onBackPress}>
           <Text style={styles.backIconText}>{"<"}</Text>
         </TouchableOpacity>
       ) : null}
-
-      <View style={styles.header}>
-        <Text style={styles.appName}>iRoomReserve</Text>
-        <Text style={styles.schoolName}>St. Dominic College of Asia</Text>
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.title}>{title}</Text>
-        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-        {children}
-      </View>
-
-      <Text style={styles.footer}>iRoomReserve v1.0 - SDCA Capstone Project</Text>
+      {enableRoomSearch ? <SelectionRoomSearch>{cardContent}</SelectionRoomSearch> : cardContent}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: {
+  container: {
     flexGrow: 1,
     justifyContent: "center",
     padding: 16,
@@ -71,20 +78,6 @@ const styles = StyleSheet.create({
     fontSize: 20,
     lineHeight: 20,
   },
-  header: {
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  appName: {
-    fontSize: 20,
-    fontFamily: fonts.bold,
-    color: colors.primary,
-  },
-  schoolName: {
-    fontSize: 13,
-    fontFamily: fonts.regular,
-    color: colors.secondary,
-  },
   card: {
     backgroundColor: colors.surface,
     borderRadius: 16,
@@ -92,26 +85,30 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  appName: {
+    fontSize: 20,
+    fontFamily: fonts.bold,
+    color: colors.primary,
+    textAlign: "center",
+    marginBottom: 4,
+  },
   title: {
     fontSize: 24,
     fontFamily: fonts.bold,
     color: colors.text,
     textAlign: "center",
-    marginBottom: 20,
   },
   subtitle: {
     fontSize: 14,
     fontFamily: fonts.regular,
     color: colors.secondary,
     textAlign: "center",
-    marginTop: -8,
-    marginBottom: 20,
+    marginTop: 6,
+  },
+  content: {
+    marginTop: 18,
   },
   footer: {
-    textAlign: "center",
-    color: colors.secondary,
-    fontSize: 11,
-    paddingVertical: 16,
-    fontFamily: fonts.regular,
+    marginTop: 12,
   },
 });

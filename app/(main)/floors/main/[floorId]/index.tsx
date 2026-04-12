@@ -34,6 +34,14 @@ export default function MainFloorRoomsScreen() {
   const [error, setError] = useState<string | null>(
     resolvedBuildingId ? null : "Missing building."
   );
+  const footer = (
+    <TouchableOpacity
+      style={styles.linkButton}
+      onPress={() => router.push("/(main)/dashboard")}
+    >
+      <Text style={styles.linkText}>Dashboard</Text>
+    </TouchableOpacity>
+  );
 
   useEffect(() => {
     if (!resolvedBuildingId) {
@@ -92,6 +100,8 @@ export default function MainFloorRoomsScreen() {
       title={floorLabel ?? building?.name ?? "Selected Floor"}
       subtitle="Select Room"
       onBackPress={() => router.back()}
+      enableRoomSearch
+      footer={footer}
     >
       {loading ? (
         <ActivityIndicator color={colors.primary} style={styles.statusSpacing} />
@@ -120,12 +130,6 @@ export default function MainFloorRoomsScreen() {
         </View>
       )}
 
-      <TouchableOpacity
-        style={styles.linkButton}
-        onPress={() => router.push("/(main)/dashboard")}
-      >
-        <Text style={styles.linkText}>Dashboard</Text>
-      </TouchableOpacity>
     </SelectionScreenLayout>
   );
 }

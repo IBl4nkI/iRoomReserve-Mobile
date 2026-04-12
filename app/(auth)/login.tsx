@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
   passwordInput: { flex: 1, padding: 14, color: colors.text, fontFamily: fonts.regular },
   eyeIcon: { fontSize: 14, padding: 4, marginLeft: 8, color: colors.secondary },
   forgotPassword: { alignItems: "flex-end", marginBottom: 16 },
-  forgotPasswordText: { fontSize: 13, color: colors.secondary, fontFamily: fonts.bold },
+  forgotPasswordText: { fontSize: 13, color: colors.primary, fontFamily: fonts.bold },
   primaryButton: {
     backgroundColor: colors.primary,
     borderRadius: 12,

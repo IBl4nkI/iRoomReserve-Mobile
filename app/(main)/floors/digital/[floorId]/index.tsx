@@ -27,6 +27,14 @@ export default function DigitalFloorRoomsScreen() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const footer = (
+    <TouchableOpacity
+      style={styles.linkButton}
+      onPress={() => router.push("/(main)/dashboard")}
+    >
+      <Text style={styles.linkText}>Dashboard</Text>
+    </TouchableOpacity>
+  );
 
   useEffect(() => {
     let active = true;
@@ -77,6 +85,8 @@ export default function DigitalFloorRoomsScreen() {
       title={floorLabel ?? "Selected Floor"}
       subtitle="Select Room"
       onBackPress={() => router.back()}
+      enableRoomSearch
+      footer={footer}
     >
       {loading ? (
         <ActivityIndicator color={colors.primary} style={styles.statusSpacing} />
@@ -105,12 +115,6 @@ export default function DigitalFloorRoomsScreen() {
         </View>
       )}
 
-      <TouchableOpacity
-        style={styles.linkButton}
-        onPress={() => router.push("/(main)/dashboard")}
-      >
-        <Text style={styles.linkText}>Dashboard</Text>
-      </TouchableOpacity>
     </SelectionScreenLayout>
   );
 }

@@ -22,6 +22,11 @@ export default function BuildingDetailsScreen() {
   const [floors, setFloors] = useState<FloorOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const footer = (
+    <TouchableOpacity style={styles.linkButton} onPress={() => router.push("/(main)/dashboard")}>
+      <Text style={styles.linkText}>Dashboard</Text>
+    </TouchableOpacity>
+  );
 
   useEffect(() => {
     let active = true;
@@ -68,6 +73,8 @@ export default function BuildingDetailsScreen() {
       title={building?.name ?? "Selected Building"}
       subtitle="Select Floor"
       onBackPress={() => router.back()}
+      enableRoomSearch
+      footer={footer}
     >
       {loading ? (
         <ActivityIndicator color={colors.primary} style={styles.statusSpacing} />
@@ -92,9 +99,6 @@ export default function BuildingDetailsScreen() {
         </View>
       )}
 
-      <TouchableOpacity style={styles.linkButton} onPress={() => router.push("/(main)/dashboard")}>
-        <Text style={styles.linkText}>Dashboard</Text>
-      </TouchableOpacity>
     </SelectionScreenLayout>
   );
 }

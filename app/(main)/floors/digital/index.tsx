@@ -19,6 +19,14 @@ export default function DigitalFloorsScreen() {
   const [floors, setFloors] = useState<FloorOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const footer = (
+    <TouchableOpacity
+      style={styles.linkButton}
+      onPress={() => router.push("/(main)/dashboard")}
+    >
+      <Text style={styles.linkText}>Dashboard</Text>
+    </TouchableOpacity>
+  );
 
   useEffect(() => {
     let active = true;
@@ -57,7 +65,13 @@ export default function DigitalFloorsScreen() {
   }, []);
 
   return (
-    <SelectionScreenLayout title="Digital Campus" subtitle="Select Floor" onBackPress={() => router.back()}>
+    <SelectionScreenLayout
+      title="Digital Campus"
+      subtitle="Select Floor"
+      onBackPress={() => router.back()}
+      enableRoomSearch
+      footer={footer}
+    >
       {loading ? (
         <ActivityIndicator color={colors.primary} style={styles.statusSpacing} />
       ) : error ? (
@@ -74,12 +88,6 @@ export default function DigitalFloorsScreen() {
         ))
       )}
 
-      <TouchableOpacity
-        style={styles.linkButton}
-        onPress={() => router.push("/(main)/dashboard")}
-      >
-        <Text style={styles.linkText}>Dashboard</Text>
-      </TouchableOpacity>
     </SelectionScreenLayout>
   );
 }

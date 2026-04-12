@@ -24,6 +24,14 @@ export default function MainFloorsScreen() {
   const [error, setError] = useState<string | null>(
     resolvedBuildingId ? null : "Select a building first."
   );
+  const footer = (
+    <TouchableOpacity
+      style={styles.linkButton}
+      onPress={() => router.push("/(main)/dashboard")}
+    >
+      <Text style={styles.linkText}>Dashboard</Text>
+    </TouchableOpacity>
+  );
 
   useEffect(() => {
     if (!resolvedBuildingId) {
@@ -74,6 +82,8 @@ export default function MainFloorsScreen() {
       title={building?.name ?? "Selected Building"}
       subtitle="Select Floor"
       onBackPress={() => router.back()}
+      enableRoomSearch
+      footer={footer}
     >
       {loading ? (
         <ActivityIndicator color={colors.primary} style={styles.statusSpacing} />
@@ -96,12 +106,6 @@ export default function MainFloorsScreen() {
         ))
       )}
 
-      <TouchableOpacity
-        style={styles.linkButton}
-        onPress={() => router.push("/(main)/dashboard")}
-      >
-        <Text style={styles.linkText}>Dashboard</Text>
-      </TouchableOpacity>
     </SelectionScreenLayout>
   );
 }

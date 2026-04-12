@@ -6,9 +6,14 @@ import { colors, fonts } from "@/constants/theme";
 
 export default function CampusSelectScreen() {
   const router = useRouter();
+  const footer = (
+    <TouchableOpacity style={styles.dashboardButton} onPress={() => router.push("/(main)/dashboard")}>
+      <Text style={styles.dashboardText}>Dashboard</Text>
+    </TouchableOpacity>
+  );
 
   return (
-    <SelectionScreenLayout title="Select Campus">
+    <SelectionScreenLayout title="Select Campus" enableRoomSearch footer={footer}>
       <TouchableOpacity style={styles.optionButton} onPress={() => router.push("/(main)/buildings")}>
         <Text style={styles.optionLabel}>Main Campus</Text>
       </TouchableOpacity>
@@ -17,10 +22,6 @@ export default function CampusSelectScreen() {
 
       <TouchableOpacity style={styles.optionButton} onPress={() => router.push("/(main)/floors/digital")}>
         <Text style={styles.optionLabel}>Digital Campus</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity style={styles.dashboardButton} onPress={() => router.push("/(main)/dashboard")}>
-        <Text style={styles.dashboardText}>Dashboard</Text>
       </TouchableOpacity>
     </SelectionScreenLayout>
   );
