@@ -1,12 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Modal,
-  ScrollView,
   StyleSheet,
-  Switch,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -14,7 +10,6 @@ import { useRouter } from "expo-router";
 
 import { colors, fonts } from "@/constants/theme";
 import {
-  CAMPUS_LABELS,
   buildRoomSearchText,
   buildTimeSlots,
   formatSelectionLabel,
@@ -34,10 +29,10 @@ import { getBuildings } from "@/services/buildings.service";
 import { getRoomsByBuilding } from "@/services/rooms.service";
 import { formatTime12h, getSchedulesByRoomId } from "@/services/schedules.service";
 import type { ReservationCampus, Schedule } from "@/types/reservation";
+import RoomSearchBar from "@/components/RoomSearchBar";
+import RoomSearchFilters from "@/components/RoomSearchFilters";
+import RoomTimePickerModal from "@/components/RoomTimePickerModal";
 
-const CAMPUS_OPTIONS: ReservationCampus[] = ["main", "digi"];
-const WEEKDAY_OPTIONS = [1, 2, 3, 4, 5, 6] as const;
-const CALENDAR_DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 const TIME_MINUTE_OPTIONS = ["00", "30"] as const;
 const TIME_PERIOD_OPTIONS = ["AM", "PM"] as const;
 const TIME_WHEEL_ITEM_HEIGHT = 72;
@@ -177,7 +172,11 @@ function getEndTimeOptionsForRange(campus: ReservationCampus | null, startTime: 
   return options.filter((value) => timeStringToMinutes(value) - startMinutes >= 60);
 }
 
-function toTimeWheelParts(value: string) {
+function toTimeWheelParts(value: string): {
+  hour: string;
+  minute: (typeof TIME_MINUTE_OPTIONS)[number];
+  period: (typeof TIME_PERIOD_OPTIONS)[number];
+} {
   const [hourString, minuteString] = value.split(":");
   let hour = Number(hourString);
   const period: (typeof TIME_PERIOD_OPTIONS)[number] = hour >= 12 ? "PM" : "AM";
@@ -190,7 +189,7 @@ function toTimeWheelParts(value: string) {
 
   return {
     hour: String(hour),
-    minute: (minuteString === "30" ? "30" : "00") as (typeof TIME_MINUTE_OPTIONS)[number],
+    minute: minuteString === "30" ? "30" : "00",
     period,
   };
 }
@@ -308,17 +307,9 @@ export default function SelectionRoomSearch({ children }: SelectionRoomSearchPro
   const [calendarMonth, setCalendarMonth] = useState(new Date());
 
   const searchActive = query.trim().length > 0;
-  const effectiveTimeCampus = useMemo(
-    () => getEffectiveTimeCampus(selectedCampusDraft),
-    [selectedCampusDraft]
-  );
   const startTimeOptions = useMemo(
     () => getStartTimeOptions(selectedCampusDraft),
     [selectedCampusDraft]
-  );
-  const campusTimeOptions = useMemo(
-    () => getCampusTimeOptions(effectiveTimeCampus),
-    [effectiveTimeCampus]
   );
   const endTimeOptions = useMemo(
     () => getEndTimeOptionsForRange(selectedCampusDraft, startTimeDraft),
@@ -738,570 +729,70 @@ export default function SelectionRoomSearch({ children }: SelectionRoomSearchPro
 
   return (
     <View style={styles.wrapper}>
-      <View style={styles.searchRow}>
-        <View style={styles.searchInputWrap}>
-          <View style={styles.searchIcon}>
-            <View style={styles.searchIconCircle} />
-            <View style={styles.searchIconHandle} />
-          </View>
-          <TextInput
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search for a room"
-            placeholderTextColor={colors.mutedText}
-            style={styles.searchInput}
-          />
-        </View>
-        <TouchableOpacity
-          style={[styles.filterButton, filtersOpen && styles.filterButtonActive]}
-          onPress={() => setFiltersOpen((currentValue) => !currentValue)}
-        >
-          <View style={styles.filterButtonContent}>
-            <View style={styles.filterIcon}>
-              <View
-                style={[
-                  styles.filterIconLine,
-                  filtersOpen && styles.filterIconLineActive,
-                  styles.filterIconLineTop,
-                ]}
-              />
-              <View
-                style={[
-                  styles.filterIconLine,
-                  filtersOpen && styles.filterIconLineActive,
-                  styles.filterIconLineMiddle,
-                ]}
-              />
-              <View
-                style={[
-                  styles.filterIconLine,
-                  filtersOpen && styles.filterIconLineActive,
-                  styles.filterIconLineBottom,
-                ]}
-              />
-            </View>
-            <Text
-              style={[
-                styles.filterButtonText,
-                filtersOpen && styles.filterButtonTextActive,
-              ]}
-            >
-              Filters
-            </Text>
-          </View>
-        </TouchableOpacity>
-      </View>
+      <RoomSearchBar
+        filtersOpen={filtersOpen}
+        onToggleFilters={() => setFiltersOpen((currentValue) => !currentValue)}
+        onQueryChange={setQuery}
+        query={query}
+      />
 
-      {filtersOpen ? (
-        <View style={styles.filterCard}>
-          <Text style={styles.filterSectionTitle}>Search by Campus:</Text>
-          <View style={styles.radioGroup}>
-            {CAMPUS_OPTIONS.map((campus) => {
-              const selected = selectedCampusDraft === campus;
+      <RoomSearchFilters
+        calendarMonthLabel={getMonthLabel(calendarMonth)}
+        calendarWeeks={calendarWeeks}
+        endDateInput={recurringEndDateInputDraft}
+        endTimeLabel={formatTime12h(endTimeDraft)}
+        filtersOpen={filtersOpen}
+        getDayShortLabel={getDayShortLabel}
+        isCalendarDateDisabled={(date, dateKey) =>
+          isPastDate(date) ||
+          (openCalendarField === "recurringEndDate" && Boolean(reservationDateDraft) && dateKey < reservationDateDraft)
+        }
+        isCalendarDateSelected={(dateKey) =>
+          openCalendarField === "reservationDates"
+            ? reservationDatesDraft.includes(dateKey)
+            : openCalendarField === "reservationDate"
+              ? reservationDateDraft === dateKey
+              : recurringEndDateDraft === dateKey
+        }
+        isRecurring={isRecurringDraft}
+        onCalendarDateSelect={handleCalendarDateSelect}
+        onCalendarDone={() => setOpenCalendarField(null)}
+        onEndDateBlur={handleRecurringEndDateBlur}
+        onEndDateChange={setRecurringEndDateInputDraft}
+        onEndDateCalendarPress={() => openCalendar("recurringEndDate")}
+        onEndTimePress={() => toggleTimePicker("end")}
+        onNextMonth={() => setCalendarMonth((currentValue) => addMonths(currentValue, 1))}
+        onPrevMonth={() => setCalendarMonth((currentValue) => addMonths(currentValue, -1))}
+        onRemoveReservationDate={removeReservationDate}
+        onReservationDateBlur={isRecurringDraft ? handleReservationDateBlur : handleReservationDatesInputBlur}
+        onReservationDateChange={isRecurringDraft ? setReservationDateInputDraft : setReservationDatesInputDraft}
+        onReservationDateCalendarPress={() =>
+          openCalendar(isRecurringDraft ? "reservationDate" : "reservationDates")
+        }
+        onStartTimePress={() => toggleTimePicker("start")}
+        onToggleCampus={toggleCampus}
+        onToggleDay={toggleSelectedDay}
+        onToggleRecurring={setIsRecurringDraft}
+        openCalendarField={openCalendarField}
+        previewDates={reservationDateKeys}
+        reservationDateInput={reservationDateInputDraft}
+        reservationDatesInput={reservationDatesInputDraft}
+        selectedCampus={selectedCampusDraft}
+        selectedDays={selectedDaysDraft}
+        startTimeLabel={formatTime12h(startTimeDraft)}
+      />
 
-              return (
-                <TouchableOpacity
-                  key={campus}
-                  style={[styles.radioRow, selected && styles.radioRowSelected]}
-                  onPress={() => toggleCampus(campus)}
-                >
-                  <View style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
-                    {selected ? <View style={styles.radioInner} /> : null}
-                  </View>
-                  <Text style={styles.radioText}>{CAMPUS_LABELS[campus]}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          <View style={styles.toggleCard}>
-            <View style={styles.toggleTextBlock}>
-              <Text style={styles.toggleTitle}>Recurring Reservation</Text>
-              <Text style={styles.toggleSubtitle}>
-                Book the same time slot on multiple days
-              </Text>
-            </View>
-            <Switch
-              value={isRecurringDraft}
-              onValueChange={setIsRecurringDraft}
-              trackColor={{ false: "#d7cdcd", true: "#d87878" }}
-              thumbColor={isRecurringDraft ? colors.primary : colors.surface}
-            />
-          </View>
-
-          {isRecurringDraft ? (
-            <>
-              <Text style={styles.filterSectionTitle}>Select Days of the Week</Text>
-              <View style={styles.weekdayCalendarRow}>
-                {WEEKDAY_OPTIONS.map((dayOfWeek) => {
-                  const selected = selectedDaysDraft.includes(dayOfWeek);
-
-                  return (
-                    <TouchableOpacity
-                      key={dayOfWeek}
-                      style={[
-                        styles.weekdayCalendarButton,
-                        selected && styles.weekdayCalendarButtonSelected,
-                      ]}
-                      onPress={() => toggleSelectedDay(dayOfWeek)}
-                    >
-                      <Text
-                        style={[
-                          styles.weekdayCalendarText,
-                          selected && styles.weekdayCalendarTextSelected,
-                        ]}
-                      >
-                        {getDayShortLabel(dayOfWeek)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </>
-          ) : null}
-
-          <View style={styles.inputGrid}>
-            <View style={styles.inputBlock}>
-              <Text style={styles.inputLabel}>
-                {isRecurringDraft ? "Start Date" : "Add Reservation Date(s)"}
-              </Text>
-              {isRecurringDraft ? (
-                <View style={styles.inputWithAction}>
-                  <TextInput
-                    value={reservationDateInputDraft}
-                    onChangeText={setReservationDateInputDraft}
-                    onBlur={handleReservationDateBlur}
-                    placeholder="DD/MM/YYYY"
-                    placeholderTextColor={colors.mutedText}
-                    style={[styles.filterInput, styles.filterInputWithIcon]}
-                  />
-                  <TouchableOpacity
-                    style={styles.inputActionButton}
-                    onPress={() => openCalendar("reservationDate")}
-                  >
-                    <View style={styles.calendarIcon}>
-                      <View style={styles.calendarIconHeader} />
-                      <View style={styles.calendarIconGrid}>
-                        <View style={styles.calendarIconDot} />
-                        <View style={styles.calendarIconDot} />
-                        <View style={styles.calendarIconDot} />
-                        <View style={styles.calendarIconDot} />
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={styles.inputWithAction}>
-                  <TextInput
-                    value={reservationDatesInputDraft}
-                    onChangeText={setReservationDatesInputDraft}
-                    onBlur={handleReservationDatesInputBlur}
-                    placeholder="DD/MM/YYYY"
-                    placeholderTextColor={colors.mutedText}
-                    style={[styles.filterInput, styles.filterInputWithIcon]}
-                  />
-                  <TouchableOpacity
-                    style={styles.inputActionButton}
-                    onPress={() => openCalendar("reservationDates")}
-                  >
-                    <View style={styles.calendarIcon}>
-                      <View style={styles.calendarIconHeader} />
-                      <View style={styles.calendarIconGrid}>
-                        <View style={styles.calendarIconDot} />
-                        <View style={styles.calendarIconDot} />
-                        <View style={styles.calendarIconDot} />
-                        <View style={styles.calendarIconDot} />
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-            {isRecurringDraft ? (
-              <View style={styles.inputBlock}>
-                <Text style={styles.inputLabel}>End Date</Text>
-                <View style={styles.inputWithAction}>
-                  <TextInput
-                    value={recurringEndDateInputDraft}
-                    onChangeText={setRecurringEndDateInputDraft}
-                    onBlur={handleRecurringEndDateBlur}
-                    placeholder="DD/MM/YYYY"
-                    placeholderTextColor={colors.mutedText}
-                    style={[styles.filterInput, styles.filterInputWithIcon]}
-                  />
-                  <TouchableOpacity
-                    style={styles.inputActionButton}
-                    onPress={() => openCalendar("recurringEndDate")}
-                  >
-                    <View style={styles.calendarIcon}>
-                      <View style={styles.calendarIconHeader} />
-                      <View style={styles.calendarIconGrid}>
-                        <View style={styles.calendarIconDot} />
-                        <View style={styles.calendarIconDot} />
-                        <View style={styles.calendarIconDot} />
-                        <View style={styles.calendarIconDot} />
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : null}
-          </View>
-
-          {openCalendarField ? (
-            <View style={styles.calendarCard}>
-              <View style={styles.calendarHeaderRow}>
-                <TouchableOpacity
-                  style={styles.calendarNavButton}
-                  onPress={() => setCalendarMonth((currentValue) => addMonths(currentValue, -1))}
-                >
-                  <Text style={styles.calendarNavText}>{"<"}</Text>
-                </TouchableOpacity>
-                <Text style={styles.calendarTitle}>{getMonthLabel(calendarMonth)}</Text>
-                <TouchableOpacity
-                  style={styles.calendarNavButton}
-                  onPress={() => setCalendarMonth((currentValue) => addMonths(currentValue, 1))}
-                >
-                  <Text style={styles.calendarNavText}>{">"}</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.calendarWeekRow}>
-                {CALENDAR_DAY_LABELS.map((label) => (
-                  <Text key={label} style={styles.calendarWeekLabel}>
-                    {label}
-                  </Text>
-                ))}
-              </View>
-
-              {calendarWeeks.map((week, weekIndex) => (
-                <View key={`${calendarMonth.getMonth()}-${weekIndex}`} style={styles.calendarWeekRow}>
-                  {week.map((entry) => {
-                    const selectedDateKey =
-                      openCalendarField === "reservationDate"
-                        ? reservationDateDraft
-                        : openCalendarField === "recurringEndDate"
-                          ? recurringEndDateDraft
-                          : "";
-                    const isSelected =
-                      openCalendarField === "reservationDates"
-                        ? reservationDatesDraft.includes(entry.dateKey)
-                        : entry.dateKey === selectedDateKey;
-                    const isDisabled =
-                      !entry.inMonth ||
-                      isPastDate(entry.date) ||
-                      (openCalendarField === "recurringEndDate" &&
-                        entry.dateKey < reservationDateDraft);
-
-                    return (
-                      <TouchableOpacity
-                        key={entry.dateKey}
-                        disabled={isDisabled}
-                        style={[
-                          styles.calendarDateButton,
-                          isSelected && styles.calendarDateButtonSelected,
-                          isDisabled && styles.calendarDateButtonDisabled,
-                        ]}
-                        onPress={() => handleCalendarDateSelect(entry.dateKey)}
-                      >
-                        <Text
-                          style={[
-                            styles.calendarDateText,
-                            !entry.inMonth && styles.calendarDateTextMuted,
-                            isSelected && styles.calendarDateTextSelected,
-                            isDisabled && styles.calendarDateTextDisabled,
-                          ]}
-                        >
-                          {entry.date.getDate()}
-                        </Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              ))}
-
-              <Text style={styles.helperText}>
-                Sundays are excluded. Only Monday to Saturday can be selected.
-              </Text>
-              {openCalendarField === "reservationDates" ? (
-                <TouchableOpacity
-                  style={styles.calendarDoneButton}
-                  onPress={() => setOpenCalendarField(null)}
-                >
-                  <Text style={styles.calendarDoneButtonText}>Done</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          ) : null}
-
-          <View style={styles.previewCard}>
-            <Text style={styles.previewTitle}>Room should be available on:</Text>
-            <View style={styles.previewChipWrap}>
-              {reservationDateKeys.length === 0 ? (
-                <Text style={styles.previewEmptyText}>
-                  {isRecurringDraft
-                    ? "Add valid dates and weekdays to preview the selected range."
-                    : "Add one or more valid dates to preview room availability."}
-                </Text>
-              ) : (
-                reservationDateKeys.map((dateKey) => (
-                  <View key={dateKey} style={styles.previewChip}>
-                    <Text style={styles.previewChipText}>{formatDisplayDate(dateKey)}</Text>
-                    {!isRecurringDraft ? (
-                      <TouchableOpacity
-                        style={styles.previewChipRemoveButton}
-                        onPress={() => removeReservationDate(dateKey)}
-                      >
-                        <Text style={styles.previewChipRemoveText}>x</Text>
-                      </TouchableOpacity>
-                    ) : null}
-                  </View>
-                ))
-              )}
-            </View>
-          </View>
-
-          <View style={styles.inputGrid}>
-            <View style={styles.inputBlock}>
-              <Text style={styles.inputLabel}>Start Time</Text>
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={() => toggleTimePicker("start")}
-              >
-                <View style={styles.inputWithAction}>
-                  <View
-                    style={[
-                      styles.filterInput,
-                      styles.filterInputWithIcon,
-                      styles.timeReadonlyInput,
-                      !isStartTimeValid && styles.filterInputInvalid,
-                    ]}
-                  >
-                    <Text style={styles.timeReadonlyText}>{formatTime12h(startTimeDraft)}</Text>
-                  </View>
-                  <View style={styles.inputActionButton}>
-                    <View style={styles.clockIcon}>
-                      <View style={styles.clockFace} />
-                      <View style={styles.clockHandVertical} />
-                      <View style={styles.clockHandHorizontal} />
-                    </View>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.inputBlock}>
-              <Text style={styles.inputLabel}>End Time</Text>
-              <TouchableOpacity
-                activeOpacity={0.9}
-                onPress={() => toggleTimePicker("end")}
-              >
-                <View style={styles.inputWithAction}>
-                  <View
-                    style={[
-                      styles.filterInput,
-                      styles.filterInputWithIcon,
-                      styles.timeReadonlyInput,
-                      !isEndTimeValid && styles.filterInputInvalid,
-                    ]}
-                  >
-                    <Text style={styles.timeReadonlyText}>{formatTime12h(endTimeDraft)}</Text>
-                  </View>
-                  <View style={styles.inputActionButton}>
-                    <View style={styles.clockIcon}>
-                      <View style={styles.clockFace} />
-                      <View style={styles.clockHandVertical} />
-                      <View style={styles.clockHandHorizontal} />
-                    </View>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      ) : null}
-
-      <Modal
-        visible={Boolean(openTimeField)}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setOpenTimeField(null)}
-      >
-        <View style={styles.timeModalBackdrop}>
-          <View style={styles.timeModalCard}>
-            <View style={styles.timeModalHeader}>
-              <Text style={styles.timePickerTitle}>
-                {openTimeField === "start" ? "Choose Start Time" : "Choose End Time"}
-              </Text>
-              <TouchableOpacity
-                style={styles.timeModalCloseButton}
-                onPress={() => setOpenTimeField(null)}
-              >
-                <Text style={styles.timeModalCloseText}>X</Text>
-              </TouchableOpacity>
-            </View>
-
-            {openTimeField ? (
-              <View style={styles.timeWheelWrap}>
-                <View style={styles.timeWheelSelectionBand} />
-                <ScrollView
-                  key={`${openTimeField}-${selectedCampusDraft ?? "all"}-${
-                    openTimeField === "start" ? startTimeDraft : endTimeDraft
-                  }-hour`}
-                  style={styles.timeWheelColumn}
-                  contentContainerStyle={styles.timeWheelContent}
-                  showsVerticalScrollIndicator={false}
-                  nestedScrollEnabled
-                  snapToInterval={TIME_WHEEL_ITEM_HEIGHT}
-                  decelerationRate="fast"
-                  scrollEventThrottle={16}
-                  onScrollEndDrag={(event) =>
-                    handleTimeWheelScroll(
-                      openTimeField,
-                      "hour",
-                      event.nativeEvent.contentOffset.y
-                    )
-                  }
-                  onMomentumScrollEnd={(event) =>
-                    handleTimeWheelScroll(
-                      openTimeField,
-                      "hour",
-                      event.nativeEvent.contentOffset.y
-                    )
-                  }
-                  contentOffset={{
-                    x: 0,
-                    y:
-                      timeWheelHours.indexOf(
-                        openTimeField === "start" ? startTimeParts.hour : endTimeParts.hour
-                      ) * TIME_WHEEL_ITEM_HEIGHT,
-                  }}
-                >
-                  {timeWheelHours.map((hour) => {
-                    const selected =
-                      hour ===
-                      (openTimeField === "start" ? startTimeParts.hour : endTimeParts.hour);
-
-                    return (
-                      <View key={hour} style={styles.timeWheelItem}>
-                        <Text
-                          style={[
-                            styles.timeWheelText,
-                            selected && styles.timeWheelTextSelected,
-                          ]}
-                        >
-                          {hour}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
-                <Text style={styles.timeWheelDivider}>:</Text>
-                <ScrollView
-                  key={`${openTimeField}-${openTimeField === "start" ? startTimeDraft : endTimeDraft}-minute`}
-                  style={styles.timeWheelColumn}
-                  contentContainerStyle={styles.timeWheelContent}
-                  showsVerticalScrollIndicator={false}
-                  nestedScrollEnabled
-                  snapToInterval={TIME_WHEEL_ITEM_HEIGHT}
-                  decelerationRate="fast"
-                  scrollEventThrottle={16}
-                  onScrollEndDrag={(event) =>
-                    handleTimeWheelScroll(
-                      openTimeField,
-                      "minute",
-                      event.nativeEvent.contentOffset.y
-                    )
-                  }
-                  onMomentumScrollEnd={(event) =>
-                    handleTimeWheelScroll(
-                      openTimeField,
-                      "minute",
-                      event.nativeEvent.contentOffset.y
-                    )
-                  }
-                  contentOffset={{
-                    x: 0,
-                    y:
-                      TIME_MINUTE_OPTIONS.indexOf(
-                        openTimeField === "start" ? startTimeParts.minute : endTimeParts.minute
-                      ) * TIME_WHEEL_ITEM_HEIGHT,
-                  }}
-                >
-                  {TIME_MINUTE_OPTIONS.map((minute) => {
-                    const selected =
-                      minute ===
-                      (openTimeField === "start" ? startTimeParts.minute : endTimeParts.minute);
-
-                    return (
-                      <View key={minute} style={styles.timeWheelItem}>
-                        <Text
-                          style={[
-                            styles.timeWheelText,
-                            selected && styles.timeWheelTextSelected,
-                          ]}
-                        >
-                          {minute}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
-                <ScrollView
-                  key={`${openTimeField}-${openTimeField === "start" ? startTimeDraft : endTimeDraft}-period`}
-                  style={styles.timePeriodColumn}
-                  contentContainerStyle={styles.timeWheelContent}
-                  showsVerticalScrollIndicator={false}
-                  nestedScrollEnabled
-                  snapToInterval={TIME_WHEEL_ITEM_HEIGHT}
-                  decelerationRate="fast"
-                  scrollEventThrottle={16}
-                  onScrollEndDrag={(event) =>
-                    handleTimeWheelScroll(
-                      openTimeField,
-                      "period",
-                      event.nativeEvent.contentOffset.y
-                    )
-                  }
-                  onMomentumScrollEnd={(event) =>
-                    handleTimeWheelScroll(
-                      openTimeField,
-                      "period",
-                      event.nativeEvent.contentOffset.y
-                    )
-                  }
-                  contentOffset={{
-                    x: 0,
-                    y:
-                      TIME_PERIOD_OPTIONS.indexOf(
-                        openTimeField === "start" ? startTimeParts.period : endTimeParts.period
-                      ) * TIME_WHEEL_ITEM_HEIGHT,
-                  }}
-                >
-                  {TIME_PERIOD_OPTIONS.map((period) => {
-                    const selected =
-                      period ===
-                      (openTimeField === "start" ? startTimeParts.period : endTimeParts.period);
-
-                    return (
-                      <View key={period} style={styles.timeWheelItem}>
-                        <Text
-                          style={[
-                            styles.timeWheelText,
-                            styles.timePeriodText,
-                            selected && styles.timeWheelTextSelected,
-                          ]}
-                        >
-                          {period.toLowerCase()}
-                        </Text>
-                      </View>
-                    );
-                  })}
-                </ScrollView>
-              </View>
-            ) : null}
-          </View>
-        </View>
-      </Modal>
+      <RoomTimePickerModal
+        endTime={endTimeDraft}
+        endTimeParts={endTimeParts}
+        onClose={() => setOpenTimeField(null)}
+        onTimeWheelScroll={handleTimeWheelScroll}
+        openTimeField={openTimeField}
+        selectedCampus={selectedCampusDraft}
+        startTime={startTimeDraft}
+        startTimeParts={startTimeParts}
+        timeWheelHours={timeWheelHours}
+      />
 
       {!searchActive ? (
         <View>{children}</View>
@@ -1721,13 +1212,42 @@ const styles = StyleSheet.create({
   filterInputWithIcon: {
     paddingRight: 48,
   },
-  timeReadonlyInput: {
-    justifyContent: "center",
+  inlineTimeInputShell: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
   },
-  timeReadonlyText: {
+  inlineTimeHourInput: {
+    width: 30,
+    paddingVertical: 0,
     color: colors.text,
     fontFamily: fonts.bold,
     fontSize: 16,
+    textAlign: "center",
+  },
+  inlineTimeSeparator: {
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 16,
+  },
+  inlineTimeMinuteInput: {
+    width: 28,
+    paddingVertical: 0,
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    textAlign: "center",
+  },
+  inlineTimePeriodButton: {
+    marginLeft: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  inlineTimePeriodText: {
+    color: colors.primary,
+    fontFamily: fonts.bold,
+    fontSize: 15,
+    textTransform: "lowercase",
   },
   inputActionButton: {
     position: "absolute",
