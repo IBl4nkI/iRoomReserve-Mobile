@@ -82,6 +82,130 @@ function ClockIcon() {
   );
 }
 
+function splitDateValue(value: string) {
+  const [rawDay = "", rawMonth = "", rawYear = ""] = value.split("/");
+
+  return {
+    day: rawDay.replace(/\D/g, "").slice(0, 2),
+    month: rawMonth.replace(/\D/g, "").slice(0, 2),
+    year: rawYear.replace(/\D/g, "").slice(0, 2),
+  };
+}
+
+function joinDateValue(day: string, month: string, year: string) {
+  if (!day && !month && !year) {
+    return "";
+  }
+
+  return `${day}/${month}/${year}`.replace(/\/+$/, "");
+}
+
+interface SegmentedDateInputProps {
+  onBlur?: () => void;
+  onCalendarPress: () => void;
+  onChange: (value: string) => void;
+  value: string;
+}
+
+function SegmentedDateInput({
+  onBlur,
+  onCalendarPress,
+  onChange,
+  value,
+}: SegmentedDateInputProps) {
+  const monthRef = React.useRef<TextInput | null>(null);
+  const yearRef = React.useRef<TextInput | null>(null);
+  const { day, month, year } = splitDateValue(value);
+
+  function updateValue(nextDay: string, nextMonth: string, nextYear: string) {
+    onChange(joinDateValue(nextDay, nextMonth, nextYear));
+  }
+
+  function handleDayChange(rawValue: string) {
+    const digits = rawValue.replace(/\D/g, "").slice(0, 2);
+
+    if (digits.length === 1 && Number(digits) > 3) {
+      updateValue(`0${digits}`, month, year);
+      monthRef.current?.focus();
+      return;
+    }
+
+    updateValue(digits, month, year);
+
+    if (digits.length === 2) {
+      monthRef.current?.focus();
+    }
+  }
+
+  function handleMonthChange(rawValue: string) {
+    const digits = rawValue.replace(/\D/g, "").slice(0, 2);
+
+    if (digits.length === 1) {
+      const digit = Number(digits);
+
+      if (digit >= 2) {
+        updateValue(day, `0${digits}`, year);
+        yearRef.current?.focus();
+        return;
+      }
+    }
+
+    updateValue(day, digits, year);
+
+    if (digits.length === 2) {
+      yearRef.current?.focus();
+    }
+  }
+
+  function handleYearChange(rawValue: string) {
+    updateValue(day, month, rawValue.replace(/\D/g, "").slice(0, 2));
+  }
+
+  return (
+    <View style={styles.inputWithAction}>
+      <View style={[styles.filterInput, styles.filterInputWithIcon, styles.segmentedDateShell]}>
+        <TextInput
+          keyboardType="number-pad"
+          maxLength={2}
+          onBlur={onBlur}
+          onChangeText={handleDayChange}
+          placeholder="DD"
+          placeholderTextColor={colors.mutedText}
+          style={styles.segmentedDateInput}
+          value={day}
+        />
+        <Text style={styles.segmentedDateDivider}>/</Text>
+        <TextInput
+          keyboardType="number-pad"
+          maxLength={2}
+          onBlur={onBlur}
+          onChangeText={handleMonthChange}
+          placeholder="MM"
+          placeholderTextColor={colors.mutedText}
+          ref={monthRef}
+          style={styles.segmentedDateInput}
+          value={month}
+        />
+        <Text style={styles.segmentedDateDivider}>/</Text>
+        <TextInput
+          keyboardType="number-pad"
+          maxLength={2}
+          onBlur={onBlur}
+          onChangeText={handleYearChange}
+          placeholder="YY"
+          placeholderTextColor={colors.mutedText}
+          ref={yearRef}
+          style={styles.segmentedDateInput}
+          value={year}
+        />
+      </View>
+      <TouchableOpacity style={styles.inputActionButton} onPress={onCalendarPress}>
+        <CalendarIcon />
+      </TouchableOpacity>
+    </View>
+  );
+}
+
 export default function RoomSearchFilters({
   calendarMonthLabel,
   calendarWeeks,
@@ -191,43 +315,23 @@ export default function RoomSearchFilters({
           <Text style={styles.inputLabel}>
             {isRecurring ? "Start Date" : "Add Reservation Date(s)"}
           </Text>
-          <View style={styles.inputWithAction}>
-            <TextInput
-              value={isRecurring ? reservationDateInput : reservationDatesInput}
-              onChangeText={isRecurring ? onReservationDateChange : onReservationDateChange}
-              onBlur={onReservationDateBlur}
-              placeholder="DD/MM/YYYY"
-              placeholderTextColor={colors.mutedText}
-              style={[styles.filterInput, styles.filterInputWithIcon]}
-            />
-            <TouchableOpacity
-              style={styles.inputActionButton}
-              onPress={onReservationDateCalendarPress}
-            >
-              <CalendarIcon />
-            </TouchableOpacity>
-          </View>
+          <SegmentedDateInput
+            onBlur={onReservationDateBlur}
+            onCalendarPress={onReservationDateCalendarPress}
+            onChange={onReservationDateChange}
+            value={isRecurring ? reservationDateInput : reservationDatesInput}
+          />
         </View>
 
         {isRecurring ? (
           <View style={styles.inputBlock}>
             <Text style={styles.inputLabel}>End Date</Text>
-            <View style={styles.inputWithAction}>
-              <TextInput
-                value={endDateInput}
-                onChangeText={onEndDateChange}
-                onBlur={onEndDateBlur}
-                placeholder="DD/MM/YYYY"
-                placeholderTextColor={colors.mutedText}
-                style={[styles.filterInput, styles.filterInputWithIcon]}
-              />
-              <TouchableOpacity
-                style={styles.inputActionButton}
-                onPress={onEndDateCalendarPress}
-              >
-                <CalendarIcon />
-              </TouchableOpacity>
-            </View>
+            <SegmentedDateInput
+              onBlur={onEndDateBlur}
+              onCalendarPress={onEndDateCalendarPress}
+              onChange={onEndDateChange}
+              value={endDateInput}
+            />
           </View>
         ) : null}
       </View>
@@ -505,6 +609,24 @@ const styles = StyleSheet.create({
   filterInputWithIcon: {
     paddingRight: 48,
   },
+  segmentedDateShell: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  segmentedDateInput: {
+    minWidth: 28,
+    paddingVertical: 0,
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    textAlign: "center",
+  },
+  segmentedDateDivider: {
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 14,
+  },
   inputActionButton: {
     position: "absolute",
     right: 12,
@@ -692,8 +814,8 @@ const styles = StyleSheet.create({
   },
   previewChipText: {
     color: colors.text,
-    fontFamily: fonts.regular,
-    fontSize: 12,
+    fontFamily: fonts.bold,
+    fontSize: 14,
   },
   previewChipRemoveButton: {
     width: 18,

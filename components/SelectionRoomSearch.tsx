@@ -75,6 +75,20 @@ function formatDisplayDateLong(dateKey: string) {
   return `${day}/${month}/${year}`;
 }
 
+function formatDisplayDateShort(dateKey: string) {
+  if (!dateKey) {
+    return "";
+  }
+
+  const [year, month, day] = dateKey.split("-");
+
+  if (!year || !month || !day) {
+    return dateKey;
+  }
+
+  return `${day}/${month}/${year.slice(-2)}`;
+}
+
 function getMonthLabel(date: Date) {
   return date.toLocaleDateString("en-GB", {
     month: "long",
@@ -452,15 +466,11 @@ export default function SelectionRoomSearch({
   }, [isRecurringDraft]);
 
   useEffect(() => {
-    setReservationDatesInputDraft(reservationDatesDraft.map(formatDisplayDate).join(", "));
-  }, [reservationDatesDraft]);
-
-  useEffect(() => {
-    setReservationDateInputDraft(formatDisplayDateLong(reservationDateDraft));
+    setReservationDateInputDraft(formatDisplayDateShort(reservationDateDraft));
   }, [reservationDateDraft]);
 
   useEffect(() => {
-    setRecurringEndDateInputDraft(formatDisplayDateLong(recurringEndDateDraft));
+    setRecurringEndDateInputDraft(formatDisplayDateShort(recurringEndDateDraft));
   }, [recurringEndDateDraft]);
 
   useEffect(() => {
@@ -662,7 +672,18 @@ export default function SelectionRoomSearch({
   }
 
   function handleReservationDatesInputBlur() {
-    setReservationDatesDraft(parseEditableDateList(reservationDatesInputDraft));
+    const parsedDate = parseEditableDateInput(reservationDatesInputDraft);
+
+    if (!parsedDate) {
+      return;
+    }
+
+    setReservationDatesDraft((currentValue) =>
+      currentValue.includes(parsedDate)
+        ? currentValue
+        : [...currentValue, parsedDate].sort((left, right) => left.localeCompare(right))
+    );
+    setReservationDatesInputDraft("");
   }
 
   function handleReservationDateBlur() {
@@ -732,9 +753,9 @@ export default function SelectionRoomSearch({
       return;
     }
 
-    const nextDates = reservationDatesDraft.filter((value) => value !== dateKey);
-    setReservationDatesDraft(nextDates);
-    setReservationDatesInputDraft(nextDates.map(formatDisplayDate).join(", "));
+    setReservationDatesDraft((currentValue) =>
+      currentValue.filter((value) => value !== dateKey)
+    );
   }
 
   function toggleExpandedRoom(roomId: string) {
