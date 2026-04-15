@@ -30,11 +30,14 @@ export default function SelectionScreenLayout({
 }: SelectionScreenLayoutProps) {
   const insets = useSafeAreaInsets();
   const [searchInteractionActive, setSearchInteractionActive] = useState(false);
+  const [searchHeaderVisible, setSearchHeaderVisible] = useState(false);
   const cardContent = (
     <View style={styles.card}>
-      <Text style={styles.appName}>iRoomReserve</Text>
-      <Text style={styles.title}>{title}</Text>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      <>
+        <Text style={styles.appName}>iRoomReserve</Text>
+        <Text style={styles.title}>{searchHeaderVisible ? "Available Rooms" : title}</Text>
+        {!searchHeaderVisible && subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+      </>
 
       <View style={styles.content}>{children}</View>
       {footer ? <View style={styles.footer}>{footer}</View> : null}
@@ -59,7 +62,10 @@ export default function SelectionScreenLayout({
         </TouchableOpacity>
       ) : null}
       {enableRoomSearch ? (
-        <SelectionRoomSearch onInteractionChange={setSearchInteractionActive}>
+        <SelectionRoomSearch
+          onHeaderVisibilityChange={setSearchHeaderVisible}
+          onInteractionChange={setSearchInteractionActive}
+        >
           {cardContent}
         </SelectionRoomSearch>
       ) : (

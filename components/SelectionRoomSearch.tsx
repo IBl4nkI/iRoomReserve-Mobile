@@ -296,11 +296,13 @@ function getStatusStyles(state: "available" | "pending" | "unavailable") {
 
 interface SelectionRoomSearchProps {
   children: React.ReactNode;
+  onHeaderVisibilityChange?: (visible: boolean) => void;
   onInteractionChange?: (active: boolean) => void;
 }
 
 export default function SelectionRoomSearch({
   children,
+  onHeaderVisibilityChange,
   onInteractionChange,
 }: SelectionRoomSearchProps) {
   const router = useRouter();
@@ -571,6 +573,10 @@ export default function SelectionRoomSearch({
     onInteractionChange?.(filtersOpen || searchFocused);
   }, [filtersOpen, onInteractionChange, searchFocused]);
 
+  useEffect(() => {
+    onHeaderVisibilityChange?.(normalizedQuery.length > 0);
+  }, [normalizedQuery.length, onHeaderVisibilityChange]);
+
   function toggleSelectedDay(dayOfWeek: number) {
     setSelectedDaysDraft((currentValue) =>
       currentValue.includes(dayOfWeek)
@@ -840,6 +846,12 @@ export default function SelectionRoomSearch({
         <View>{children}</View>
       ) : (
         <View style={styles.resultsShell}>
+          {normalizedQuery.length > 0 ? (
+            <>
+              <Text style={styles.resultsAppName}>iRoomReserve</Text>
+              <Text style={styles.resultsTitle}>Available Rooms</Text>
+            </>
+          ) : null}
           {roomsLoading ? (
             <View style={styles.stateCard}>
               <ActivityIndicator color={colors.primary} />
@@ -1616,6 +1628,20 @@ const styles = StyleSheet.create({
     padding: 24,
     borderWidth: 1,
     borderColor: colors.border,
+  },
+  resultsAppName: {
+    color: colors.primary,
+    fontFamily: fonts.bold,
+    fontSize: 20,
+    textAlign: "center",
+    marginBottom: 4,
+  },
+  resultsTitle: {
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 24,
+    textAlign: "center",
+    marginBottom: 18,
   },
   resultsBlock: {},
   roomCard: {
