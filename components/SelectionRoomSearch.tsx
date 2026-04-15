@@ -15,12 +15,12 @@ import {
   formatSelectionLabel,
   formatShortDate,
   formatWeekLabel,
-  getCampusTimeOptions,
   getDayShortLabel,
   getWeekDates,
   isPastDate,
   isRoomAvailableForRequest,
   isTimeRangeValid,
+  minutesToTimeString,
   timeStringToMinutes,
   toSearchRoom,
   type SearchRoom,
@@ -145,8 +145,17 @@ function parseEditableDateList(value: string) {
     .sort((left, right) => left.localeCompare(right));
 }
 
-function getEffectiveTimeCampus(campus: ReservationCampus | null) {
-  return campus === "digi" ? "digi" : "main";
+function getSelectedTimeRange(campus: ReservationCampus | null) {
+  if (!campus) {
+    return {
+      startMinutes: 7 * 60,
+      endMinutes: 17 * 60,
+    };
+  }
+
+  return campus === "digi"
+    ? { startMinutes: 7 * 60, endMinutes: 17 * 60 }
+    : { startMinutes: 7 * 60, endMinutes: 21 * 60 };
 }
 
 function getDefaultStartTime() {
@@ -154,11 +163,17 @@ function getDefaultStartTime() {
 }
 
 function getDefaultEndTime(campus: ReservationCampus | null) {
-  return getEffectiveTimeCampus(campus) === "digi" ? "17:00" : "21:00";
+  return minutesToTimeString(getSelectedTimeRange(campus).endMinutes);
 }
 
 function getStartTimeOptions(campus: ReservationCampus | null) {
-  const options = getCampusTimeOptions(getEffectiveTimeCampus(campus));
+  const { startMinutes, endMinutes } = getSelectedTimeRange(campus);
+  const options: string[] = [];
+
+  for (let minutes = startMinutes; minutes <= endMinutes; minutes += 30) {
+    options.push(minutesToTimeString(minutes));
+  }
+
   return options.filter(
     (value) =>
       timeStringToMinutes(value) <= timeStringToMinutes(getDefaultEndTime(campus)) - 60
@@ -166,7 +181,13 @@ function getStartTimeOptions(campus: ReservationCampus | null) {
 }
 
 function getEndTimeOptionsForRange(campus: ReservationCampus | null, startTime: string) {
-  const options = getCampusTimeOptions(getEffectiveTimeCampus(campus));
+  const { startMinutes: earliestMinutes, endMinutes } = getSelectedTimeRange(campus);
+  const options: string[] = [];
+
+  for (let minutes = earliestMinutes; minutes <= endMinutes; minutes += 30) {
+    options.push(minutesToTimeString(minutes));
+  }
+
   const startMinutes = timeStringToMinutes(startTime || getDefaultStartTime());
 
   return options.filter((value) => timeStringToMinutes(value) - startMinutes >= 60);
@@ -306,7 +327,8 @@ export default function SelectionRoomSearch({ children }: SelectionRoomSearchPro
   const [openTimeField, setOpenTimeField] = useState<"start" | "end" | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
 
-  const searchActive = query.trim().length > 0;
+  const normalizedQuery = query.trim().toLowerCase();
+  const resultsVisible = filtersOpen || normalizedQuery.length > 0;
   const startTimeOptions = useMemo(
     () => getStartTimeOptions(selectedCampusDraft),
     [selectedCampusDraft]
@@ -394,12 +416,7 @@ export default function SelectionRoomSearch({ children }: SelectionRoomSearchPro
     };
   }, []);
 
-  const searchedRooms = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) {
-      return [];
-    }
-
+  const filteredRooms = useMemo(() => {
     return rooms.filter((room) => {
       if (!room.campus) {
         return false;
@@ -409,9 +426,13 @@ export default function SelectionRoomSearch({ children }: SelectionRoomSearchPro
         return false;
       }
 
+      if (!normalizedQuery) {
+        return true;
+      }
+
       return buildRoomSearchText(room).includes(normalizedQuery);
     });
-  }, [query, rooms, selectedCampusDraft]);
+  }, [normalizedQuery, rooms, selectedCampusDraft]);
 
   useEffect(() => {
     if (!isRecurringDraft) {
@@ -452,11 +473,11 @@ export default function SelectionRoomSearch({ children }: SelectionRoomSearchPro
   }, [endTimeDraft, selectedCampusDraft, startTimeDraft, startTimeOptions]);
 
   useEffect(() => {
-    if (!searchActive) {
+    if (!resultsVisible) {
       return;
     }
 
-    const roomIdsToFetch = searchedRooms
+    const roomIdsToFetch = filteredRooms
       .map((room) => room.id)
       .filter((roomId) => roomSchedules[roomId] === undefined);
 
@@ -509,10 +530,10 @@ export default function SelectionRoomSearch({ children }: SelectionRoomSearchPro
     return () => {
       active = false;
     };
-  }, [roomSchedules, searchActive, searchedRooms]);
+  }, [filteredRooms, resultsVisible, roomSchedules]);
 
   const availableRooms = useMemo(() => {
-    return searchedRooms.filter((room) => {
+    return filteredRooms.filter((room) => {
       if (
         startTimeDraft &&
         endTimeDraft &&
@@ -529,7 +550,17 @@ export default function SelectionRoomSearch({ children }: SelectionRoomSearchPro
         endTimeDraft
       );
     });
-  }, [endTimeDraft, reservationDateKeys, roomSchedules, searchedRooms, startTimeDraft]);
+  }, [endTimeDraft, filteredRooms, reservationDateKeys, roomSchedules, startTimeDraft]);
+
+  const availabilityRequiresSchedules = reservationDateKeys.length > 0;
+  const availabilityLoading = useMemo(
+    () =>
+      availabilityRequiresSchedules &&
+      filteredRooms.some(
+        (room) => roomSchedules[room.id] === undefined || Boolean(scheduleLoadingIds[room.id])
+      ),
+    [availabilityRequiresSchedules, filteredRooms, roomSchedules, scheduleLoadingIds]
+  );
 
   function toggleSelectedDay(dayOfWeek: number) {
     setSelectedDaysDraft((currentValue) =>
@@ -794,217 +825,226 @@ export default function SelectionRoomSearch({ children }: SelectionRoomSearchPro
         timeWheelHours={timeWheelHours}
       />
 
-      {!searchActive ? (
+      {!resultsVisible ? (
         <View>{children}</View>
-      ) : roomsLoading ? (
-        <View style={styles.stateCard}>
-          <ActivityIndicator color={colors.primary} />
-          <Text style={styles.stateText}>Loading searchable rooms...</Text>
-        </View>
-      ) : roomsError ? (
-        <View style={styles.stateCard}>
-          <Text style={styles.stateText}>{roomsError}</Text>
-        </View>
-      ) : availableRooms.length === 0 ? (
-        <View style={styles.stateCard}>
-          <Text style={styles.stateText}>
-            No rooms match this search and availability filter.
-          </Text>
-        </View>
       ) : (
-        <View style={styles.resultsBlock}>
-          {availableRooms.map((room) => {
-            const expanded = expandedRoomId === room.id;
-            const schedules = roomSchedules[room.id] ?? [];
-            const selectedDateKeys = expandedDates[room.id] ?? [];
-            const weekOffset = weekOffsets[room.id] ?? 0;
-            const currentWeekDates = getWeekDates(weekOffset);
+        <View style={styles.resultsShell}>
+          {roomsLoading ? (
+            <View style={styles.stateCard}>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={styles.stateText}>Loading rooms...</Text>
+            </View>
+          ) : roomsError ? (
+            <View style={styles.stateCard}>
+              <Text style={styles.stateText}>{roomsError}</Text>
+            </View>
+          ) : availabilityLoading ? (
+            <View style={styles.stateCard}>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={styles.stateText}>Checking room availability...</Text>
+            </View>
+          ) : availableRooms.length === 0 ? (
+            <View style={styles.stateCard}>
+              <Text style={styles.stateText}>
+                No rooms match the current filters and availability window.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.resultsBlock}>
+              {availableRooms.map((room) => {
+                const expanded = expandedRoomId === room.id;
+                const schedules = roomSchedules[room.id] ?? [];
+                const selectedDateKeys = expandedDates[room.id] ?? [];
+                const weekOffset = weekOffsets[room.id] ?? 0;
+                const currentWeekDates = getWeekDates(weekOffset);
 
-            return (
-              <View key={room.id} style={styles.roomCard}>
-                <View style={styles.roomHeader}>
-                  <TouchableOpacity
-                    style={styles.roomInfoPressable}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/(main)/rooms/[roomId]",
-                        params: { roomId: room.id },
-                      })
-                    }
-                  >
-                    <Text style={styles.roomName}>{room.name}</Text>
-                    <Text style={styles.roomMeta}>
-                      {room.campusName} / {room.buildingName}
-                    </Text>
-                    <Text style={styles.roomMeta}>Floor: {room.floor}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.expandButton}
-                    onPress={() => toggleExpandedRoom(room.id)}
-                  >
-                    <Text style={styles.expandButtonText}>{expanded ? "^" : "v"}</Text>
-                  </TouchableOpacity>
-                </View>
-
-                {scheduleLoadingIds[room.id] ? (
-                  <ActivityIndicator color={colors.primary} style={styles.roomLoader} />
-                ) : null}
-
-                {expanded ? (
-                  <View style={styles.expandedSection}>
-                    <View style={styles.detailCard}>
-                      <Text style={styles.detailText}>Type: {room.roomType}</Text>
-                      <Text style={styles.detailText}>Status: {room.status}</Text>
-                      <Text style={styles.detailText}>
-                        Air-Conditioner: {room.acStatus}
-                      </Text>
-                      <Text style={styles.detailText}>
-                        TV/Projector: {room.tvProjectorStatus}
-                      </Text>
-                      <Text style={styles.detailText}>Capacity: {room.capacity}</Text>
+                return (
+                  <View key={room.id} style={styles.roomCard}>
+                    <View style={styles.roomHeader}>
+                      <TouchableOpacity
+                        style={styles.roomInfoPressable}
+                        onPress={() =>
+                          router.push({
+                            pathname: "/(main)/rooms/[roomId]",
+                            params: { roomId: room.id },
+                          })
+                        }
+                      >
+                        <Text style={styles.roomName}>{room.name}</Text>
+                        <Text style={styles.roomMeta}>
+                          {room.campusName} / {room.buildingName}
+                        </Text>
+                        <Text style={styles.roomMeta}>Floor: {room.floor}</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.expandButton}
+                        onPress={() => toggleExpandedRoom(room.id)}
+                      >
+                        <Text style={styles.expandButtonText}>{expanded ? "^" : "v"}</Text>
+                      </TouchableOpacity>
                     </View>
 
-                    <View style={styles.schedulePreviewCard}>
-                      <Text style={styles.schedulePreviewTitle}>View Schedules</Text>
-                      <View style={styles.weekNavRow}>
-                        <TouchableOpacity
-                          style={styles.weekNavButton}
-                          disabled={weekOffset === 0}
-                          onPress={() =>
-                            setWeekOffsets((currentValue) => ({
-                              ...currentValue,
-                              [room.id]: Math.max(0, weekOffset - 1),
-                            }))
-                          }
-                        >
-                          <Text
-                            style={[
-                              styles.weekNavText,
-                              weekOffset === 0 && styles.weekNavTextDisabled,
-                            ]}
-                          >
-                            {"<"}
+                    {scheduleLoadingIds[room.id] ? (
+                      <ActivityIndicator color={colors.primary} style={styles.roomLoader} />
+                    ) : null}
+
+                    {expanded ? (
+                      <View style={styles.expandedSection}>
+                        <View style={styles.detailCard}>
+                          <Text style={styles.detailText}>Type: {room.roomType}</Text>
+                          <Text style={styles.detailText}>Status: {room.status}</Text>
+                          <Text style={styles.detailText}>
+                            Air-Conditioner: {room.acStatus}
                           </Text>
-                        </TouchableOpacity>
-                        <Text style={styles.schedulePreviewSubtitle}>
-                          {formatWeekLabel(currentWeekDates[0])}
-                        </Text>
-                        <TouchableOpacity
-                          style={styles.weekNavButton}
-                          onPress={() =>
-                            setWeekOffsets((currentValue) => ({
-                              ...currentValue,
-                              [room.id]: weekOffset + 1,
-                            }))
-                          }
-                        >
-                          <Text style={styles.weekNavText}>{">"}</Text>
-                        </TouchableOpacity>
-                      </View>
+                          <Text style={styles.detailText}>
+                            TV/Projector: {room.tvProjectorStatus}
+                          </Text>
+                          <Text style={styles.detailText}>Capacity: {room.capacity}</Text>
+                        </View>
 
-                      <View style={styles.scheduleDateGrid}>
-                        {currentWeekDates.map((date) => {
-                          const rawDateKey = toDateKey(date);
-                          const selected = selectedDateKeys.includes(rawDateKey);
-                          const disabled = isPastDate(date);
-
-                          return (
+                        <View style={styles.schedulePreviewCard}>
+                          <Text style={styles.schedulePreviewTitle}>View Schedules</Text>
+                          <View style={styles.weekNavRow}>
                             <TouchableOpacity
-                              key={rawDateKey}
-                              disabled={disabled}
-                              style={[
-                                styles.scheduleDateChip,
-                                selected && styles.scheduleDateChipSelected,
-                                disabled && styles.scheduleDateChipDisabled,
-                              ]}
-                              onPress={() => toggleExpandedDate(room.id, rawDateKey)}
+                              style={styles.weekNavButton}
+                              disabled={weekOffset === 0}
+                              onPress={() =>
+                                setWeekOffsets((currentValue) => ({
+                                  ...currentValue,
+                                  [room.id]: Math.max(0, weekOffset - 1),
+                                }))
+                              }
                             >
                               <Text
                                 style={[
-                                  styles.scheduleDateDay,
-                                  selected && styles.scheduleDateTextSelected,
-                                  disabled && styles.scheduleDateTextDisabled,
+                                  styles.weekNavText,
+                                  weekOffset === 0 && styles.weekNavTextDisabled,
                                 ]}
                               >
-                                {getDayShortLabel(date.getDay())}
-                              </Text>
-                              <Text
-                                style={[
-                                  styles.scheduleDateValue,
-                                  selected && styles.scheduleDateTextSelected,
-                                  disabled && styles.scheduleDateTextDisabled,
-                                ]}
-                              >
-                                {formatShortDate(date)}
+                                {"<"}
                               </Text>
                             </TouchableOpacity>
-                          );
-                        })}
-                      </View>
-
-                      {selectedDateKeys.length === 0 ? (
-                        <Text style={styles.previewEmptyText}>
-                          Select one or more days to preview room schedules.
-                        </Text>
-                      ) : (
-                        selectedDateKeys.map((dateKey) => (
-                          <View key={dateKey} style={styles.timeSlotSection}>
-                            <Text style={styles.timeSlotSectionTitle}>
-                              {formatSelectionLabel(dateKey)}
+                            <Text style={styles.schedulePreviewSubtitle}>
+                              {formatWeekLabel(currentWeekDates[0])}
                             </Text>
-                            {buildTimeSlots(room.id, dateKey, schedules).map((slot) => {
-                              const statusStyles = getStatusStyles(slot.state);
+                            <TouchableOpacity
+                              style={styles.weekNavButton}
+                              onPress={() =>
+                                setWeekOffsets((currentValue) => ({
+                                  ...currentValue,
+                                  [room.id]: weekOffset + 1,
+                                }))
+                              }
+                            >
+                              <Text style={styles.weekNavText}>{">"}</Text>
+                            </TouchableOpacity>
+                          </View>
+
+                          <View style={styles.scheduleDateGrid}>
+                            {currentWeekDates.map((date) => {
+                              const rawDateKey = toDateKey(date);
+                              const selected = selectedDateKeys.includes(rawDateKey);
+                              const disabled = isPastDate(date);
 
                               return (
-                                <View
-                                  key={`${dateKey}-${slot.startTime}`}
+                                <TouchableOpacity
+                                  key={rawDateKey}
+                                  disabled={disabled}
                                   style={[
-                                    styles.timeSlotCard,
-                                    {
-                                      backgroundColor: statusStyles.backgroundColor,
-                                      borderColor: statusStyles.borderColor,
-                                    },
+                                    styles.scheduleDateChip,
+                                    selected && styles.scheduleDateChipSelected,
+                                    disabled && styles.scheduleDateChipDisabled,
                                   ]}
+                                  onPress={() => toggleExpandedDate(room.id, rawDateKey)}
                                 >
-                                  <View style={styles.timeSlotHeader}>
-                                    <Text
-                                      style={[
-                                        styles.timeSlotTime,
-                                        { color: statusStyles.textColor },
-                                      ]}
-                                    >
-                                      {formatTime12h(slot.startTime)} -{" "}
-                                      {formatTime12h(slot.endTime)}
-                                    </Text>
-                                    <Text
-                                      style={[
-                                        styles.timeSlotBadge,
-                                        { color: statusStyles.textColor },
-                                      ]}
-                                    >
-                                      {slot.state}
-                                    </Text>
-                                  </View>
                                   <Text
                                     style={[
-                                      styles.timeSlotDescription,
-                                      { color: statusStyles.textColor },
+                                      styles.scheduleDateDay,
+                                      selected && styles.scheduleDateTextSelected,
+                                      disabled && styles.scheduleDateTextDisabled,
                                     ]}
                                   >
-                                    {slot.description}
+                                    {getDayShortLabel(date.getDay())}
                                   </Text>
-                                </View>
+                                  <Text
+                                    style={[
+                                      styles.scheduleDateValue,
+                                      selected && styles.scheduleDateTextSelected,
+                                      disabled && styles.scheduleDateTextDisabled,
+                                    ]}
+                                  >
+                                    {formatShortDate(date)}
+                                  </Text>
+                                </TouchableOpacity>
                               );
                             })}
                           </View>
-                        ))
-                      )}
-                    </View>
+
+                          {selectedDateKeys.length === 0 ? (
+                            <Text style={styles.previewEmptyText}>
+                              Select one or more days to preview room schedules.
+                            </Text>
+                          ) : (
+                            selectedDateKeys.map((dateKey) => (
+                              <View key={dateKey} style={styles.timeSlotSection}>
+                                <Text style={styles.timeSlotSectionTitle}>
+                                  {formatSelectionLabel(dateKey)}
+                                </Text>
+                                {buildTimeSlots(room.id, dateKey, schedules).map((slot) => {
+                                  const statusStyles = getStatusStyles(slot.state);
+
+                                  return (
+                                    <View
+                                      key={`${dateKey}-${slot.startTime}`}
+                                      style={[
+                                        styles.timeSlotCard,
+                                        {
+                                          backgroundColor: statusStyles.backgroundColor,
+                                          borderColor: statusStyles.borderColor,
+                                        },
+                                      ]}
+                                    >
+                                      <View style={styles.timeSlotHeader}>
+                                        <Text
+                                          style={[
+                                            styles.timeSlotTime,
+                                            { color: statusStyles.textColor },
+                                          ]}
+                                        >
+                                          {formatTime12h(slot.startTime)} -{" "}
+                                          {formatTime12h(slot.endTime)}
+                                        </Text>
+                                        <Text
+                                          style={[
+                                            styles.timeSlotBadge,
+                                            { color: statusStyles.textColor },
+                                          ]}
+                                        >
+                                          {slot.state}
+                                        </Text>
+                                      </View>
+                                      <Text
+                                        style={[
+                                          styles.timeSlotDescription,
+                                          { color: statusStyles.textColor },
+                                        ]}
+                                      >
+                                        {slot.description}
+                                      </Text>
+                                    </View>
+                                  );
+                                })}
+                              </View>
+                            ))
+                          )}
+                        </View>
+                      </View>
+                    ) : null}
                   </View>
-                ) : null}
-              </View>
-            );
-          })}
+                );
+              })}
+            </View>
+          )}
         </View>
       )}
     </View>
@@ -1558,7 +1598,15 @@ const styles = StyleSheet.create({
     marginTop: 8,
     textAlign: "center",
   },
-  resultsBlock: { marginTop: 12 },
+  resultsShell: {
+    marginTop: 12,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  resultsBlock: {},
   roomCard: {
     borderRadius: 14,
     borderWidth: 1,
