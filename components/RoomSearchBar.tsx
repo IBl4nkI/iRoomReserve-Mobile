@@ -5,14 +5,18 @@ import { colors, fonts } from "@/constants/theme";
 
 interface RoomSearchBarProps {
   filtersOpen: boolean;
+  onQueryBlur?: () => void;
   onToggleFilters: () => void;
+  onQueryFocus?: () => void;
   onQueryChange: (value: string) => void;
   query: string;
 }
 
 export default function RoomSearchBar({
   filtersOpen,
+  onQueryBlur,
   onToggleFilters,
+  onQueryFocus,
   onQueryChange,
   query,
 }: RoomSearchBarProps) {
@@ -26,6 +30,8 @@ export default function RoomSearchBar({
         <TextInput
           value={query}
           onChangeText={onQueryChange}
+          onBlur={onQueryBlur}
+          onFocus={onQueryFocus}
           placeholder="Search for a room"
           placeholderTextColor={colors.mutedText}
           style={styles.searchInput}

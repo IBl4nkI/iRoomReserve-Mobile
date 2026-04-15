@@ -296,12 +296,17 @@ function getStatusStyles(state: "available" | "pending" | "unavailable") {
 
 interface SelectionRoomSearchProps {
   children: React.ReactNode;
+  onInteractionChange?: (active: boolean) => void;
 }
 
-export default function SelectionRoomSearch({ children }: SelectionRoomSearchProps) {
+export default function SelectionRoomSearch({
+  children,
+  onInteractionChange,
+}: SelectionRoomSearchProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
   const [isRecurringDraft, setIsRecurringDraft] = useState(false);
   const [selectedCampusDraft, setSelectedCampusDraft] = useState<ReservationCampus | null>(null);
   const [selectedDaysDraft, setSelectedDaysDraft] = useState<number[]>([]);
@@ -562,6 +567,10 @@ export default function SelectionRoomSearch({ children }: SelectionRoomSearchPro
     [availabilityRequiresSchedules, filteredRooms, roomSchedules, scheduleLoadingIds]
   );
 
+  useEffect(() => {
+    onInteractionChange?.(filtersOpen || searchFocused);
+  }, [filtersOpen, onInteractionChange, searchFocused]);
+
   function toggleSelectedDay(dayOfWeek: number) {
     setSelectedDaysDraft((currentValue) =>
       currentValue.includes(dayOfWeek)
@@ -762,6 +771,8 @@ export default function SelectionRoomSearch({ children }: SelectionRoomSearchPro
     <View style={styles.wrapper}>
       <RoomSearchBar
         filtersOpen={filtersOpen}
+        onQueryBlur={() => setSearchFocused(false)}
+        onQueryFocus={() => setSearchFocused(true)}
         onToggleFilters={() => setFiltersOpen((currentValue) => !currentValue)}
         onQueryChange={setQuery}
         query={query}

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,12 +10,16 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Keyboard,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { registerWithEmail, getAuthErrorMessage } from '@/lib/auth';
 import { colors, fonts } from '@/constants/theme';
 
 export default function RegisterScreen() {
+  const insets = useSafeAreaInsets();
+  const scrollViewRef = useRef<ScrollView | null>(null);
   const [selectedRole, setSelectedRole] = useState('student');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -28,6 +32,16 @@ export default function RegisterScreen() {
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage] = useState('');
   const router = useRouter();
+
+  useEffect(() => {
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+    });
+
+    return () => {
+      hideSubscription.remove();
+    };
+  }, []);
 
   const roles = [
     { key: 'student', label: 'Student' },
@@ -97,9 +111,16 @@ export default function RegisterScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        ref={scrollViewRef}
+        contentContainerStyle={[
+          styles.scroll,
+          {
+            paddingTop: Math.max(insets.top, 32),
+            paddingBottom: Math.max(insets.bottom, 0),
+          },
+        ]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
 

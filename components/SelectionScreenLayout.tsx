@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import SelectionRoomSearch from "@/components/SelectionRoomSearch";
 import { colors, fonts } from "@/constants/theme";
@@ -27,6 +28,8 @@ export default function SelectionScreenLayout({
   subtitle,
   title,
 }: SelectionScreenLayoutProps) {
+  const insets = useSafeAreaInsets();
+  const [searchInteractionActive, setSearchInteractionActive] = useState(false);
   const cardContent = (
     <View style={styles.card}>
       <Text style={styles.appName}>iRoomReserve</Text>
@@ -41,14 +44,27 @@ export default function SelectionScreenLayout({
   return (
     <ScrollView
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={styles.container}
+      contentContainerStyle={[
+        styles.container,
+        searchInteractionActive ? styles.searchContainer : styles.centeredContainer,
+        {
+          paddingTop: Math.max(insets.top, searchInteractionActive ? 64 : 16),
+          paddingBottom: Math.max(insets.bottom, 16),
+        },
+      ]}
     >
       {onBackPress ? (
         <TouchableOpacity style={styles.backIconButton} onPress={onBackPress}>
           <Text style={styles.backIconText}>{"<"}</Text>
         </TouchableOpacity>
       ) : null}
-      {enableRoomSearch ? <SelectionRoomSearch>{cardContent}</SelectionRoomSearch> : cardContent}
+      {enableRoomSearch ? (
+        <SelectionRoomSearch onInteractionChange={setSearchInteractionActive}>
+          {cardContent}
+        </SelectionRoomSearch>
+      ) : (
+        cardContent
+      )}
     </ScrollView>
   );
 }
@@ -56,9 +72,14 @@ export default function SelectionScreenLayout({
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    justifyContent: "center",
     padding: 16,
     backgroundColor: colors.background,
+  },
+  centeredContainer: {
+    justifyContent: "center",
+  },
+  searchContainer: {
+    justifyContent: "flex-start",
   },
   backIconButton: {
     alignSelf: "flex-start",
