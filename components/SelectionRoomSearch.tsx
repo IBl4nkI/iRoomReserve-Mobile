@@ -321,6 +321,15 @@ export default function SelectionRoomSearch({
 
   const normalizedQuery = query.trim().toLowerCase();
   const resultsVisible = filtersOpen || normalizedQuery.length > 0;
+  const hasActiveFilters =
+    selectedCampusDraft !== null ||
+    isRecurringDraft ||
+    selectedDaysDraft.length > 0 ||
+    reservationDatesDraft.length > 0 ||
+    reservationDateDraft.length > 0 ||
+    recurringEndDateDraft.length > 0 ||
+    startTimeDraft !== getDefaultStartTime() ||
+    endTimeDraft !== getDefaultEndTime(null);
   const startTimeOptions = useMemo(
     () => getStartTimeOptions(selectedCampusDraft),
     [selectedCampusDraft]
@@ -576,6 +585,23 @@ export default function SelectionRoomSearch({
     setEndTimeDraft(nextEndTime);
   }
 
+  function resetFilters() {
+    setSelectedCampusDraft(null);
+    setIsRecurringDraft(false);
+    setSelectedDaysDraft([]);
+    setReservationDatesDraft([]);
+    setReservationDatesInputDraft("");
+    setReservationDateDraft("");
+    setReservationDateInputDraft("");
+    setRecurringEndDateDraft("");
+    setRecurringEndDateInputDraft("");
+    setStartTimeDraft(getDefaultStartTime());
+    setEndTimeDraft(getDefaultEndTime(null));
+    setOpenCalendarField(null);
+    setOpenTimeField(null);
+    setCalendarMonth(new Date());
+  }
+
   function applyTimeValue(field: "start" | "end", value: string) {
     if (field === "start") {
       const nextStartTime = getNearestTimeOption(startTimeOptions, value);
@@ -755,6 +781,7 @@ export default function SelectionRoomSearch({
         endTimeLabel={formatTime12h(endTimeDraft)}
         filtersOpen={filtersOpen}
         getDayShortLabel={getDayShortLabel}
+        hasActiveFilters={hasActiveFilters}
         isCalendarDateDisabled={(date, dateKey) =>
           isPastDate(date) ||
           (openCalendarField === "recurringEndDate" && Boolean(reservationDateDraft) && dateKey < reservationDateDraft)
@@ -781,6 +808,7 @@ export default function SelectionRoomSearch({
         onReservationDateCalendarPress={() =>
           openCalendar(isRecurringDraft ? "reservationDate" : "reservationDates")
         }
+        onResetFilters={resetFilters}
         onStartTimePress={() => toggleTimePicker("start")}
         onToggleCampus={toggleCampus}
         onToggleDay={toggleSelectedDay}

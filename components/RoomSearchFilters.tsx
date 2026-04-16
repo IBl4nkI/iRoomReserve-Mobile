@@ -30,6 +30,7 @@ interface RoomSearchFiltersProps {
   endTimeLabel: string;
   filtersOpen: boolean;
   getDayShortLabel: (dayOfWeek: number) => string;
+  hasActiveFilters: boolean;
   isCalendarDateDisabled: (date: Date, dateKey: string) => boolean;
   isCalendarDateSelected: (dateKey: string) => boolean;
   isRecurring: boolean;
@@ -45,6 +46,7 @@ interface RoomSearchFiltersProps {
   onReservationDateBlur: () => void;
   onReservationDateChange: (value: string) => void;
   onReservationDateCalendarPress: () => void;
+  onResetFilters: () => void;
   onStartTimePress: () => void;
   onToggleCampus: (campus: ReservationCampus) => void;
   onToggleDay: (dayOfWeek: number) => void;
@@ -213,6 +215,7 @@ export default function RoomSearchFilters({
   endTimeLabel,
   filtersOpen,
   getDayShortLabel,
+  hasActiveFilters,
   isCalendarDateDisabled,
   isCalendarDateSelected,
   isRecurring,
@@ -228,6 +231,7 @@ export default function RoomSearchFilters({
   onReservationDateBlur,
   onReservationDateChange,
   onReservationDateCalendarPress,
+  onResetFilters,
   onStartTimePress,
   onToggleCampus,
   onToggleDay,
@@ -457,6 +461,24 @@ export default function RoomSearchFilters({
           </TouchableOpacity>
         </View>
       </View>
+
+      <TouchableOpacity
+        disabled={!hasActiveFilters}
+        onPress={onResetFilters}
+        style={[
+          styles.resetButton,
+          !hasActiveFilters && styles.resetButtonDisabled,
+        ]}
+      >
+        <Text
+          style={[
+            styles.resetButtonText,
+            !hasActiveFilters && styles.resetButtonTextDisabled,
+          ]}
+        >
+          Reset Filters
+        </Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -688,6 +710,28 @@ const styles = StyleSheet.create({
     height: 1.5,
     backgroundColor: colors.primary,
     left: 9,
+  },
+  resetButton: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  resetButtonDisabled: {
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  resetButtonText: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 13,
+  },
+  resetButtonTextDisabled: {
+    color: colors.mutedText,
   },
   calendarCard: {
     borderRadius: 14,
