@@ -31,6 +31,6 @@ const styles = StyleSheet.create({
   optionButton: { borderWidth: 1, borderColor: colors.text, borderRadius: 12, paddingVertical: 20, alignItems: "center", marginBottom: 14, backgroundColor: colors.primary },
   optionLabel: { fontSize: 24, fontFamily: fonts.bold, color: colors.surface },
   orText: { textAlign: "center", color: colors.secondary, fontFamily: fonts.regular, marginBottom: 14 },
-  dashboardButton: { marginTop: 12, alignItems: "center" },
+  dashboardButton: {},
   dashboardText: { color: colors.primary, fontFamily: fonts.bold, fontSize: 13, textDecorationLine: "underline" },
 });

@@ -85,6 +85,6 @@ const styles = StyleSheet.create({
   statusText: { color: colors.secondary, fontFamily: fonts.regular, textAlign: "center", marginBottom: 20 },
   optionButton: { backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 20, alignItems: "center", marginBottom: 14 },
   optionLabel: { fontSize: 24, fontFamily: fonts.bold, color: colors.white },
-  linkButton: { alignItems: "center", marginTop: 8 },
+  linkButton: {},
   linkText: { color: colors.primary, fontFamily: fonts.bold, fontSize: 13, textDecorationLine: "underline" },
 });

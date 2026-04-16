@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
     color: colors.white,
     textAlign: "center",
   },
-  linkButton: { alignItems: "center", marginTop: 12 },
+  linkButton: {},
   linkText: {
     color: colors.primary,
     fontFamily: fonts.bold,

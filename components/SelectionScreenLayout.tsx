@@ -65,6 +65,7 @@ export default function SelectionScreenLayout({
         <SelectionRoomSearch
           onHeaderVisibilityChange={setSearchHeaderVisible}
           onInteractionChange={setSearchInteractionActive}
+          resultsFooter={footer}
         >
           {cardContent}
         </SelectionRoomSearch>
@@ -137,5 +138,6 @@ const styles = StyleSheet.create({
   },
   footer: {
     marginTop: 12,
+    alignItems: "center",
   },
 });

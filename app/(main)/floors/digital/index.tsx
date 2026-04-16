@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   optionLabel: { fontSize: 22, fontFamily: fonts.bold, color: colors.white },
-  linkButton: { alignItems: "center", marginTop: 8 },
+  linkButton: {},
   linkText: {
     color: colors.primary,
     fontFamily: fonts.bold,

@@ -284,12 +284,14 @@ interface SelectionRoomSearchProps {
   children: React.ReactNode;
   onHeaderVisibilityChange?: (visible: boolean) => void;
   onInteractionChange?: (active: boolean) => void;
+  resultsFooter?: React.ReactNode;
 }
 
 export default function SelectionRoomSearch({
   children,
   onHeaderVisibilityChange,
   onInteractionChange,
+  resultsFooter,
 }: SelectionRoomSearchProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -320,8 +322,6 @@ export default function SelectionRoomSearch({
   const [calendarMonth, setCalendarMonth] = useState(new Date());
 
   const normalizedQuery = query.trim().toLowerCase();
-  const resultsVisible = filtersOpen || normalizedQuery.length > 0;
-  const resultsHeadingVisible = filtersOpen || normalizedQuery.length > 0;
   const hasActiveFilters =
     selectedCampusDraft !== null ||
     isRecurringDraft ||
@@ -331,6 +331,8 @@ export default function SelectionRoomSearch({
     recurringEndDateDraft.length > 0 ||
     startTimeDraft !== getDefaultStartTime() ||
     endTimeDraft !== getDefaultEndTime(null);
+  const resultsVisible = filtersOpen || normalizedQuery.length > 0 || hasActiveFilters;
+  const resultsHeadingVisible = resultsVisible;
   const startTimeOptions = useMemo(
     () => getStartTimeOptions(selectedCampusDraft),
     [selectedCampusDraft]
@@ -905,15 +907,26 @@ export default function SelectionRoomSearch({
                     {expanded ? (
                       <View style={styles.expandedSection}>
                         <View style={styles.detailCard}>
-                          <Text style={styles.detailText}>Type: {room.roomType}</Text>
-                          <Text style={styles.detailText}>Status: {room.status}</Text>
                           <Text style={styles.detailText}>
-                            Air-Conditioner: {room.acStatus}
+                            <Text style={styles.detailLabel}>Type: </Text>
+                            {room.roomType}
                           </Text>
                           <Text style={styles.detailText}>
-                            TV/Projector: {room.tvProjectorStatus}
+                            <Text style={styles.detailLabel}>Status: </Text>
+                            {room.status}
                           </Text>
-                          <Text style={styles.detailText}>Capacity: {room.capacity}</Text>
+                          <Text style={styles.detailText}>
+                            <Text style={styles.detailLabel}>Air-Conditioner: </Text>
+                            {room.acStatus}
+                          </Text>
+                          <Text style={styles.detailText}>
+                            <Text style={styles.detailLabel}>TV/Projector: </Text>
+                            {room.tvProjectorStatus}
+                          </Text>
+                          <Text style={styles.detailText}>
+                            <Text style={styles.detailLabel}>Capacity: </Text>
+                            {room.capacity}
+                          </Text>
                         </View>
 
                         <View style={styles.schedulePreviewCard}>
@@ -946,6 +959,7 @@ export default function SelectionRoomSearch({
               })}
             </View>
           )}
+          {resultsFooter ? <View style={styles.resultsFooter}>{resultsFooter}</View> : null}
         </View>
       )}
     </View>
@@ -1521,6 +1535,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 18,
   },
+  resultsFooter: {
+    marginTop: 12,
+  },
   resultsBlock: {},
   roomCard: {
     borderRadius: 14,
@@ -1555,6 +1572,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   detailText: { color: colors.text, fontFamily: fonts.regular, fontSize: 13, marginBottom: 4 },
+  detailLabel: { fontFamily: fonts.bold },
   schedulePreviewCard: {
     marginTop: 12,
     borderRadius: 12,
