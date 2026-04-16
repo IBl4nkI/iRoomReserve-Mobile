@@ -36,7 +36,7 @@ export function getBuildingFloorOptions(buildingId?: string, buildingFloors?: nu
     case "gd1":
       return [
         "Basement",
-        ...Array.from({ length: 7 }, (_, index) => formatOrdinalFloor(index + 2)),
+        ...Array.from({ length: 8 }, (_, index) => formatOrdinalFloor(index + 1)),
       ];
     case "gd2":
       return Array.from({ length: 10 }, (_, index) => formatOrdinalFloor(index + 1));
