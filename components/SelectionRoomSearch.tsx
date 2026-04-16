@@ -838,7 +838,7 @@ export default function SelectionRoomSearch({
       />
 
       {!resultsVisible ? (
-        <View>{children}</View>
+        <View style={styles.defaultContentShell}>{children}</View>
       ) : (
         <View style={styles.resultsShell}>
           {resultsHeadingVisible ? (
@@ -1521,6 +1521,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
+  defaultContentShell: {
+    marginTop: 12,
+  },
   resultsAppName: {
     color: colors.primary,
     fontFamily: fonts.bold,
@@ -1537,6 +1540,7 @@ const styles = StyleSheet.create({
   },
   resultsFooter: {
     marginTop: 12,
+    alignItems: "center",
   },
   resultsBlock: {},
   roomCard: {

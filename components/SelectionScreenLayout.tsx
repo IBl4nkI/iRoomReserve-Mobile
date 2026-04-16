@@ -137,7 +137,8 @@ const styles = StyleSheet.create({
     marginTop: 18,
   },
   footer: {
-    marginTop: 12,
+    marginTop: 8,
+    marginBottom: 2,
     alignItems: "center",
   },
 });
