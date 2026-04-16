@@ -321,6 +321,7 @@ export default function SelectionRoomSearch({
 
   const normalizedQuery = query.trim().toLowerCase();
   const resultsVisible = filtersOpen || normalizedQuery.length > 0;
+  const resultsHeadingVisible = filtersOpen || normalizedQuery.length > 0;
   const hasActiveFilters =
     selectedCampusDraft !== null ||
     isRecurringDraft ||
@@ -564,8 +565,8 @@ export default function SelectionRoomSearch({
   }, [filtersOpen, onInteractionChange, searchFocused]);
 
   useEffect(() => {
-    onHeaderVisibilityChange?.(normalizedQuery.length > 0);
-  }, [normalizedQuery.length, onHeaderVisibilityChange]);
+    onHeaderVisibilityChange?.(resultsHeadingVisible);
+  }, [onHeaderVisibilityChange, resultsHeadingVisible]);
 
   function toggleSelectedDay(dayOfWeek: number) {
     setSelectedDaysDraft((currentValue) =>
@@ -838,7 +839,7 @@ export default function SelectionRoomSearch({
         <View>{children}</View>
       ) : (
         <View style={styles.resultsShell}>
-          {normalizedQuery.length > 0 ? (
+          {resultsHeadingVisible ? (
             <>
               <Text style={styles.resultsAppName}>iRoomReserve</Text>
               <Text style={styles.resultsTitle}>Available Rooms</Text>
