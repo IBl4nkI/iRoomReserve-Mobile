@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import GoogleIcon from "@/components/GoogleIcon";
-import { useToast } from "@/components/toast-provider";
+import { useToast } from "@/components/ToastProvider";
 import { colors, fonts } from "@/constants/theme";
 import {
   loginWithEmail,

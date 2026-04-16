@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import { getUserProfile } from '@/lib/auth';
 import { auth } from '@/lib/firebase';
-import { ToastProvider } from '@/components/toast-provider';
+import { ToastProvider } from '@/components/ToastProvider';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import { colors } from '@/constants/theme';

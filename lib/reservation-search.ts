@@ -43,6 +43,8 @@ export const SLOT_DEFINITIONS: TimeSlotDefinition[] = [
   { startTime: "16:00", endTime: "17:00" },
   { startTime: "17:00", endTime: "18:00" },
   { startTime: "18:00", endTime: "19:00" },
+  { startTime: "19:00", endTime: "20:00" },
+  { startTime: "20:00", endTime: "21:00" },
 ];
 
 export interface SearchRoom extends Room {
@@ -98,6 +100,18 @@ export function getCampusTimeOptions(campus: ReservationCampus | null) {
   }
 
   return options;
+}
+
+export function getSlotDefinitionsForCampus(campus: ReservationCampus | null) {
+  if (!campus) {
+    return SLOT_DEFINITIONS;
+  }
+
+  const { endMinutes } = CAMPUS_TIME_RANGES[campus];
+
+  return SLOT_DEFINITIONS.filter(
+    (slot) => timeStringToMinutes(slot.endTime) <= endMinutes
+  );
 }
 
 export function isTimeRangeValid(

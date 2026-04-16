@@ -11,12 +11,7 @@ import { useRouter } from "expo-router";
 import { colors, fonts } from "@/constants/theme";
 import {
   buildRoomSearchText,
-  buildTimeSlots,
-  formatSelectionLabel,
-  formatShortDate,
-  formatWeekLabel,
   getDayShortLabel,
-  getWeekDates,
   isPastDate,
   isRoomAvailableForRequest,
   isTimeRangeValid,
@@ -32,6 +27,7 @@ import type { ReservationCampus, Schedule } from "@/types/reservation";
 import RoomSearchBar from "@/components/RoomSearchBar";
 import RoomSearchFilters from "@/components/RoomSearchFilters";
 import RoomTimePickerModal from "@/components/RoomTimePickerModal";
+import WeeklyScheduleGrid from "@/components/WeeklyScheduleGrid";
 
 const TIME_MINUTE_OPTIONS = ["00", "30"] as const;
 const TIME_PERIOD_OPTIONS = ["AM", "PM"] as const;
@@ -284,30 +280,6 @@ function toDateKey(date: Date) {
   )}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
-function getStatusStyles(state: "available" | "pending" | "unavailable") {
-  if (state === "available") {
-    return {
-      backgroundColor: colors.successBackground,
-      borderColor: colors.successBorder,
-      textColor: colors.successText,
-    };
-  }
-
-  if (state === "pending") {
-    return {
-      backgroundColor: "#fff7ed",
-      borderColor: "#fdba74",
-      textColor: "#c2410c",
-    };
-  }
-
-  return {
-    backgroundColor: colors.dangerBackground,
-    borderColor: colors.dangerBorder,
-    textColor: colors.dangerText,
-  };
-}
-
 interface SelectionRoomSearchProps {
   children: React.ReactNode;
   onHeaderVisibilityChange?: (visible: boolean) => void;
@@ -335,7 +307,6 @@ export default function SelectionRoomSearch({
   const [startTimeDraft, setStartTimeDraft] = useState(getDefaultStartTime());
   const [endTimeDraft, setEndTimeDraft] = useState(getDefaultEndTime(null));
   const [expandedRoomId, setExpandedRoomId] = useState<string | null>(null);
-  const [expandedDates, setExpandedDates] = useState<Record<string, string[]>>({});
   const [weekOffsets, setWeekOffsets] = useState<Record<string, number>>({});
   const [rooms, setRooms] = useState<SearchRoom[]>([]);
   const [roomSchedules, setRoomSchedules] = useState<Record<string, Schedule[]>>({});
@@ -760,38 +731,10 @@ export default function SelectionRoomSearch({
 
   function toggleExpandedRoom(roomId: string) {
     setExpandedRoomId((currentValue) => (currentValue === roomId ? null : roomId));
-    setExpandedDates((currentValue) => ({
-      ...currentValue,
-      [roomId]:
-        currentValue[roomId] ??
-        (reservationDateKeys.length > 0
-          ? reservationDateKeys.slice(0, 3)
-          : reservationDateDraft
-            ? [reservationDateDraft]
-            : []),
-    }));
     setWeekOffsets((currentValue) => ({
       ...currentValue,
       [roomId]: currentValue[roomId] ?? 0,
     }));
-  }
-
-  function toggleExpandedDate(roomId: string, dateKey: string) {
-    const selectedDate = new Date(`${dateKey}T00:00:00`);
-    if (isPastDate(selectedDate)) {
-      return;
-    }
-
-    setExpandedDates((currentValue) => {
-      const currentDates = currentValue[roomId] ?? [];
-
-      return {
-        ...currentValue,
-        [roomId]: currentDates.includes(dateKey)
-          ? currentDates.filter((value) => value !== dateKey)
-          : [...currentDates, dateKey].sort((left, right) => left.localeCompare(right)),
-      };
-    });
   }
 
   return (
@@ -898,9 +841,7 @@ export default function SelectionRoomSearch({
               {availableRooms.map((room) => {
                 const expanded = expandedRoomId === room.id;
                 const schedules = roomSchedules[room.id] ?? [];
-                const selectedDateKeys = expandedDates[room.id] ?? [];
                 const weekOffset = weekOffsets[room.id] ?? 0;
-                const currentWeekDates = getWeekDates(weekOffset);
 
                 return (
                   <View key={room.id} style={styles.roomCard}>
@@ -948,139 +889,26 @@ export default function SelectionRoomSearch({
 
                         <View style={styles.schedulePreviewCard}>
                           <Text style={styles.schedulePreviewTitle}>View Schedules</Text>
-                          <View style={styles.weekNavRow}>
-                            <TouchableOpacity
-                              style={styles.weekNavButton}
-                              disabled={weekOffset === 0}
-                              onPress={() =>
-                                setWeekOffsets((currentValue) => ({
-                                  ...currentValue,
-                                  [room.id]: Math.max(0, weekOffset - 1),
-                                }))
-                              }
-                            >
-                              <Text
-                                style={[
-                                  styles.weekNavText,
-                                  weekOffset === 0 && styles.weekNavTextDisabled,
-                                ]}
-                              >
-                                {"<"}
-                              </Text>
-                            </TouchableOpacity>
-                            <Text style={styles.schedulePreviewSubtitle}>
-                              {formatWeekLabel(currentWeekDates[0])}
-                            </Text>
-                            <TouchableOpacity
-                              style={styles.weekNavButton}
-                              onPress={() =>
-                                setWeekOffsets((currentValue) => ({
-                                  ...currentValue,
-                                  [room.id]: weekOffset + 1,
-                                }))
-                              }
-                            >
-                              <Text style={styles.weekNavText}>{">"}</Text>
-                            </TouchableOpacity>
-                          </View>
-
-                          <View style={styles.scheduleDateGrid}>
-                            {currentWeekDates.map((date) => {
-                              const rawDateKey = toDateKey(date);
-                              const selected = selectedDateKeys.includes(rawDateKey);
-                              const disabled = isPastDate(date);
-
-                              return (
-                                <TouchableOpacity
-                                  key={rawDateKey}
-                                  disabled={disabled}
-                                  style={[
-                                    styles.scheduleDateChip,
-                                    selected && styles.scheduleDateChipSelected,
-                                    disabled && styles.scheduleDateChipDisabled,
-                                  ]}
-                                  onPress={() => toggleExpandedDate(room.id, rawDateKey)}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.scheduleDateDay,
-                                      selected && styles.scheduleDateTextSelected,
-                                      disabled && styles.scheduleDateTextDisabled,
-                                    ]}
-                                  >
-                                    {getDayShortLabel(date.getDay())}
-                                  </Text>
-                                  <Text
-                                    style={[
-                                      styles.scheduleDateValue,
-                                      selected && styles.scheduleDateTextSelected,
-                                      disabled && styles.scheduleDateTextDisabled,
-                                    ]}
-                                  >
-                                    {formatShortDate(date)}
-                                  </Text>
-                                </TouchableOpacity>
-                              );
-                            })}
-                          </View>
-
-                          {selectedDateKeys.length === 0 ? (
-                            <Text style={styles.previewEmptyText}>
-                              Select one or more days to preview room schedules.
-                            </Text>
-                          ) : (
-                            selectedDateKeys.map((dateKey) => (
-                              <View key={dateKey} style={styles.timeSlotSection}>
-                                <Text style={styles.timeSlotSectionTitle}>
-                                  {formatSelectionLabel(dateKey)}
-                                </Text>
-                                {buildTimeSlots(room.id, dateKey, schedules).map((slot) => {
-                                  const statusStyles = getStatusStyles(slot.state);
-
-                                  return (
-                                    <View
-                                      key={`${dateKey}-${slot.startTime}`}
-                                      style={[
-                                        styles.timeSlotCard,
-                                        {
-                                          backgroundColor: statusStyles.backgroundColor,
-                                          borderColor: statusStyles.borderColor,
-                                        },
-                                      ]}
-                                    >
-                                      <View style={styles.timeSlotHeader}>
-                                        <Text
-                                          style={[
-                                            styles.timeSlotTime,
-                                            { color: statusStyles.textColor },
-                                          ]}
-                                        >
-                                          {formatTime12h(slot.startTime)} -{" "}
-                                          {formatTime12h(slot.endTime)}
-                                        </Text>
-                                        <Text
-                                          style={[
-                                            styles.timeSlotBadge,
-                                            { color: statusStyles.textColor },
-                                          ]}
-                                        >
-                                          {slot.state}
-                                        </Text>
-                                      </View>
-                                      <Text
-                                        style={[
-                                          styles.timeSlotDescription,
-                                          { color: statusStyles.textColor },
-                                        ]}
-                                      >
-                                        {slot.description}
-                                      </Text>
-                                    </View>
-                                  );
-                                })}
-                              </View>
-                            ))
-                          )}
+                          <Text style={styles.schedulePreviewSubtitle}>
+                            <Text style={styles.schedulePreviewGreen}>Green</Text>
+                            {" means available, "}
+                            <Text style={styles.schedulePreviewYellow}>yellow</Text>
+                            {" means there is an ongoing reservation request, and "}
+                            <Text style={styles.schedulePreviewRed}>red</Text>
+                            {" means unavailable."}
+                          </Text>
+                          <WeeklyScheduleGrid
+                            campus={room.campus}
+                            roomId={room.id}
+                            schedules={schedules}
+                            weekOffset={weekOffset}
+                            onWeekChange={(nextWeekOffset) =>
+                              setWeekOffsets((currentValue) => ({
+                                ...currentValue,
+                                [room.id]: nextWeekOffset,
+                              }))
+                            }
+                          />
                         </View>
                       </View>
                     ) : null}
@@ -1730,7 +1558,11 @@ const styles = StyleSheet.create({
     color: colors.secondary,
     fontFamily: fonts.regular,
     fontSize: 12,
+    lineHeight: 18,
   },
+  schedulePreviewGreen: { color: colors.successText, fontFamily: fonts.bold },
+  schedulePreviewYellow: { color: "#fdba74", fontFamily: fonts.bold },
+  schedulePreviewRed: { color: colors.dangerText, fontFamily: fonts.bold },
   scheduleDateGrid: {
     flexDirection: "row",
     flexWrap: "wrap",

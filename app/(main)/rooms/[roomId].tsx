@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -10,7 +10,9 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+import WeeklyScheduleGrid from "@/components/WeeklyScheduleGrid";
 import { colors, fonts } from "@/constants/theme";
+import { formatFullDate, getRoomCampus } from "@/lib/reservation-search";
 import {
   DAY_NAMES,
   formatTime12h,
@@ -19,213 +21,12 @@ import {
 import { getRoomById } from "@/services/rooms.service";
 import type { Room, Schedule } from "@/types/reservation";
 
-type ScheduleSelection =
-  | {
-      id: string;
-      type: "date";
-      dayOfWeek: number;
-      label: string;
-      key: string;
-    }
-  | {
-      id: string;
-      type: "weekday";
-      dayOfWeek: number;
-      label: string;
-      key: string;
-    };
-
-type SlotState = "available" | "unavailable" | "pending";
-
-interface TimeSlotDefinition {
-  endTime: string;
-  startTime: string;
-}
-
-interface TimeSlotViewModel extends TimeSlotDefinition {
-  description: string;
-  state: SlotState;
-}
-
-const SELECTABLE_DAY_INDICES = [1, 2, 3, 4, 5, 6] as const;
-const SLOT_DEFINITIONS: TimeSlotDefinition[] = [
-  { startTime: "07:00", endTime: "08:00" },
-  { startTime: "08:00", endTime: "09:00" },
-  { startTime: "09:00", endTime: "10:00" },
-  { startTime: "10:00", endTime: "11:00" },
-  { startTime: "11:00", endTime: "12:00" },
-  { startTime: "12:00", endTime: "13:00" },
-  { startTime: "13:00", endTime: "14:00" },
-  { startTime: "14:00", endTime: "15:00" },
-  { startTime: "15:00", endTime: "16:00" },
-  { startTime: "16:00", endTime: "17:00" },
-  { startTime: "17:00", endTime: "18:00" },
-  { startTime: "18:00", endTime: "19:00" },
-];
-
-function getMondayOfWeek(date: Date) {
-  const localDate = new Date(date);
-  localDate.setHours(0, 0, 0, 0);
-
-  const day = localDate.getDay();
-  const difference = day === 0 ? -6 : 1 - day;
-
-  localDate.setDate(localDate.getDate() + difference);
-
-  return localDate;
-}
-
-function addDays(date: Date, amount: number) {
-  const nextDate = new Date(date);
-  nextDate.setDate(nextDate.getDate() + amount);
-  return nextDate;
-}
-
-function padTwoDigits(value: number) {
-  return String(value).padStart(2, "0");
-}
-
-function toDateKey(date: Date) {
-  return `${date.getFullYear()}-${padTwoDigits(date.getMonth() + 1)}-${padTwoDigits(
-    date.getDate()
-  )}`;
-}
-
-function formatShortDate(date: Date) {
-  return date.toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "short",
-  });
-}
-
-function formatFullDate(date: Date) {
-  return date.toLocaleDateString("en-US", {
-    day: "numeric",
-    month: "long",
-    weekday: "long",
-    year: "numeric",
-  });
-}
-
-function formatWeekLabel(date: Date) {
-  return date.toLocaleDateString("en-US", {
-    month: "long",
-    year: "numeric",
-  });
-}
-
-function startOfToday() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return today;
-}
-
-function isPastDate(date: Date) {
-  return date.getTime() < startOfToday().getTime();
-}
-
-function timeToMinutes(value: string) {
-  const [hours, minutes] = value.split(":").map((piece) => parseInt(piece, 10));
-  return hours * 60 + minutes;
-}
-
-function slotsOverlap(left: TimeSlotDefinition, right: TimeSlotDefinition) {
-  return (
-    timeToMinutes(left.startTime) < timeToMinutes(right.endTime) &&
-    timeToMinutes(left.endTime) > timeToMinutes(right.startTime)
-  );
-}
-
-function getDeterministicHash(value: string) {
-  return value.split("").reduce((sum, character, index) => {
-    return sum + character.charCodeAt(0) * (index + 1);
-  }, 0);
-}
-
-function getPendingState(roomId: string, selectionKey: string, slot: TimeSlotDefinition) {
-  const hash = getDeterministicHash(`${roomId}-${selectionKey}-${slot.startTime}`);
-  return hash % 7 === 0;
-}
-
-function buildSelectionSummary(selection: ScheduleSelection) {
-  return selection.type === "date"
-    ? selection.label
-    : `${selection.label} recurring schedule`;
-}
-
-function buildTimeSlots(
-  roomId: string,
-  selection: ScheduleSelection,
-  schedules: Schedule[]
-): TimeSlotViewModel[] {
-  const matchingSchedules = schedules.filter(
-    (schedule) => schedule.dayOfWeek === selection.dayOfWeek
-  );
-
-  return SLOT_DEFINITIONS.map((slot) => {
-    const blockedSchedule = matchingSchedules.find((schedule) =>
-      slotsOverlap(slot, {
-        endTime: schedule.endTime,
-        startTime: schedule.startTime,
-      })
-    );
-
-    if (blockedSchedule) {
-      return {
-        ...slot,
-        description: `${blockedSchedule.subjectName} with ${blockedSchedule.instructorName}`,
-        state: "unavailable",
-      };
-    }
-
-    if (getPendingState(roomId, selection.key, slot)) {
-      return {
-        ...slot,
-        description: "There is an ongoing reservation request for this timeslot.",
-        state: "pending",
-      };
-    }
-
-    return {
-      ...slot,
-      description: "This timeslot is available for reservation.",
-      state: "available",
-    };
-  });
-}
-
-function getStatusStyles(state: SlotState) {
-  if (state === "available") {
-    return {
-      backgroundColor: colors.successBackground,
-      borderColor: colors.successBorder,
-      textColor: colors.successText,
-    };
-  }
-
-  if (state === "pending") {
-    return {
-      backgroundColor: "#fff7ed",
-      borderColor: "#fdba74",
-      textColor: "#c2410c",
-    };
-  }
-
-  return {
-    backgroundColor: colors.dangerBackground,
-    borderColor: colors.dangerBorder,
-    textColor: colors.dangerText,
-  };
-}
-
 export default function RoomDetailsScreen() {
   const router = useRouter();
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
   const resolvedRoomId = String(roomId);
   const [room, setRoom] = useState<Room | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [selectedWeekdays, setSelectedWeekdays] = useState<number[]>([]);
-  const [selectedDateKeys, setSelectedDateKeys] = useState<string[]>([]);
   const [weekOffset, setWeekOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -267,98 +68,37 @@ export default function RoomDetailsScreen() {
     };
   }, [resolvedRoomId]);
 
-  const currentWeekDates = useMemo(() => {
-    const monday = addDays(getMondayOfWeek(new Date()), weekOffset * 7);
-
-    return SELECTABLE_DAY_INDICES.map((dayOffset) => addDays(monday, dayOffset - 1));
-  }, [weekOffset]);
-
-  const scheduleSelections = useMemo<ScheduleSelection[]>(() => {
-    const dateSelections = selectedDateKeys
-      .map((dateKey) => {
-        const date = new Date(`${dateKey}T00:00:00`);
-        const dayOfWeek = date.getDay();
-
-        if (!SELECTABLE_DAY_INDICES.includes(dayOfWeek as (typeof SELECTABLE_DAY_INDICES)[number])) {
-          return null;
-        }
-
-        return {
-          dayOfWeek,
-          id: `date-${dateKey}`,
-          key: dateKey,
-          label: formatFullDate(date),
-          type: "date" as const,
-        };
-      })
-      .filter((value): value is Extract<ScheduleSelection, { type: "date" }> => Boolean(value))
-      .sort((left, right) => left.key.localeCompare(right.key));
-
-    const weekdaySelections = selectedWeekdays
-      .slice()
-      .sort((left, right) => left - right)
-      .map((dayOfWeek) => ({
-        dayOfWeek,
-        id: `weekday-${dayOfWeek}`,
-        key: `weekday-${dayOfWeek}`,
-        label: `Every ${DAY_NAMES[dayOfWeek]}`,
-        type: "weekday" as const,
-      }));
-
-    return [...dateSelections, ...weekdaySelections];
-  }, [selectedDateKeys, selectedWeekdays]);
-
-  function toggleWeekday(dayOfWeek: number) {
-    setSelectedWeekdays((currentSelection) =>
-      currentSelection.includes(dayOfWeek)
-        ? currentSelection.filter((value) => value !== dayOfWeek)
-        : [...currentSelection, dayOfWeek]
-    );
-  }
-
-  function toggleDate(dateKey: string) {
-    const selectedDate = new Date(`${dateKey}T00:00:00`);
-
-    if (isPastDate(selectedDate)) {
-      Alert.alert(
-        "Past Dates Unavailable",
-        "You can only reserve timeslots for today or a future date."
-      );
-      return;
-    }
-
-    setSelectedDateKeys((currentSelection) =>
-      currentSelection.includes(dateKey)
-        ? currentSelection.filter((value) => value !== dateKey)
-        : [...currentSelection, dateKey]
-    );
-  }
-
-  function openAlternativeRooms(selection: ScheduleSelection, slot: TimeSlotViewModel) {
+  function openAlternativeRooms(selectionLabel: string, timeslot: string) {
     router.push({
       pathname: "/(main)/alternative-rooms",
       params: {
         roomId: resolvedRoomId,
         roomName: room?.name ?? "Selected Room",
-        selection: buildSelectionSummary(selection),
-        timeslot: `${formatTime12h(slot.startTime)} - ${formatTime12h(slot.endTime)}`,
+        selection: selectionLabel,
+        timeslot,
       },
     });
   }
 
-  function openReservationForm(selection: ScheduleSelection, slot: TimeSlotViewModel) {
+  function openReservationForm(selectionLabel: string, timeslot: string) {
     router.push({
       pathname: "/(main)/reservation-form",
       params: {
         roomId: resolvedRoomId,
         roomName: room?.name ?? "Selected Room",
-        selection: buildSelectionSummary(selection),
-        timeslot: `${formatTime12h(slot.startTime)} - ${formatTime12h(slot.endTime)}`,
+        selection: selectionLabel,
+        timeslot,
       },
     });
   }
 
-  function handleSlotPress(selection: ScheduleSelection, slot: TimeSlotViewModel) {
+  function handleSlotPress(
+    dateKey: string,
+    slot: { description: string; endTime: string; startTime: string; state: string }
+  ) {
+    const selectionLabel = formatFullDate(new Date(`${dateKey}T00:00:00`));
+    const timeslot = `${formatTime12h(slot.startTime)} - ${formatTime12h(slot.endTime)}`;
+
     if (slot.state === "unavailable") {
       Alert.alert(
         "Timeslot Unavailable",
@@ -367,7 +107,7 @@ export default function RoomDetailsScreen() {
           { style: "cancel", text: "No, stay here" },
           {
             text: "Yes, take me there",
-            onPress: () => openAlternativeRooms(selection, slot),
+            onPress: () => openAlternativeRooms(selectionLabel, timeslot),
           },
         ]
       );
@@ -383,7 +123,7 @@ export default function RoomDetailsScreen() {
           { style: "cancel", text: "Not now" },
           {
             text: "Proceed",
-            onPress: () => openReservationForm(selection, slot),
+            onPress: () => openReservationForm(selectionLabel, timeslot),
           },
         ]
       );
@@ -391,7 +131,7 @@ export default function RoomDetailsScreen() {
       return;
     }
 
-    openReservationForm(selection, slot);
+    openReservationForm(selectionLabel, timeslot);
   }
 
   if (!loading && (!room || error)) {
@@ -454,171 +194,23 @@ export default function RoomDetailsScreen() {
 
             <View style={styles.selectorCard}>
               <Text style={styles.selectorHeading}>View Schedules</Text>
-              <Text style={styles.selectorSubheading}>Select Date</Text>
-
-              <View style={styles.weekNavRow}>
-                <TouchableOpacity
-                  style={styles.weekNavButton}
-                  disabled={weekOffset === 0}
-                  onPress={() =>
-                    setWeekOffset((currentValue) => Math.max(0, currentValue - 1))
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.weekNavText,
-                      weekOffset === 0 && styles.weekNavTextDisabled,
-                    ]}
-                  >
-                    {"<"}
-                  </Text>
-                </TouchableOpacity>
-                <Text style={styles.weekLabel}>{formatWeekLabel(currentWeekDates[0])}</Text>
-                <TouchableOpacity
-                  style={styles.weekNavButton}
-                  onPress={() => setWeekOffset((currentValue) => currentValue + 1)}
-                >
-                  <Text style={styles.weekNavText}>{">"}</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.dateGrid}>
-                {currentWeekDates.map((date) => {
-                  const dateKey = toDateKey(date);
-                  const selected = selectedDateKeys.includes(dateKey);
-                  const disabled = isPastDate(date);
-
-                  return (
-                    <TouchableOpacity
-                      key={dateKey}
-                      disabled={disabled}
-                      style={[
-                        styles.dateChip,
-                        selected && styles.dateChipSelected,
-                        disabled && styles.dateChipDisabled,
-                      ]}
-                      onPress={() => toggleDate(dateKey)}
-                    >
-                      <Text
-                        style={[
-                          styles.dateChipDay,
-                          selected && styles.dateChipTextSelected,
-                          disabled && styles.dateChipTextDisabled,
-                        ]}
-                      >
-                        {DAY_NAMES[date.getDay()].slice(0, 3)}
-                      </Text>
-                      <Text
-                        style={[
-                          styles.dateChipDate,
-                          selected && styles.dateChipTextSelected,
-                          disabled && styles.dateChipTextDisabled,
-                        ]}
-                      >
-                        {formatShortDate(date)}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
-              <Text style={styles.selectorSubheading}>Repeat Weekly</Text>
-              <View style={styles.weekdayGrid}>
-                {SELECTABLE_DAY_INDICES.map((dayOfWeek) => {
-                  const selected = selectedWeekdays.includes(dayOfWeek);
-
-                  return (
-                    <TouchableOpacity
-                      key={dayOfWeek}
-                      style={[styles.weekdayChip, selected && styles.weekdayChipSelected]}
-                      onPress={() => toggleWeekday(dayOfWeek)}
-                    >
-                      <Text
-                        style={[
-                          styles.weekdayChipText,
-                          selected && styles.weekdayChipTextSelected,
-                        ]}
-                      >
-                        {DAY_NAMES[dayOfWeek]}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-
               <Text style={styles.selectionHint}>
-                Schedules are available from Monday to Saturday. Exact date reservations can
-                only be made for today or future dates.
+                <Text style={styles.selectionHintGreen}>Green</Text>
+                {" means available, "}
+                <Text style={styles.selectionHintYellow}>yellow</Text>
+                {" means there is an ongoing reservation request, and "}
+                <Text style={styles.selectionHintRed}>red</Text>
+                {" means unavailable."}
               </Text>
+              <WeeklyScheduleGrid
+                campus={room ? getRoomCampus(room) : null}
+                roomId={resolvedRoomId}
+                schedules={schedules}
+                weekOffset={weekOffset}
+                onWeekChange={setWeekOffset}
+                onSlotPress={handleSlotPress}
+              />
             </View>
-
-            {scheduleSelections.length === 0 ? (
-              <View style={styles.emptySelectionCard}>
-                <Text style={styles.emptySelectionText}>
-                  Choose one or more dates above to view available timeslots.
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.resultsContainer}>
-                {scheduleSelections.map((selection) => (
-                  <View key={selection.id} style={styles.selectionResultCard}>
-                    <Text style={styles.selectionResultTitle}>{selection.label}</Text>
-                    <Text style={styles.selectionResultMeta}>
-                      Green means available, red means unavailable, orange means pending.
-                    </Text>
-
-                    {buildTimeSlots(resolvedRoomId, selection, schedules).map((slot) => {
-                      const statusStyles = getStatusStyles(slot.state);
-
-                      return (
-                        <TouchableOpacity
-                          key={`${selection.id}-${slot.startTime}`}
-                          style={[
-                            styles.timeSlotButton,
-                            {
-                              backgroundColor: statusStyles.backgroundColor,
-                              borderColor: statusStyles.borderColor,
-                            },
-                          ]}
-                          onPress={() => handleSlotPress(selection, slot)}
-                        >
-                          <View style={styles.timeSlotHeader}>
-                            <Text
-                              style={[
-                                styles.timeSlotTime,
-                                { color: statusStyles.textColor },
-                              ]}
-                            >
-                              {formatTime12h(slot.startTime)} - {formatTime12h(slot.endTime)}
-                            </Text>
-                            <Text
-                              style={[
-                                styles.timeSlotBadge,
-                                { color: statusStyles.textColor },
-                              ]}
-                            >
-                              {slot.state === "available"
-                                ? "Available"
-                                : slot.state === "pending"
-                                  ? "Pending"
-                                  : "Unavailable"}
-                            </Text>
-                          </View>
-                          <Text
-                            style={[
-                              styles.timeSlotDescription,
-                              { color: statusStyles.textColor },
-                            ]}
-                          >
-                            {slot.description}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                ))}
-              </View>
-            )}
           </>
         )}
 
@@ -859,6 +451,9 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginTop: 14,
   },
+  selectionHintGreen: { color: colors.successText, fontFamily: fonts.bold },
+  selectionHintYellow: { color: "#fdba74", fontFamily: fonts.bold },
+  selectionHintRed: { color: colors.dangerText, fontFamily: fonts.bold },
   emptySelectionCard: {
     marginTop: 16,
     padding: 14,
