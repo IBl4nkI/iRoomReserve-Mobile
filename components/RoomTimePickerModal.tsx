@@ -3,13 +3,13 @@ import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "rea
 
 import { colors, fonts } from "@/constants/theme";
 
-const TIME_MINUTE_OPTIONS = ["00", "30"] as const;
-const TIME_PERIOD_OPTIONS = ["AM", "PM"] as const;
 const TIME_WHEEL_ITEM_HEIGHT = 72;
 
 interface RoomTimePickerModalProps {
   endTime: string;
   endTimeParts: { hour: string; minute: "00" | "30"; period: "AM" | "PM" };
+  hourOptions: string[];
+  minuteOptions: Array<"00" | "30">;
   onClose: () => void;
   onTimeWheelScroll: (
     field: "start" | "end",
@@ -17,22 +17,24 @@ interface RoomTimePickerModalProps {
     offsetY: number
   ) => void;
   openTimeField: "start" | "end" | null;
+  periodOptions: Array<"AM" | "PM">;
   selectedCampus: string | null;
   startTime: string;
   startTimeParts: { hour: string; minute: "00" | "30"; period: "AM" | "PM" };
-  timeWheelHours: string[];
 }
 
 export default function RoomTimePickerModal({
   endTime,
   endTimeParts,
+  hourOptions,
+  minuteOptions,
   onClose,
   onTimeWheelScroll,
   openTimeField,
+  periodOptions,
   selectedCampus,
   startTime,
   startTimeParts,
-  timeWheelHours,
 }: RoomTimePickerModalProps) {
   return (
     <Modal
@@ -75,12 +77,15 @@ export default function RoomTimePickerModal({
                 contentOffset={{
                   x: 0,
                   y:
-                    timeWheelHours.indexOf(
+                    Math.max(
+                      0,
+                      hourOptions.indexOf(
                       openTimeField === "start" ? startTimeParts.hour : endTimeParts.hour
+                      )
                     ) * TIME_WHEEL_ITEM_HEIGHT,
                 }}
               >
-                {timeWheelHours.map((hour) => {
+                {hourOptions.map((hour) => {
                   const selected =
                     hour ===
                     (openTimeField === "start" ? startTimeParts.hour : endTimeParts.hour);
@@ -115,12 +120,15 @@ export default function RoomTimePickerModal({
                 contentOffset={{
                   x: 0,
                   y:
-                    TIME_MINUTE_OPTIONS.indexOf(
+                    Math.max(
+                      0,
+                      minuteOptions.indexOf(
                       openTimeField === "start" ? startTimeParts.minute : endTimeParts.minute
+                      )
                     ) * TIME_WHEEL_ITEM_HEIGHT,
                 }}
               >
-                {TIME_MINUTE_OPTIONS.map((minute) => {
+                {minuteOptions.map((minute) => {
                   const selected =
                     minute ===
                     (openTimeField === "start" ? startTimeParts.minute : endTimeParts.minute);
@@ -153,12 +161,15 @@ export default function RoomTimePickerModal({
                 contentOffset={{
                   x: 0,
                   y:
-                    TIME_PERIOD_OPTIONS.indexOf(
+                    Math.max(
+                      0,
+                      periodOptions.indexOf(
                       openTimeField === "start" ? startTimeParts.period : endTimeParts.period
+                      )
                     ) * TIME_WHEEL_ITEM_HEIGHT,
                 }}
               >
-                {TIME_PERIOD_OPTIONS.map((period) => {
+                {periodOptions.map((period) => {
                   const selected =
                     period ===
                     (openTimeField === "start" ? startTimeParts.period : endTimeParts.period);

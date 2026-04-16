@@ -159,7 +159,7 @@ function getSelectedTimeRange(campus: ReservationCampus | null) {
   if (!campus) {
     return {
       startMinutes: 7 * 60,
-      endMinutes: 17 * 60,
+      endMinutes: 21 * 60,
     };
   }
 
@@ -237,8 +237,45 @@ function fromTimeWheelParts(hour: string, minute: string, period: string) {
   return `${String(hourNumber).padStart(2, "0")}:${minute}`;
 }
 
-function getTimeWheelHours(campus: ReservationCampus | null) {
-  return Array.from({ length: 12 }, (_, index) => String(index + 1));
+function getTimeWheelPeriods(options: string[]) {
+  return TIME_PERIOD_OPTIONS.filter((period) =>
+    options.some((value) => toTimeWheelParts(value).period === period)
+  );
+}
+
+function getTimeWheelHoursForPeriod(
+  options: string[],
+  period: (typeof TIME_PERIOD_OPTIONS)[number]
+) {
+  return options.reduce<string[]>((hours, value) => {
+    const parts = toTimeWheelParts(value);
+
+    if (parts.period !== period || hours.includes(parts.hour)) {
+      return hours;
+    }
+
+    return [...hours, parts.hour];
+  }, []);
+}
+
+function getTimeWheelMinutesForHour(
+  options: string[],
+  period: (typeof TIME_PERIOD_OPTIONS)[number],
+  hour: string
+) {
+  return options.reduce<Array<(typeof TIME_MINUTE_OPTIONS)[number]>>((minutes, value) => {
+    const parts = toTimeWheelParts(value);
+
+    if (
+      parts.period !== period ||
+      parts.hour !== hour ||
+      minutes.includes(parts.minute)
+    ) {
+      return minutes;
+    }
+
+    return [...minutes, parts.minute];
+  }, []);
 }
 
 function getNearestTimeOption(options: string[], value: string) {
@@ -346,9 +383,31 @@ export default function SelectionRoomSearch({
   const isEndTimeValid = endTimeOptions.includes(endTimeDraft);
   const startTimeParts = useMemo(() => toTimeWheelParts(startTimeDraft), [startTimeDraft]);
   const endTimeParts = useMemo(() => toTimeWheelParts(endTimeDraft), [endTimeDraft]);
-  const timeWheelHours = useMemo(
-    () => getTimeWheelHours(selectedCampusDraft),
-    [selectedCampusDraft]
+  const activeTimeOptions = useMemo(
+    () => (openTimeField === "start" ? startTimeOptions : endTimeOptions),
+    [endTimeOptions, openTimeField, startTimeOptions]
+  );
+  const activeTimeParts = openTimeField === "start" ? startTimeParts : endTimeParts;
+  const timeWheelPeriods = useMemo(
+    () => getTimeWheelPeriods(activeTimeOptions),
+    [activeTimeOptions]
+  );
+  const timeWheelHoursForPeriod = useMemo(
+    () =>
+      getTimeWheelHoursForPeriod(
+        activeTimeOptions,
+        activeTimeParts.period
+      ),
+    [activeTimeOptions, activeTimeParts.period]
+  );
+  const timeWheelMinutesForHour = useMemo(
+    () =>
+      getTimeWheelMinutesForHour(
+        activeTimeOptions,
+        activeTimeParts.period,
+        activeTimeParts.hour
+      ),
+    [activeTimeOptions, activeTimeParts.hour, activeTimeParts.period]
   );
   const reservationDateKeys = useMemo(
     () => {
@@ -626,12 +685,26 @@ export default function SelectionRoomSearch({
     parts: Partial<{ hour: string; minute: string; period: string }>
   ) {
     const currentParts = toTimeWheelParts(field === "start" ? startTimeDraft : endTimeDraft);
+    const fieldOptions = field === "start" ? startTimeOptions : endTimeOptions;
+    const nextPeriod = (parts.period ?? currentParts.period) as (typeof TIME_PERIOD_OPTIONS)[number];
+    const validHours = getTimeWheelHoursForPeriod(fieldOptions, nextPeriod);
+    const nextHour =
+      parts.hour ?? (validHours.includes(currentParts.hour) ? currentParts.hour : validHours[0] ?? currentParts.hour);
+    const normalizedHour = validHours.includes(nextHour) ? nextHour : validHours[0] ?? nextHour;
+    const validMinutes = getTimeWheelMinutesForHour(fieldOptions, nextPeriod, normalizedHour);
+    const requestedMinute = (parts.minute ?? currentParts.minute) as (typeof TIME_MINUTE_OPTIONS)[number];
+    const nextMinute =
+      validMinutes.includes(requestedMinute)
+        ? requestedMinute
+        : validMinutes[0] ?? currentParts.minute;
+    const normalizedMinute = validMinutes.includes(nextMinute) ? nextMinute : validMinutes[0] ?? nextMinute;
+
     applyTimeValue(
       field,
       fromTimeWheelParts(
-      parts.hour ?? currentParts.hour,
-      parts.minute ?? currentParts.minute,
-      parts.period ?? currentParts.period
+      normalizedHour,
+      normalizedMinute,
+      nextPeriod
       )
     );
   }
@@ -649,26 +722,26 @@ export default function SelectionRoomSearch({
     if (wheel === "hour") {
       const index = Math.max(
         0,
-        Math.min(timeWheelHours.length - 1, Math.round(offsetY / TIME_WHEEL_ITEM_HEIGHT))
+        Math.min(timeWheelHoursForPeriod.length - 1, Math.round(offsetY / TIME_WHEEL_ITEM_HEIGHT))
       );
-      updateTimeFromPicker(field, { hour: timeWheelHours[index] });
+      updateTimeFromPicker(field, { hour: timeWheelHoursForPeriod[index] });
       return;
     }
 
     if (wheel === "minute") {
       const index = Math.max(
         0,
-        Math.min(TIME_MINUTE_OPTIONS.length - 1, Math.round(offsetY / TIME_WHEEL_ITEM_HEIGHT))
+        Math.min(timeWheelMinutesForHour.length - 1, Math.round(offsetY / TIME_WHEEL_ITEM_HEIGHT))
       );
-      updateTimeFromPicker(field, { minute: TIME_MINUTE_OPTIONS[index] });
+      updateTimeFromPicker(field, { minute: timeWheelMinutesForHour[index] });
       return;
     }
 
     const index = Math.max(
       0,
-      Math.min(TIME_PERIOD_OPTIONS.length - 1, Math.round(offsetY / TIME_WHEEL_ITEM_HEIGHT))
+      Math.min(timeWheelPeriods.length - 1, Math.round(offsetY / TIME_WHEEL_ITEM_HEIGHT))
     );
-    updateTimeFromPicker(field, { period: TIME_PERIOD_OPTIONS[index] });
+    updateTimeFromPicker(field, { period: timeWheelPeriods[index] });
   }
 
   function handleReservationDatesInputBlur() {
@@ -828,13 +901,15 @@ export default function SelectionRoomSearch({
       <RoomTimePickerModal
         endTime={endTimeDraft}
         endTimeParts={endTimeParts}
+        hourOptions={timeWheelHoursForPeriod}
+        minuteOptions={timeWheelMinutesForHour}
         onClose={() => setOpenTimeField(null)}
         onTimeWheelScroll={handleTimeWheelScroll}
         openTimeField={openTimeField}
+        periodOptions={timeWheelPeriods}
         selectedCampus={selectedCampusDraft}
         startTime={startTimeDraft}
         startTimeParts={startTimeParts}
-        timeWheelHours={timeWheelHours}
       />
 
       {!resultsVisible ? (
