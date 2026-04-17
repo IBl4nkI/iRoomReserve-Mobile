@@ -8,7 +8,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import SelectionRoomSearch from "@/components/SelectionRoomSearch";
+import SelectionRoomSearch from "@/components/selection-room-search";
 import { colors, fonts } from "@/constants/theme";
 
 interface SelectionScreenLayoutProps {
