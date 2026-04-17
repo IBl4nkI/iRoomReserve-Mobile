@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -21,6 +21,82 @@ import {
 import { getRoomById } from "@/services/rooms.service";
 import type { Room, Schedule } from "@/types/reservation";
 
+interface SelectedTimeslot {
+  dateKey: string;
+  description: string;
+  endTime: string;
+  startTime: string;
+  state: "available" | "pending";
+}
+
+function getTimeslotKey(slot: Pick<SelectedTimeslot, "dateKey" | "startTime" | "endTime">) {
+  return `${slot.dateKey}-${slot.startTime}-${slot.endTime}`;
+}
+
+function buildSelectionLabel(selectedSlots: SelectedTimeslot[]) {
+  const uniqueDateKeys = [...new Set(selectedSlots.map((slot) => slot.dateKey))];
+  return uniqueDateKeys
+    .map((dateKey) => formatFullDate(new Date(`${dateKey}T00:00:00`)))
+    .join(", ");
+}
+
+function buildTimeslotLabel(selectedSlots: SelectedTimeslot[]) {
+  const groupedSlots = selectedSlots.reduce<Record<string, SelectedTimeslot[]>>(
+    (result, slot) => {
+      if (!result[slot.dateKey]) {
+        result[slot.dateKey] = [];
+      }
+
+      result[slot.dateKey].push(slot);
+      return result;
+    },
+    {}
+  );
+
+  return Object.entries(groupedSlots)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([dateKey, slots]) => {
+      const orderedSlots = [...slots].sort((left, right) =>
+        left.startTime.localeCompare(right.startTime)
+      );
+
+      return `${formatFullDate(new Date(`${dateKey}T00:00:00`))}: ${orderedSlots
+        .map(
+          (slot) => `${formatTime12h(slot.startTime)} - ${formatTime12h(slot.endTime)}`
+        )
+        .join(", ")}`;
+    })
+    .join(" | ");
+}
+
+function areSlotsConsecutive(selectedSlots: SelectedTimeslot[]) {
+  const groupedSlots = selectedSlots.reduce<Record<string, SelectedTimeslot[]>>(
+    (result, slot) => {
+      if (!result[slot.dateKey]) {
+        result[slot.dateKey] = [];
+      }
+
+      result[slot.dateKey].push(slot);
+      return result;
+    },
+    {}
+  );
+
+  return Object.values(groupedSlots).every((slots) => {
+    const orderedSlots = [...slots].sort((left, right) =>
+      left.startTime.localeCompare(right.startTime)
+    );
+
+    return orderedSlots.every((slot, index) => {
+      if (index === 0) {
+        return true;
+      }
+
+      return orderedSlots[index - 1].endTime === slot.startTime;
+    });
+  });
+}
+
 export default function RoomDetailsScreen() {
   const router = useRouter();
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
@@ -28,8 +104,21 @@ export default function RoomDetailsScreen() {
   const [room, setRoom] = useState<Room | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [weekOffset, setWeekOffset] = useState(0);
+  const [selectedSlots, setSelectedSlots] = useState<SelectedTimeslot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const selectedSlotKeys = useMemo(
+    () => selectedSlots.map((slot) => getTimeslotKey(slot)),
+    [selectedSlots]
+  );
+  const hasSelection = selectedSlots.length > 0;
+  const hasPendingSelection = selectedSlots.some((slot) => slot.state === "pending");
+  const hasNonConsecutiveSelection = hasSelection && !areSlotsConsecutive(selectedSlots);
+  const reserveButtonLabel = !hasSelection
+    ? "Select timeslots to reserve"
+    : hasNonConsecutiveSelection
+      ? "Timeslots must be consecutive"
+      : "Reserve Selected Timeslots";
 
   useEffect(() => {
     let active = true;
@@ -80,13 +169,18 @@ export default function RoomDetailsScreen() {
     });
   }
 
-  function openReservationForm(selectionLabel: string, timeslot: string) {
+  function openReservationForm(
+    selectionLabel: string,
+    timeslot: string,
+    selectionPayload?: string
+  ) {
     router.push({
       pathname: "/(main)/reservation-form",
       params: {
         roomId: resolvedRoomId,
         roomName: room?.name ?? "Selected Room",
         selection: selectionLabel,
+        selectedTimeslots: selectionPayload,
         timeslot,
       },
     });
@@ -94,7 +188,12 @@ export default function RoomDetailsScreen() {
 
   function handleSlotPress(
     dateKey: string,
-    slot: { description: string; endTime: string; startTime: string; state: string }
+    slot: {
+      description: string;
+      endTime: string;
+      startTime: string;
+      state: "available" | "pending" | "unavailable";
+    }
   ) {
     const selectionLabel = formatFullDate(new Date(`${dateKey}T00:00:00`));
     const timeslot = `${formatTime12h(slot.startTime)} - ${formatTime12h(slot.endTime)}`;
@@ -115,15 +214,58 @@ export default function RoomDetailsScreen() {
       return;
     }
 
-    if (slot.state === "pending") {
+    const selectedSlot: SelectedTimeslot = {
+      dateKey,
+      description: slot.description,
+      endTime: slot.endTime,
+      startTime: slot.startTime,
+      state: slot.state,
+    };
+    const selectedKey = getTimeslotKey(selectedSlot);
+
+    setSelectedSlots((currentValue) => {
+      const isSelected = currentValue.some(
+        (currentSlot) => getTimeslotKey(currentSlot) === selectedKey
+      );
+
+      if (isSelected) {
+        return currentValue.filter(
+          (currentSlot) => getTimeslotKey(currentSlot) !== selectedKey
+        );
+      }
+
+      return [...currentValue, selectedSlot];
+    });
+  }
+
+  function handleReserveSelectedSlots() {
+    if (!hasSelection || hasNonConsecutiveSelection) {
+      return;
+    }
+
+    const orderedSlots = [...selectedSlots].sort((left, right) => {
+      const dateComparison = left.dateKey.localeCompare(right.dateKey);
+
+      if (dateComparison !== 0) {
+        return dateComparison;
+      }
+
+      return left.startTime.localeCompare(right.startTime);
+    });
+    const selectionLabel = buildSelectionLabel(orderedSlots);
+    const timeslot = buildTimeslotLabel(orderedSlots);
+    const selectedTimeslots = JSON.stringify(orderedSlots);
+
+    if (hasPendingSelection) {
       Alert.alert(
         "Pending Reservation Request",
-        "There is an ongoing reservation request for this timeslot. You can still try to reserve this room, but it may be rejected by the admin if the ongoing request gets approved. Would you like to proceed?",
+        "One or more selected timeslots already have an ongoing reservation request. You can still continue, but the reservation may be rejected if another request is approved first.",
         [
           { style: "cancel", text: "Not now" },
           {
             text: "Proceed",
-            onPress: () => openReservationForm(selectionLabel, timeslot),
+            onPress: () =>
+              openReservationForm(selectionLabel, timeslot, selectedTimeslots),
           },
         ]
       );
@@ -131,7 +273,7 @@ export default function RoomDetailsScreen() {
       return;
     }
 
-    openReservationForm(selectionLabel, timeslot);
+    openReservationForm(selectionLabel, timeslot, selectedTimeslots);
   }
 
   if (!loading && (!room || error)) {
@@ -209,7 +351,31 @@ export default function RoomDetailsScreen() {
                 weekOffset={weekOffset}
                 onWeekChange={setWeekOffset}
                 onSlotPress={handleSlotPress}
+                selectedSlotKeys={selectedSlotKeys}
               />
+              <Text style={styles.selectionHelperText}>
+                Tap green or yellow timeslots to build a reservation. Selections can
+                span different days, but each day's timeslots must be consecutive.
+              </Text>
+              <TouchableOpacity
+                disabled={!hasSelection}
+                onPress={handleReserveSelectedSlots}
+                style={[
+                  styles.reserveButton,
+                  !hasSelection && styles.reserveButtonDisabled,
+                  hasNonConsecutiveSelection && styles.reserveButtonError,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.reserveButtonText,
+                    !hasSelection && styles.reserveButtonTextDisabled,
+                    hasNonConsecutiveSelection && styles.reserveButtonTextError,
+                  ]}
+                >
+                  {reserveButtonLabel}
+                </Text>
+              </TouchableOpacity>
             </View>
           </>
         )}
@@ -454,6 +620,40 @@ const styles = StyleSheet.create({
   selectionHintGreen: { color: colors.successText, fontFamily: fonts.bold },
   selectionHintYellow: { color: "#fdba74", fontFamily: fonts.bold },
   selectionHintRed: { color: colors.dangerText, fontFamily: fonts.bold },
+  selectionHelperText: {
+    color: colors.secondary,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 12,
+  },
+  reserveButton: {
+    marginTop: 14,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  reserveButtonDisabled: {
+    backgroundColor: colors.border,
+  },
+  reserveButtonError: {
+    backgroundColor: colors.dangerBackground,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
+  },
+  reserveButtonText: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 14,
+  },
+  reserveButtonTextError: {
+    color: colors.mutedText,
+  },
+  reserveButtonTextDisabled: {
+    color: colors.mutedText,
+  },
   emptySelectionCard: {
     marginTop: 16,
     padding: 14,

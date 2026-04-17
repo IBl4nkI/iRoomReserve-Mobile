@@ -29,6 +29,8 @@ interface WeeklyScheduleGridProps {
   weekOffset: number;
   onWeekChange: (nextWeekOffset: number) => void;
   onSlotPress?: (dateKey: string, slot: TimeSlotViewModel) => void;
+  selectedSlotKeys?: string[];
+  weekNavTopMargin?: number;
 }
 
 function getStatusStyles(state: TimeSlotViewModel["state"]) {
@@ -84,6 +86,8 @@ export default function WeeklyScheduleGrid({
   weekOffset,
   onWeekChange,
   onSlotPress,
+  selectedSlotKeys = [],
+  weekNavTopMargin = 8,
 }: WeeklyScheduleGridProps) {
   const currentWeekDates = getWeekDates(weekOffset);
   const slotDefinitions = getSlotDefinitionsForCampus(campus);
@@ -99,7 +103,7 @@ export default function WeeklyScheduleGrid({
 
   return (
     <View>
-      <View style={styles.weekNavRow}>
+      <View style={[styles.weekNavRow, { marginTop: weekNavTopMargin }]}>
         <TouchableOpacity
           style={styles.weekNavButton}
           disabled={weekOffset === 0}
@@ -138,21 +142,35 @@ export default function WeeklyScheduleGrid({
             {columns.map(({ dateKey, slots }) => {
               const slot = slots[rowIndex];
               const statusStyles = getStatusStyles(slot.state);
+              const isSelected = selectedSlotKeys.includes(
+                `${dateKey}-${slot.startTime}-${slot.endTime}`
+              );
 
               return (
                 <CellWrapper
                   key={`${dateKey}-${slot.startTime}`}
-                  disabled={!onSlotPress}
+                  disabled={!onSlotPress || slot.state === "unavailable"}
                   onPress={onSlotPress ? () => onSlotPress(dateKey, slot) : undefined}
                   style={[
                     styles.slotCell,
+                    isSelected && styles.slotCellSelected,
                     {
-                      backgroundColor: statusStyles.backgroundColor,
-                      borderColor: statusStyles.borderColor,
+                      backgroundColor: isSelected
+                        ? colors.primary
+                        : statusStyles.backgroundColor,
+                      borderColor: isSelected
+                        ? colors.primary
+                        : statusStyles.borderColor,
+                      opacity: slot.state === "unavailable" ? 0.9 : 1,
                     },
                   ]}
                 >
-                  <Text style={[styles.slotTimeText, { color: statusStyles.textColor }]}>
+                  <Text
+                    style={[
+                      styles.slotTimeText,
+                      { color: isSelected ? colors.white : statusStyles.textColor },
+                    ]}
+                  >
                     {formatTime12h(slot.startTime)} - {formatTime12h(slot.endTime)}
                   </Text>
                 </CellWrapper>
@@ -187,7 +205,7 @@ const styles = StyleSheet.create({
   weekNavTextDisabled: { color: colors.mutedText },
   weekLabel: {
     color: colors.secondary,
-    fontFamily: fonts.regular,
+    fontFamily: fonts.bold,
     fontSize: 12,
   },
   headerRow: {
@@ -232,6 +250,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     paddingVertical: 6,
     justifyContent: "center",
+  },
+  slotCellSelected: {
+    shadowColor: colors.primary,
+    shadowOpacity: 0.16,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
   },
   slotTimeText: {
     fontFamily: fonts.bold,

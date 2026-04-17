@@ -11,6 +11,7 @@ import { useRouter } from "expo-router";
 import { colors, fonts } from "@/constants/theme";
 import {
   buildRoomSearchText,
+  formatFullDate,
   getDayShortLabel,
   isPastDate,
   isRoomAvailableForRequest,
@@ -32,6 +33,83 @@ import WeeklyScheduleGrid from "@/components/WeeklyScheduleGrid";
 const TIME_MINUTE_OPTIONS = ["00", "30"] as const;
 const TIME_PERIOD_OPTIONS = ["AM", "PM"] as const;
 const TIME_WHEEL_ITEM_HEIGHT = 72;
+
+interface SelectedTimeslot {
+  dateKey: string;
+  endTime: string;
+  startTime: string;
+  state: "available" | "pending";
+}
+
+function getSelectedTimeslotKey(
+  slot: Pick<SelectedTimeslot, "dateKey" | "startTime" | "endTime">
+) {
+  return `${slot.dateKey}-${slot.startTime}-${slot.endTime}`;
+}
+
+function buildSelectionLabel(selectedSlots: SelectedTimeslot[]) {
+  const uniqueDateKeys = [...new Set(selectedSlots.map((slot) => slot.dateKey))];
+  return uniqueDateKeys
+    .map((dateKey) => formatFullDate(new Date(`${dateKey}T00:00:00`)))
+    .join(", ");
+}
+
+function buildTimeslotLabel(selectedSlots: SelectedTimeslot[]) {
+  const groupedSlots = selectedSlots.reduce<Record<string, SelectedTimeslot[]>>(
+    (result, slot) => {
+      if (!result[slot.dateKey]) {
+        result[slot.dateKey] = [];
+      }
+
+      result[slot.dateKey].push(slot);
+      return result;
+    },
+    {}
+  );
+
+  return Object.entries(groupedSlots)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([dateKey, slots]) => {
+      const orderedSlots = [...slots].sort((left, right) =>
+        left.startTime.localeCompare(right.startTime)
+      );
+
+      return `${formatFullDate(new Date(`${dateKey}T00:00:00`))}: ${orderedSlots
+        .map(
+          (slot) => `${formatTime12h(slot.startTime)} - ${formatTime12h(slot.endTime)}`
+        )
+        .join(", ")}`;
+    })
+    .join(" | ");
+}
+
+function areSelectedSlotsConsecutive(selectedSlots: SelectedTimeslot[]) {
+  const groupedSlots = selectedSlots.reduce<Record<string, SelectedTimeslot[]>>(
+    (result, slot) => {
+      if (!result[slot.dateKey]) {
+        result[slot.dateKey] = [];
+      }
+
+      result[slot.dateKey].push(slot);
+      return result;
+    },
+    {}
+  );
+
+  return Object.values(groupedSlots).every((slots) => {
+    const orderedSlots = [...slots].sort((left, right) =>
+      left.startTime.localeCompare(right.startTime)
+    );
+
+    return orderedSlots.every((slot, index) => {
+      if (index === 0) {
+        return true;
+      }
+
+      return orderedSlots[index - 1].endTime === slot.startTime;
+    });
+  });
+}
 
 function addDays(date: Date, amount: number) {
   const nextDate = new Date(date);
@@ -346,6 +424,9 @@ export default function SelectionRoomSearch({
   const [startTimeDraft, setStartTimeDraft] = useState(getDefaultStartTime());
   const [endTimeDraft, setEndTimeDraft] = useState(getDefaultEndTime(null));
   const [expandedRoomId, setExpandedRoomId] = useState<string | null>(null);
+  const [selectedSlotsByRoom, setSelectedSlotsByRoom] = useState<
+    Record<string, SelectedTimeslot[]>
+  >({});
   const [weekOffsets, setWeekOffsets] = useState<Record<string, number>>({});
   const [rooms, setRooms] = useState<SearchRoom[]>([]);
   const [roomSchedules, setRoomSchedules] = useState<Record<string, Schedule[]>>({});
@@ -620,6 +701,72 @@ export default function SelectionRoomSearch({
       ),
     [availabilityRequiresSchedules, filteredRooms, roomSchedules, scheduleLoadingIds]
   );
+
+  function toggleSelectedTimeslot(
+    roomId: string,
+    dateKey: string,
+    slot: {
+      endTime: string;
+      startTime: string;
+      state: "available" | "pending" | "unavailable";
+    }
+  ) {
+    if (slot.state === "unavailable") {
+      return;
+    }
+
+    const nextSlot: SelectedTimeslot = {
+      dateKey,
+      endTime: slot.endTime,
+      startTime: slot.startTime,
+      state: slot.state,
+    };
+    const nextKey = getSelectedTimeslotKey(nextSlot);
+
+    setSelectedSlotsByRoom((currentValue) => {
+      const roomSelections = currentValue[roomId] ?? [];
+      const isSelected = roomSelections.some(
+        (selectedSlot) => getSelectedTimeslotKey(selectedSlot) === nextKey
+      );
+      const nextSelections = isSelected
+        ? roomSelections.filter(
+            (selectedSlot) => getSelectedTimeslotKey(selectedSlot) !== nextKey
+          )
+        : [...roomSelections, nextSlot];
+
+      return {
+        ...currentValue,
+        [roomId]: nextSelections,
+      };
+    });
+  }
+
+  function openReservationFormForRoom(room: SearchRoom) {
+    const selectedSlots = [...(selectedSlotsByRoom[room.id] ?? [])].sort((left, right) => {
+      const dateComparison = left.dateKey.localeCompare(right.dateKey);
+
+      if (dateComparison !== 0) {
+        return dateComparison;
+      }
+
+      return left.startTime.localeCompare(right.startTime);
+    });
+
+    if (selectedSlots.length === 0 || !areSelectedSlotsConsecutive(selectedSlots)) {
+      return;
+    }
+
+    router.push({
+      pathname: "/(main)/reservation-form",
+      params: {
+        roomId: room.id,
+        roomName: room.name,
+        selection: buildSelectionLabel(selectedSlots),
+        selectedTimeslots: JSON.stringify(selectedSlots),
+        timeslot: buildTimeslotLabel(selectedSlots),
+      },
+    });
+  }
 
   useEffect(() => {
     onInteractionChange?.(filtersOpen || searchFocused);
@@ -947,6 +1094,13 @@ export default function SelectionRoomSearch({
               {availableRooms.map((room) => {
                 const expanded = expandedRoomId === room.id;
                 const schedules = roomSchedules[room.id] ?? [];
+                const selectedSlots = selectedSlotsByRoom[room.id] ?? [];
+                const selectedSlotKeys = selectedSlots.map((slot) =>
+                  getSelectedTimeslotKey(slot)
+                );
+                const hasSelectedSlots = selectedSlots.length > 0;
+                const hasNonConsecutiveSelection =
+                  hasSelectedSlots && !areSelectedSlotsConsecutive(selectedSlots);
                 const weekOffset = weekOffsets[room.id] ?? 0;
 
                 return (
@@ -1014,18 +1168,57 @@ export default function SelectionRoomSearch({
                             <Text style={styles.schedulePreviewRed}>red</Text>
                             {" means unavailable."}
                           </Text>
+                          <Text style={styles.schedulePreviewHelperText}>
+                            <Text style={styles.schedulePreviewHelperTextBold}>
+                              Tap the timeslots
+                            </Text>{" "}
+                            to reserve this room. You can select
+                            across different days, but each day's timeslots must be
+                            consecutive.
+                          </Text>
                           <WeeklyScheduleGrid
                             campus={room.campus}
                             roomId={room.id}
                             schedules={schedules}
                             weekOffset={weekOffset}
+                            weekNavTopMargin={0}
                             onWeekChange={(nextWeekOffset) =>
                               setWeekOffsets((currentValue) => ({
                                 ...currentValue,
                                 [room.id]: nextWeekOffset,
                               }))
                             }
+                            onSlotPress={(dateKey, slot) =>
+                              toggleSelectedTimeslot(room.id, dateKey, slot)
+                            }
+                            selectedSlotKeys={selectedSlotKeys}
                           />
+                          <TouchableOpacity
+                            disabled={!hasSelectedSlots}
+                            onPress={() => openReservationFormForRoom(room)}
+                            style={[
+                              styles.reserveSelectedButton,
+                              !hasSelectedSlots && styles.reserveSelectedButtonDisabled,
+                              hasNonConsecutiveSelection &&
+                                styles.reserveSelectedButtonError,
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.reserveSelectedButtonText,
+                                !hasSelectedSlots &&
+                                  styles.reserveSelectedButtonTextDisabled,
+                                hasNonConsecutiveSelection &&
+                                  styles.reserveSelectedButtonTextError,
+                              ]}
+                            >
+                              {!hasSelectedSlots
+                                ? "Select timeslots to reserve"
+                                : hasNonConsecutiveSelection
+                                  ? "Timeslots must be consecutive"
+                                  : "Reserve Selected Timeslots"}
+                            </Text>
+                          </TouchableOpacity>
                         </View>
                       </View>
                     ) : null}
@@ -1689,6 +1882,44 @@ const styles = StyleSheet.create({
   schedulePreviewGreen: { color: colors.successText, fontFamily: fonts.bold },
   schedulePreviewYellow: { color: "#fdba74", fontFamily: fonts.bold },
   schedulePreviewRed: { color: colors.dangerText, fontFamily: fonts.bold },
+  schedulePreviewHelperText: {
+    color: colors.secondary,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 18,
+    marginTop: 12,
+    marginBottom: -8,
+  },
+  schedulePreviewHelperTextBold: {
+    fontFamily: fonts.bold,
+  },
+  reserveSelectedButton: {
+    marginTop: 12,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  reserveSelectedButtonDisabled: {
+    backgroundColor: colors.border,
+  },
+  reserveSelectedButtonError: {
+    backgroundColor: colors.dangerBackground,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
+  },
+  reserveSelectedButtonText: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 14,
+  },
+  reserveSelectedButtonTextError: {
+    color: colors.mutedText,
+  },
+  reserveSelectedButtonTextDisabled: {
+    color: colors.mutedText,
+  },
   scheduleDateGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
