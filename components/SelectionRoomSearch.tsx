@@ -672,9 +672,13 @@ export default function SelectionRoomSearch({
     };
   }, [filteredRooms, resultsVisible, roomSchedules]);
 
+  const hasExplicitTimeFilter =
+    startTimeDraft !== getDefaultStartTime() || endTimeDraft !== getDefaultEndTime(null);
+
   const availableRooms = useMemo(() => {
     return filteredRooms.filter((room) => {
       if (
+        (selectedCampusDraft !== null || hasExplicitTimeFilter) &&
         startTimeDraft &&
         endTimeDraft &&
         !isTimeRangeValid(room.campus, startTimeDraft, endTimeDraft)
@@ -690,7 +694,15 @@ export default function SelectionRoomSearch({
         endTimeDraft
       );
     });
-  }, [endTimeDraft, filteredRooms, reservationDateKeys, roomSchedules, startTimeDraft]);
+  }, [
+    endTimeDraft,
+    filteredRooms,
+    hasExplicitTimeFilter,
+    reservationDateKeys,
+    roomSchedules,
+    selectedCampusDraft,
+    startTimeDraft,
+  ]);
 
   const availabilityRequiresSchedules = reservationDateKeys.length > 0;
   const availabilityLoading = useMemo(
