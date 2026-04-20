@@ -187,11 +187,16 @@ export default function RoomDetailsScreen() {
     timeslot: string,
     selectionPayload?: string
   ) {
+    const roomCampus = room ? getRoomCampus(room) : null;
+
     router.push({
       pathname: "/(main)/reservation-form",
       params: {
         roomId: resolvedRoomId,
         roomName: room?.name ?? "Selected Room",
+        campus: roomCampus ?? undefined,
+        floor: room?.floor ?? undefined,
+        roomType: room?.roomType ?? undefined,
         selection: selectionLabel,
         selectedTimeslots: selectionPayload,
         timeslot,
