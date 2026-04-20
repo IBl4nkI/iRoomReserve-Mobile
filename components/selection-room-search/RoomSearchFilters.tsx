@@ -102,6 +102,15 @@ function joinDateValue(day: string, month: string, year: string) {
   return `${day}/${month}/${year}`.replace(/\/+$/, "");
 }
 
+function clampTwoDigitValue(value: string, min: number, max: number) {
+  if (!value) {
+    return "";
+  }
+
+  const numericValue = Number(value);
+  return String(Math.min(max, Math.max(min, numericValue))).padStart(2, "0");
+}
+
 interface SegmentedDateInputProps {
   onBlur?: () => void;
   onCalendarPress: () => void;
@@ -132,7 +141,8 @@ function SegmentedDateInput({
       return;
     }
 
-    updateValue(digits, month, year);
+    const nextDay = digits.length === 2 ? clampTwoDigitValue(digits, 1, 31) : digits;
+    updateValue(nextDay, month, year);
 
     if (digits.length === 2) {
       monthRef.current?.focus();
@@ -152,7 +162,8 @@ function SegmentedDateInput({
       }
     }
 
-    updateValue(day, digits, year);
+    const nextMonth = digits.length === 2 ? clampTwoDigitValue(digits, 1, 12) : digits;
+    updateValue(day, nextMonth, year);
 
     if (digits.length === 2) {
       yearRef.current?.focus();
@@ -160,7 +171,9 @@ function SegmentedDateInput({
   }
 
   function handleYearChange(rawValue: string) {
-    updateValue(day, month, rawValue.replace(/\D/g, "").slice(0, 2));
+    const digits = rawValue.replace(/\D/g, "").slice(0, 2);
+    const nextYear = digits.length === 2 ? clampTwoDigitValue(digits, 25, 99) : digits;
+    updateValue(day, month, nextYear);
   }
 
   return (
@@ -634,7 +647,7 @@ const styles = StyleSheet.create({
   segmentedDateShell: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 0,
   },
   segmentedDateInput: {
     minWidth: 28,
@@ -648,6 +661,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontFamily: fonts.bold,
     fontSize: 14,
+    marginHorizontal: 0,
   },
   inputActionButton: {
     position: "absolute",

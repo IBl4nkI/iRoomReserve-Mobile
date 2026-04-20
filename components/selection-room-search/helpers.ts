@@ -185,7 +185,7 @@ export function parseEditableDateInput(value: string) {
   const month = Number(match[2]);
   const year = match[3].length === 2 ? Number(`20${match[3]}`) : Number(match[3]);
 
-  if (month < 1 || month > 12 || day < 1) {
+  if (month < 1 || month > 12 || day < 1 || day > 31 || year < 2025) {
     return null;
   }
 
