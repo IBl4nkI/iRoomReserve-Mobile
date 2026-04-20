@@ -19,6 +19,7 @@ import {
   addMonths,
   buildSelectionLabel,
   buildTimeslotLabel,
+  collapseSelectedTimeslots,
   fromTimeWheelParts,
   getCalendarWeeks,
   getDefaultEndTime,
@@ -452,7 +453,7 @@ export default function SelectionRoomSearch({
         roomId: room.id,
         roomName: room.name,
         selection: buildSelectionLabel(selectedSlots),
-        selectedTimeslots: JSON.stringify(selectedSlots),
+        selectedTimeslots: JSON.stringify(collapseSelectedTimeslots(selectedSlots)),
         timeslot: buildTimeslotLabel(selectedSlots),
       },
     });

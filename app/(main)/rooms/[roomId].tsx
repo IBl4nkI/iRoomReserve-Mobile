@@ -40,7 +40,7 @@ function buildSelectionLabel(selectedSlots: SelectedTimeslot[]) {
     .join(", ");
 }
 
-function buildTimeslotLabel(selectedSlots: SelectedTimeslot[]) {
+function collapseSelectedTimeslots(selectedSlots: SelectedTimeslot[]) {
   const groupedSlots = selectedSlots.reduce<Record<string, SelectedTimeslot[]>>(
     (result, slot) => {
       if (!result[slot.dateKey]) {
@@ -55,16 +55,29 @@ function buildTimeslotLabel(selectedSlots: SelectedTimeslot[]) {
 
   return Object.entries(groupedSlots)
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([dateKey, slots]) => {
+    .map(([, slots]) => {
       const orderedSlots = [...slots].sort((left, right) =>
         left.startTime.localeCompare(right.startTime)
       );
+      const firstSlot = orderedSlots[0];
+      const lastSlot = orderedSlots[orderedSlots.length - 1];
 
-      return `${formatFullDate(new Date(`${dateKey}T00:00:00`))}: ${orderedSlots
-        .map(
-          (slot) => `${formatTime12h(slot.startTime)} - ${formatTime12h(slot.endTime)}`
-        )
-        .join(", ")}`;
+      return {
+        ...firstSlot,
+        endTime: lastSlot.endTime,
+        state: orderedSlots.some((slot) => slot.state === "pending")
+          ? "pending"
+          : firstSlot.state,
+      };
+    });
+}
+
+function buildTimeslotLabel(selectedSlots: SelectedTimeslot[]) {
+  return collapseSelectedTimeslots(selectedSlots)
+    .map((slot) => {
+      return `${formatFullDate(new Date(`${slot.dateKey}T00:00:00`))}: ${formatTime12h(
+        slot.startTime
+      )} - ${formatTime12h(slot.endTime)}`;
     })
     .join(" | ");
 }
@@ -254,7 +267,7 @@ export default function RoomDetailsScreen() {
     });
     const selectionLabel = buildSelectionLabel(orderedSlots);
     const timeslot = buildTimeslotLabel(orderedSlots);
-    const selectedTimeslots = JSON.stringify(orderedSlots);
+    const selectedTimeslots = JSON.stringify(collapseSelectedTimeslots(orderedSlots));
 
     if (hasPendingSelection) {
       Alert.alert(
