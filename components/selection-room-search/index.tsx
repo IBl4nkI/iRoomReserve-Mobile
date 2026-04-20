@@ -69,6 +69,7 @@ export default function SelectionRoomSearch({
   const [searchFocused, setSearchFocused] = useState(false);
   const [isRecurringDraft, setIsRecurringDraft] = useState(false);
   const [selectedCampusDraft, setSelectedCampusDraft] = useState<ReservationCampus | null>(null);
+  const [selectedRoomTypesDraft, setSelectedRoomTypesDraft] = useState<string[]>([]);
   const [selectedDaysDraft, setSelectedDaysDraft] = useState<number[]>([]);
   const [reservationDatesDraft, setReservationDatesDraft] = useState<string[]>([]);
   const [reservationDatesInputDraft, setReservationDatesInputDraft] = useState("");
@@ -95,8 +96,16 @@ export default function SelectionRoomSearch({
   const [calendarMonth, setCalendarMonth] = useState(new Date());
 
   const normalizedQuery = query.trim().toLowerCase();
+  const roomTypeOptions = useMemo(
+    () =>
+      [...new Set(rooms.map((room) => room.roomType.trim()).filter(Boolean))].sort((a, b) =>
+        a.localeCompare(b)
+      ),
+    [rooms]
+  );
   const hasActiveFilters =
     selectedCampusDraft !== null ||
+    selectedRoomTypesDraft.length > 0 ||
     isRecurringDraft ||
     selectedDaysDraft.length > 0 ||
     reservationDatesDraft.length > 0 ||
@@ -228,11 +237,20 @@ export default function SelectionRoomSearch({
 
   const filteredRooms = useMemo(() => {
     return rooms.filter((room) => {
+      const roomType = room.roomType.trim();
+
       if (!room.campus) {
         return false;
       }
 
       if (selectedCampusDraft && room.campus !== selectedCampusDraft) {
+        return false;
+      }
+
+      if (
+        selectedRoomTypesDraft.length > 0 &&
+        !selectedRoomTypesDraft.includes(roomType)
+      ) {
         return false;
       }
 
@@ -242,7 +260,7 @@ export default function SelectionRoomSearch({
 
       return buildRoomSearchText(room).includes(normalizedQuery);
     });
-  }, [normalizedQuery, rooms, selectedCampusDraft]);
+  }, [normalizedQuery, rooms, selectedCampusDraft, selectedRoomTypesDraft]);
 
   useEffect(() => {
     if (!isRecurringDraft) {
@@ -485,8 +503,17 @@ export default function SelectionRoomSearch({
     setEndTimeDraft(nextEndTime);
   }
 
+  function toggleRoomType(roomType: string) {
+    setSelectedRoomTypesDraft((currentValue) =>
+      currentValue.includes(roomType)
+        ? currentValue.filter((value) => value !== roomType)
+        : [...currentValue, roomType].sort((left, right) => left.localeCompare(right))
+    );
+  }
+
   function resetFilters() {
     setSelectedCampusDraft(null);
+    setSelectedRoomTypesDraft([]);
     setIsRecurringDraft(false);
     setSelectedDaysDraft([]);
     setReservationDatesDraft([]);
@@ -735,13 +762,16 @@ export default function SelectionRoomSearch({
         onResetFilters={resetFilters}
         onStartTimePress={() => toggleTimePicker("start")}
         onToggleCampus={toggleCampus}
+        onToggleRoomType={toggleRoomType}
         onToggleDay={toggleSelectedDay}
         onToggleRecurring={setIsRecurringDraft}
         openCalendarField={openCalendarField}
         previewDates={reservationDateKeys}
         reservationDateInput={reservationDateInputDraft}
         reservationDatesInput={reservationDatesInputDraft}
+        roomTypeOptions={roomTypeOptions}
         selectedCampus={selectedCampusDraft}
+        selectedRoomTypes={selectedRoomTypesDraft}
         selectedDays={selectedDaysDraft}
         startTimeLabel={formatTime12h(startTimeDraft)}
       />

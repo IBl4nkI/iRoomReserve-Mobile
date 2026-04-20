@@ -49,13 +49,16 @@ interface RoomSearchFiltersProps {
   onResetFilters: () => void;
   onStartTimePress: () => void;
   onToggleCampus: (campus: ReservationCampus) => void;
+  onToggleRoomType: (roomType: string) => void;
   onToggleDay: (dayOfWeek: number) => void;
   onToggleRecurring: (value: boolean) => void;
   openCalendarField: "reservationDates" | "reservationDate" | "recurringEndDate" | null;
   previewDates: string[];
   reservationDateInput: string;
   reservationDatesInput: string;
+  roomTypeOptions: string[];
   selectedCampus: ReservationCampus | null;
+  selectedRoomTypes: string[];
   selectedDays: number[];
   startTimeLabel: string;
 }
@@ -247,13 +250,16 @@ export default function RoomSearchFilters({
   onResetFilters,
   onStartTimePress,
   onToggleCampus,
+  onToggleRoomType,
   onToggleDay,
   onToggleRecurring,
   openCalendarField,
   previewDates,
   reservationDateInput,
   reservationDatesInput,
+  roomTypeOptions,
   selectedCampus,
+  selectedRoomTypes,
   selectedDays,
   startTimeLabel,
 }: RoomSearchFiltersProps) {
@@ -278,6 +284,26 @@ export default function RoomSearchFilters({
                 {selected ? <View style={styles.radioInner} /> : null}
               </View>
               <Text style={styles.radioText}>{CAMPUS_LABELS[campus]}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <Text style={styles.filterSectionTitle}>Search by Type:</Text>
+      <View style={styles.checkboxGroup}>
+        {roomTypeOptions.map((roomType) => {
+          const selected = selectedRoomTypes.includes(roomType);
+
+          return (
+            <TouchableOpacity
+              key={roomType}
+              style={[styles.checkboxRow, selected && styles.checkboxRowSelected]}
+              onPress={() => onToggleRoomType(roomType)}
+            >
+              <View style={[styles.checkboxBox, selected && styles.checkboxBoxSelected]}>
+                {selected ? <Text style={styles.checkboxMark}>✓</Text> : null}
+              </View>
+              <Text style={styles.checkboxText}>{roomType}</Text>
             </TouchableOpacity>
           );
         })}
@@ -516,6 +542,51 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     marginBottom: 16,
+  },
+  checkboxGroup: {
+    gap: 10,
+    marginBottom: 16,
+  },
+  checkboxRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  checkboxRowSelected: {
+    borderColor: "#e7aaaa",
+    backgroundColor: "#fbf2f2",
+  },
+  checkboxBox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
+  },
+  checkboxBoxSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+  checkboxMark: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    lineHeight: 12,
+  },
+  checkboxText: {
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    flex: 1,
   },
   radioRow: {
     flex: 1,
