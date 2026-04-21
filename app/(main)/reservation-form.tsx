@@ -415,24 +415,30 @@ export default function ReservationFormScreen() {
     [activeTimeOptions, activeTimeParts.hour, activeTimeParts.period, timeWheelHoursForPeriod, timeWheelPeriods]
   );
   const calendarWeeks = React.useMemo(() => getCalendarWeeks(calendarMonth), [calendarMonth]);
-  const scheduledDatesLabel = React.useMemo(() => {
-    if (parsedTimeslots.length === 0) {
-      return selection ?? "";
+  const scheduledEntries = React.useMemo(() => {
+    if (parsedTimeslots.length > 0) {
+      return parsedTimeslots.map(
+        (slot) =>
+          `${formatFullDate(new Date(`${slot.dateKey}T00:00:00`))} | ${formatTime12h(
+            slot.startTime
+          )} - ${formatTime12h(slot.endTime)}`
+      );
     }
 
-    return [...new Set(parsedTimeslots.map((slot) => slot.dateKey))]
-      .map((dateKey) => formatFullDate(new Date(`${dateKey}T00:00:00`)))
-      .join(", ");
-  }, [parsedTimeslots, selection]);
-  const scheduledTimeslotsLabel = React.useMemo(() => {
-    if (parsedTimeslots.length === 0) {
-      return timeslot ?? "";
+    if (selection && timeslot) {
+      return [`${selection} | ${timeslot}`];
     }
 
-    return parsedTimeslots
-      .map((slot) => `${formatTime12h(slot.startTime)} - ${formatTime12h(slot.endTime)}`)
-      .join(" | ");
-  }, [parsedTimeslots, timeslot]);
+    if (selection) {
+      return [selection];
+    }
+
+    if (timeslot) {
+      return [timeslot];
+    }
+
+    return [];
+  }, [parsedTimeslots, selection, timeslot]);
 
   function handleReservationDateBlur() {
     const parsedDate = parseEditableDateInput(reservationDateInput);
@@ -639,12 +645,6 @@ export default function ReservationFormScreen() {
           </View>
         </View>
 
-        <Text style={styles.selectionText}>
-          Scheduled Date(s): {scheduledDatesLabel || "-"}
-        </Text>
-        <Text style={styles.selectionText}>
-          Timeslot(s): {scheduledTimeslotsLabel || "-"}
-        </Text>
       </View>
 
       <View style={styles.sectionCard}>
@@ -844,16 +844,14 @@ export default function ReservationFormScreen() {
           </View>
         </View>
 
-        {parsedTimeslots.length > 0 ? (
+        {scheduledEntries.length > 0 ? (
           <View style={styles.selectedTimeslotsCard}>
-            <Text style={styles.selectedTimeslotsTitle}>Selected Timeslots</Text>
-            {parsedTimeslots.map((slot) => (
-              <Text
-                key={`${slot.dateKey}-${slot.startTime}-${slot.endTime}`}
-                style={styles.selectedTimeslotItem}
-              >
-                {formatTime12h(slot.startTime)} - {formatTime12h(slot.endTime)}
-              </Text>
+            <Text style={styles.selectedTimeslotsTitle}>Request Reservation for these Dates:</Text>
+            {scheduledEntries.map((entry, index) => (
+              <View key={`${entry}-${index}`} style={styles.selectionListRow}>
+                <Text style={styles.selectionBullet}>-</Text>
+                <Text style={styles.selectedTimeslotItem}>{entry}</Text>
+              </View>
             ))}
           </View>
         ) : null}
@@ -914,7 +912,8 @@ export default function ReservationFormScreen() {
             </View>
           ))}
         </View>
-
+        
+        {/* THIS SHOULD ONLY BE FOR STUDENT ROLES
         <View style={styles.inputBlock}>
           <Text style={styles.inputLabel}>Email of Adviser / Department Head / Professor</Text>
           <TextInput
@@ -951,6 +950,7 @@ export default function ReservationFormScreen() {
             </Text>
           ) : null}
         </View>
+      */}
       </View>
 
       <TouchableOpacity activeOpacity={0.9} style={styles.submitButton}>
@@ -1015,10 +1015,32 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   selectionText: {
-    color: colors.secondary,
-    fontFamily: fonts.regular,
+    color: colors.text,
+    fontFamily: fonts.bold,
     fontSize: 13,
     marginTop: 10,
+  },
+  selectionList: {
+    marginTop: 8,
+    gap: 6,
+  },
+  selectionListRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 6,
+  },
+  selectionBullet: {
+    color: colors.text,
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  selectionListItem: {
+    flex: 1,
+    color: colors.text,
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    lineHeight: 18,
   },
   inputGrid: {
     flexDirection: "row",
@@ -1194,11 +1216,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   selectedTimeslotItem: {
-    color: colors.secondary,
+    flex: 1,
+    color: colors.text,
     fontFamily: fonts.regular,
     fontSize: 12,
     lineHeight: 18,
-    marginBottom: 4,
   },
   toggleCard: {
     flexDirection: "row",
