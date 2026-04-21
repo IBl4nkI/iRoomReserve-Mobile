@@ -96,6 +96,102 @@ export function areSelectedSlotsConsecutive(selectedSlots: SelectedTimeslot[]) {
   });
 }
 
+function timeStringToMinutes(value: string) {
+  const [hours, minutes] = value.split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function minutesToTimeString(value: number) {
+  const hours = Math.floor(value / 60);
+  const minutes = value % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+export function normalizeSelectedTimeslots<T extends SelectedTimeslot>(selectedSlots: T[]): T[] {
+  const groupedSlots = selectedSlots.reduce<Record<string, T[]>>((result, slot) => {
+    if (!result[slot.dateKey]) {
+      result[slot.dateKey] = [];
+    }
+
+    result[slot.dateKey].push(slot);
+    return result;
+  }, {});
+
+  return Object.entries(groupedSlots)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .flatMap(([, slots]) => {
+      const orderedSlots = [...slots].sort((left, right) =>
+        left.startTime.localeCompare(right.startTime)
+      );
+
+      if (orderedSlots.length <= 1) {
+        return orderedSlots;
+      }
+
+      const firstSlot = orderedSlots[0];
+      const lastSlot = orderedSlots[orderedSlots.length - 1];
+      const slotByStartTime = new Map(
+        orderedSlots.map((slot) => [slot.startTime, slot] as const)
+      );
+      const normalizedSlots: T[] = [];
+      let currentMinutes = timeStringToMinutes(firstSlot.startTime);
+      const endMinutes = timeStringToMinutes(lastSlot.endTime);
+
+      while (currentMinutes < endMinutes) {
+        const startTime = minutesToTimeString(currentMinutes);
+        const endTime = minutesToTimeString(currentMinutes + 60);
+        const existingSlot = slotByStartTime.get(startTime);
+
+        if (existingSlot) {
+          normalizedSlots.push(existingSlot);
+        } else {
+          normalizedSlots.push({
+            ...firstSlot,
+            startTime,
+            endTime,
+          });
+        }
+
+        currentMinutes += 60;
+      }
+
+      return normalizedSlots;
+    });
+}
+
+export function applySelectedTimeslotPress<T extends SelectedTimeslot>(
+  currentSlots: T[],
+  nextSlot: T
+): T[] {
+  const nextKey = getSelectedTimeslotKey(nextSlot);
+  const isSelected = currentSlots.some(
+    (currentSlot) => getSelectedTimeslotKey(currentSlot) === nextKey
+  );
+
+  if (!isSelected) {
+    return normalizeSelectedTimeslots([...currentSlots, nextSlot]);
+  }
+
+  const sameDaySlots = currentSlots
+    .filter((currentSlot) => currentSlot.dateKey === nextSlot.dateKey)
+    .sort((left, right) => left.startTime.localeCompare(right.startTime));
+  const hasLaterSlotOnSameDay = sameDaySlots.some(
+    (currentSlot) => currentSlot.startTime > nextSlot.startTime
+  );
+
+  if (hasLaterSlotOnSameDay) {
+    return currentSlots.filter(
+      (currentSlot) =>
+        currentSlot.dateKey !== nextSlot.dateKey ||
+        currentSlot.startTime <= nextSlot.startTime
+    );
+  }
+
+  return currentSlots.filter(
+    (currentSlot) => getSelectedTimeslotKey(currentSlot) !== nextKey
+  );
+}
+
 export function addDays(date: Date, amount: number) {
   const nextDate = new Date(date);
   nextDate.setDate(nextDate.getDate() + amount);

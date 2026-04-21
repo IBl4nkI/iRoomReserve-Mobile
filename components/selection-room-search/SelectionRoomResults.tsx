@@ -3,11 +3,7 @@ import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 
 import WeeklyScheduleGrid from "@/components/WeeklyScheduleGrid";
 import styles from "./styles";
-import {
-  areSelectedSlotsConsecutive,
-  getSelectedTimeslotKey,
-  type SelectedTimeslot,
-} from "./helpers";
+import { getSelectedTimeslotKey, type SelectedTimeslot } from "./helpers";
 import { colors } from "@/constants/theme";
 import type { SearchRoom } from "@/lib/reservation-search";
 import type { Schedule } from "@/types/reservation";
@@ -95,8 +91,6 @@ export default function SelectionRoomResults({
               getSelectedTimeslotKey(slot)
             );
             const hasSelectedSlots = selectedSlots.length > 0;
-            const hasNonConsecutiveSelection =
-              hasSelectedSlots && !areSelectedSlotsConsecutive(selectedSlots);
             const weekOffset = weekOffsets[room.id] ?? 0;
 
             return (
@@ -163,8 +157,8 @@ export default function SelectionRoomResults({
                         <Text style={styles.schedulePreviewHelperTextBold}>
                           Tap the timeslots
                         </Text>{" "}
-                        to reserve this room. You can select across different days, but
-                        each day's timeslots must be consecutive.
+                        to reserve this room. Selecting a later timeslot on the same day
+                        automatically fills the full range in between.
                       </Text>
                       <WeeklyScheduleGrid
                         campus={room.campus}
@@ -186,8 +180,6 @@ export default function SelectionRoomResults({
                         style={[
                           styles.reserveSelectedButton,
                           !hasSelectedSlots && styles.reserveSelectedButtonDisabled,
-                          hasNonConsecutiveSelection &&
-                            styles.reserveSelectedButtonError,
                         ]}
                       >
                         <Text
@@ -195,15 +187,11 @@ export default function SelectionRoomResults({
                             styles.reserveSelectedButtonText,
                             !hasSelectedSlots &&
                               styles.reserveSelectedButtonTextDisabled,
-                            hasNonConsecutiveSelection &&
-                              styles.reserveSelectedButtonTextError,
                           ]}
                         >
                           {!hasSelectedSlots
                             ? "Select timeslots to reserve"
-                            : hasNonConsecutiveSelection
-                              ? "Timeslots must be consecutive"
-                              : "Reserve Selected Timeslots"}
+                            : "Reserve Selected Timeslots"}
                         </Text>
                       </TouchableOpacity>
                     </View>

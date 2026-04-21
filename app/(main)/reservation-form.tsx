@@ -18,6 +18,7 @@ import {
 } from "firebase/firestore";
 
 import SelectionScreenLayout from "@/components/SelectionScreenLayout";
+import WeeklyScheduleGrid from "@/components/WeeklyScheduleGrid";
 import RoomTimePickerModal from "@/components/selection-room-search/RoomTimePickerModal";
 import { colors, fonts } from "@/constants/theme";
 import {
@@ -29,10 +30,12 @@ import {
 } from "@/lib/reservation-search";
 import { db } from "@/services/firebase";
 import { getRoomById } from "@/services/rooms.service";
-import { formatTime12h } from "@/services/schedules.service";
-import type { ReservationCampus, Room } from "@/types/reservation";
+import { formatTime12h, getSchedulesByRoomId } from "@/services/schedules.service";
+import type { ReservationCampus, Room, Schedule } from "@/types/reservation";
 import {
   addMonths,
+  applySelectedTimeslotPress,
+  collapseSelectedTimeslots,
   formatDisplayDateShort,
   fromTimeWheelParts,
   getCalendarWeeks,
@@ -40,6 +43,7 @@ import {
   getEndTimeOptionsForRange,
   getMonthLabel,
   getNearestTimeOption,
+  getSelectedTimeslotKey,
   getSelectedTimeRange,
   getTimeWheelHoursForPeriod,
   getTimeWheelMinutesForHour,
@@ -252,6 +256,56 @@ function buildDateInputValue(dateKey?: string) {
   return dateKey ? formatDisplayDateShort(dateKey) : "";
 }
 
+function getEffectiveDateKey(inputValue: string, fallbackDateKey: string) {
+  return parseEditableDateInput(inputValue) ?? fallbackDateKey;
+}
+
+function getWeekOffsetForDate(dateKey: string) {
+  const today = new Date();
+  const currentWeekStart = new Date(today);
+  const currentDay = currentWeekStart.getDay();
+  const currentWeekDifference = currentDay === 0 ? -6 : 1 - currentDay;
+  currentWeekStart.setDate(currentWeekStart.getDate() + currentWeekDifference);
+  currentWeekStart.setHours(0, 0, 0, 0);
+
+  const targetDate = new Date(`${dateKey}T00:00:00`);
+  const targetWeekStart = new Date(targetDate);
+  const targetDay = targetWeekStart.getDay();
+  const targetWeekDifference = targetDay === 0 ? -6 : 1 - targetDay;
+  targetWeekStart.setDate(targetWeekStart.getDate() + targetWeekDifference);
+  targetWeekStart.setHours(0, 0, 0, 0);
+
+  const millisecondsPerWeek = 7 * 24 * 60 * 60 * 1000;
+  return Math.round(
+    (targetWeekStart.getTime() - currentWeekStart.getTime()) / millisecondsPerWeek
+  );
+}
+
+function expandSelectedTimeslots(
+  slots: SelectedTimeslotParam[]
+): SelectedTimeslotParam[] {
+  return slots.flatMap((slot) => {
+    const expandedSlots: SelectedTimeslotParam[] = [];
+    let currentMinutes = timeStringToMinutes(slot.startTime);
+    const endMinutes = timeStringToMinutes(slot.endTime);
+
+    while (currentMinutes < endMinutes) {
+      const nextMinutes = currentMinutes + 60;
+
+      expandedSlots.push({
+        dateKey: slot.dateKey,
+        startTime: minutesToTimeString(currentMinutes),
+        endTime: minutesToTimeString(nextMinutes),
+        state: slot.state,
+      });
+
+      currentMinutes = nextMinutes;
+    }
+
+    return expandedSlots;
+  });
+}
+
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function ReservationFormScreen() {
@@ -271,6 +325,7 @@ export default function ReservationFormScreen() {
   }>();
   const resolvedRoomId = String(roomId ?? "");
   const [room, setRoom] = React.useState<Room | null>(null);
+  const [schedules, setSchedules] = React.useState<Schedule[]>([]);
 
   const parsedTimeslots: SelectedTimeslotParam[] = React.useMemo(() => {
     if (!selectedTimeslots) {
@@ -284,6 +339,15 @@ export default function ReservationFormScreen() {
       return [];
     }
   }, [selectedTimeslots]);
+  const [selectedScheduleSlots, setSelectedScheduleSlots] = React.useState<
+    SelectedTimeslotParam[]
+  >(expandSelectedTimeslots(parsedTimeslots));
+  const [isEditingSelectedSchedule, setIsEditingSelectedSchedule] = React.useState(false);
+  const [scheduleWeekOffset, setScheduleWeekOffset] = React.useState(0);
+
+  React.useEffect(() => {
+    setSelectedScheduleSlots(expandSelectedTimeslots(parsedTimeslots));
+  }, [parsedTimeslots]);
 
   React.useEffect(() => {
     let active = true;
@@ -294,15 +358,17 @@ export default function ReservationFormScreen() {
       };
     }
 
-    getRoomById(resolvedRoomId)
-      .then((roomResult) => {
+    Promise.all([getRoomById(resolvedRoomId), getSchedulesByRoomId(resolvedRoomId)])
+      .then(([roomResult, scheduleResults]) => {
         if (active) {
           setRoom(roomResult);
+          setSchedules(scheduleResults);
         }
       })
       .catch(() => {
         if (active) {
           setRoom(null);
+          setSchedules([]);
         }
       });
 
@@ -415,9 +481,60 @@ export default function ReservationFormScreen() {
     [activeTimeOptions, activeTimeParts.hour, activeTimeParts.period, timeWheelHoursForPeriod, timeWheelPeriods]
   );
   const calendarWeeks = React.useMemo(() => getCalendarWeeks(calendarMonth), [calendarMonth]);
+  const selectedScheduleSlotKeys = React.useMemo(
+    () => selectedScheduleSlots.map((slot) => getSelectedTimeslotKey(slot)),
+    [selectedScheduleSlots]
+  );
+  const effectiveReservationDateKey = React.useMemo(
+    () => getEffectiveDateKey(reservationDateInput, reservationDateKey),
+    [reservationDateInput, reservationDateKey]
+  );
+  const effectiveRecurringEndDateKey = React.useMemo(() => {
+    const parsedEndDateKey = getEffectiveDateKey(recurringEndDateInput, recurringEndDateKey);
+
+    if (
+      effectiveReservationDateKey &&
+      parsedEndDateKey &&
+      parsedEndDateKey < effectiveReservationDateKey
+    ) {
+      return effectiveReservationDateKey;
+    }
+
+    return parsedEndDateKey;
+  }, [effectiveReservationDateKey, recurringEndDateInput, recurringEndDateKey]);
   const scheduledEntries = React.useMemo(() => {
-    if (parsedTimeslots.length > 0) {
-      return parsedTimeslots.map(
+    if (isRecurring) {
+      if (
+        !effectiveReservationDateKey ||
+        !effectiveRecurringEndDateKey ||
+        !startTime ||
+        !endTime ||
+        selectedDays.length === 0
+      ) {
+        return [];
+      }
+
+      const recurringEntries: string[] = [];
+      const currentDate = new Date(`${effectiveReservationDateKey}T00:00:00`);
+      const endDate = new Date(`${effectiveRecurringEndDateKey}T00:00:00`);
+
+      while (currentDate <= endDate) {
+        if (selectedDays.includes(currentDate.getDay() as (typeof WEEKDAY_OPTIONS)[number])) {
+          recurringEntries.push(
+            `${formatFullDate(currentDate)} | ${formatTime12h(startTime)} - ${formatTime12h(
+              endTime
+            )}`
+          );
+        }
+
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+
+      return recurringEntries;
+    }
+
+    if (selectedScheduleSlots.length > 0) {
+      return collapseSelectedTimeslots(selectedScheduleSlots).map(
         (slot) =>
           `${formatFullDate(new Date(`${slot.dateKey}T00:00:00`))} | ${formatTime12h(
             slot.startTime
@@ -438,7 +555,17 @@ export default function ReservationFormScreen() {
     }
 
     return [];
-  }, [parsedTimeslots, selection, timeslot]);
+  }, [
+    effectiveRecurringEndDateKey,
+    effectiveReservationDateKey,
+    endTime,
+    isRecurring,
+    selectedDays,
+    selectedScheduleSlots,
+    selection,
+    startTime,
+    timeslot,
+  ]);
 
   function handleReservationDateBlur() {
     const parsedDate = parseEditableDateInput(reservationDateInput);
@@ -576,6 +703,45 @@ export default function ReservationFormScreen() {
     }));
   }
 
+  function handleScheduleSlotPress(
+    dateKey: string,
+    slot: {
+      endTime: string;
+      startTime: string;
+      state: "available" | "pending" | "unavailable";
+    }
+  ) {
+    if (slot.state === "unavailable") {
+      return;
+    }
+
+    const nextSlot: SelectedTimeslotParam = {
+      dateKey,
+      endTime: slot.endTime,
+      startTime: slot.startTime,
+      state: slot.state,
+    };
+    setSelectedScheduleSlots((currentValue) => {
+      return applySelectedTimeslotPress(currentValue, nextSlot);
+    });
+  }
+
+  function handleEditSelectedSchedulePress() {
+    const firstSelectedSlot = selectedScheduleSlots
+      .slice()
+      .sort(
+        (left, right) =>
+          left.dateKey.localeCompare(right.dateKey) ||
+          left.startTime.localeCompare(right.startTime)
+      )[0];
+
+    if (firstSelectedSlot) {
+      setScheduleWeekOffset(Math.max(0, getWeekOffsetForDate(firstSelectedSlot.dateKey)));
+    }
+
+    setIsEditingSelectedSchedule((currentValue) => !currentValue);
+  }
+
   async function validateAdviserEmail() {
     const trimmedEmail = adviserEmail.trim().toLowerCase();
 
@@ -649,7 +815,6 @@ export default function ReservationFormScreen() {
 
       <View style={styles.sectionCard}>
         <Text style={styles.sectionTitle}>Reservation Schedule</Text>
-
         <View style={styles.toggleCard}>
           <View style={styles.toggleTextBlock}>
             <Text style={styles.toggleTitle}>Recurring Reservation</Text>
@@ -693,166 +858,213 @@ export default function ReservationFormScreen() {
                 );
               })}
             </View>
+
+            <View style={styles.recurringDateRow}>
+              <View style={styles.recurringDateField}>
+                <Text style={styles.inputLabel}>Start Date</Text>
+                <SegmentedDateInput
+                  onBlur={handleReservationDateBlur}
+                  onCalendarPress={() =>
+                    setOpenCalendarField((currentValue) =>
+                      currentValue === "reservation" ? null : "reservation"
+                    )
+                  }
+                  onChange={setReservationDateInput}
+                  value={reservationDateInput}
+                />
+              </View>
+
+              <View style={styles.recurringDateField}>
+                <Text style={styles.inputLabel}>End Date</Text>
+                <SegmentedDateInput
+                  onBlur={handleRecurringEndDateBlur}
+                  onCalendarPress={() =>
+                    setOpenCalendarField((currentValue) =>
+                      currentValue === "recurringEnd" ? null : "recurringEnd"
+                    )
+                  }
+                  onChange={setRecurringEndDateInput}
+                  value={recurringEndDateInput}
+                />
+              </View>
+            </View>
+
+            {openCalendarField ? (
+              <View style={styles.calendarCard}>
+                <View style={styles.calendarHeaderRow}>
+                  <TouchableOpacity
+                    style={styles.calendarNavButton}
+                    onPress={() => setCalendarMonth((currentValue) => addMonths(currentValue, -1))}
+                  >
+                    <Text style={styles.calendarNavText}>{"<"}</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.calendarTitle}>{getMonthLabel(calendarMonth)}</Text>
+                  <TouchableOpacity
+                    style={styles.calendarNavButton}
+                    onPress={() => setCalendarMonth((currentValue) => addMonths(currentValue, 1))}
+                  >
+                    <Text style={styles.calendarNavText}>{">"}</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.calendarWeekRow}>
+                  {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label) => (
+                    <Text key={label} style={styles.calendarWeekLabel}>
+                      {label}
+                    </Text>
+                  ))}
+                </View>
+
+                {calendarWeeks.map((week, weekIndex) => (
+                  <View
+                    key={`${calendarMonth.toISOString()}-${weekIndex}`}
+                    style={styles.calendarWeekRow}
+                  >
+                    {week.map((entry) => {
+                      const dateKey = toDateKey(entry.date);
+                      const disabled = entry.date.getDay() === 0;
+                      const selected =
+                        openCalendarField === "reservation"
+                          ? reservationDateKey === dateKey
+                          : recurringEndDateKey === dateKey;
+
+                      return (
+                        <TouchableOpacity
+                          key={dateKey}
+                          disabled={disabled}
+                          style={[
+                            styles.calendarDateButton,
+                            selected && styles.calendarDateButtonSelected,
+                            disabled && styles.calendarDateButtonDisabled,
+                          ]}
+                          onPress={() => {
+                            if (openCalendarField === "reservation") {
+                              setReservationDateKey(dateKey);
+                              setReservationDateInput(buildDateInputValue(dateKey));
+
+                              if (
+                                isRecurring &&
+                                recurringEndDateKey &&
+                                recurringEndDateKey < dateKey
+                              ) {
+                                setRecurringEndDateKey(dateKey);
+                                setRecurringEndDateInput(buildDateInputValue(dateKey));
+                              }
+                            } else {
+                              const nextDateKey =
+                                reservationDateKey && dateKey < reservationDateKey
+                                  ? reservationDateKey
+                                  : dateKey;
+                              setRecurringEndDateKey(nextDateKey);
+                              setRecurringEndDateInput(buildDateInputValue(nextDateKey));
+                            }
+
+                            setOpenCalendarField(null);
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.calendarDateText,
+                              !entry.inMonth && styles.calendarDateTextMuted,
+                              selected && styles.calendarDateTextSelected,
+                              disabled && styles.calendarDateTextDisabled,
+                            ]}
+                          >
+                            {entry.date.getDate()}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                ))}
+
+                <Text style={styles.helperText}>
+                  The date and time are prefilled from your selected timeslot and can still be
+                  changed.
+                </Text>
+              </View>
+            ) : null}
+
+            <View style={styles.inputGrid}>
+              <View style={styles.inputBlock}>
+                <Text style={styles.inputLabel}>Start Time</Text>
+                <TouchableOpacity activeOpacity={0.9} onPress={() => setOpenTimeField("start")}>
+                  <View style={styles.inputWithAction}>
+                    <View
+                      style={[styles.fieldInput, styles.fieldInputWithIcon, styles.timeReadonly]}
+                    >
+                      <Text style={styles.timeReadonlyText}>{formatTime12h(startTime)}</Text>
+                    </View>
+                    <View style={styles.inputActionButton}>
+                      <ClockIcon />
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              </View>
+
+              <View style={styles.inputBlock}>
+                <Text style={styles.inputLabel}>End Time</Text>
+                <TouchableOpacity activeOpacity={0.9} onPress={() => setOpenTimeField("end")}>
+                  <View style={styles.inputWithAction}>
+                    <View
+                      style={[styles.fieldInput, styles.fieldInputWithIcon, styles.timeReadonly]}
+                    >
+                      <Text style={styles.timeReadonlyText}>{formatTime12h(endTime)}</Text>
+                    </View>
+                    <View style={styles.inputActionButton}>
+                      <ClockIcon />
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </View>
           </>
         ) : null}
 
-        <View style={styles.inputBlock}>
-          <Text style={styles.inputLabel}>{isRecurring ? "Start Date" : "Reservation Date"}</Text>
-          <SegmentedDateInput
-            onBlur={handleReservationDateBlur}
-            onCalendarPress={() =>
-              setOpenCalendarField((currentValue) =>
-                currentValue === "reservation" ? null : "reservation"
-              )
-            }
-            onChange={setReservationDateInput}
-            value={reservationDateInput}
-          />
-        </View>
-
-        {isRecurring ? (
-          <View style={styles.inputBlock}>
-            <Text style={styles.inputLabel}>End Date</Text>
-            <SegmentedDateInput
-              onBlur={handleRecurringEndDateBlur}
-              onCalendarPress={() =>
-                setOpenCalendarField((currentValue) =>
-                  currentValue === "recurringEnd" ? null : "recurringEnd"
-                )
-              }
-              onChange={setRecurringEndDateInput}
-              value={recurringEndDateInput}
-            />
-          </View>
-        ) : null}
-
-        {openCalendarField ? (
-          <View style={styles.calendarCard}>
-            <View style={styles.calendarHeaderRow}>
-              <TouchableOpacity
-                style={styles.calendarNavButton}
-                onPress={() => setCalendarMonth((currentValue) => addMonths(currentValue, -1))}
-              >
-                <Text style={styles.calendarNavText}>{"<"}</Text>
-              </TouchableOpacity>
-              <Text style={styles.calendarTitle}>{getMonthLabel(calendarMonth)}</Text>
-              <TouchableOpacity
-                style={styles.calendarNavButton}
-                onPress={() => setCalendarMonth((currentValue) => addMonths(currentValue, 1))}
-              >
-                <Text style={styles.calendarNavText}>{">"}</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.calendarWeekRow}>
-              {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label) => (
-                <Text key={label} style={styles.calendarWeekLabel}>
-                  {label}
-                </Text>
-              ))}
-            </View>
-
-            {calendarWeeks.map((week, weekIndex) => (
-              <View key={`${calendarMonth.toISOString()}-${weekIndex}`} style={styles.calendarWeekRow}>
-                {week.map((entry) => {
-                  const dateKey = toDateKey(entry.date);
-                  const disabled = entry.date.getDay() === 0;
-                  const selected =
-                    openCalendarField === "reservation"
-                      ? reservationDateKey === dateKey
-                      : recurringEndDateKey === dateKey;
-
-                  return (
-                    <TouchableOpacity
-                      key={dateKey}
-                      disabled={disabled}
-                      style={[
-                        styles.calendarDateButton,
-                        selected && styles.calendarDateButtonSelected,
-                        disabled && styles.calendarDateButtonDisabled,
-                      ]}
-                      onPress={() => {
-                        if (openCalendarField === "reservation") {
-                          setReservationDateKey(dateKey);
-                          setReservationDateInput(buildDateInputValue(dateKey));
-
-                          if (isRecurring && recurringEndDateKey && recurringEndDateKey < dateKey) {
-                            setRecurringEndDateKey(dateKey);
-                            setRecurringEndDateInput(buildDateInputValue(dateKey));
-                          }
-                        } else {
-                          const nextDateKey =
-                            reservationDateKey && dateKey < reservationDateKey
-                              ? reservationDateKey
-                              : dateKey;
-                          setRecurringEndDateKey(nextDateKey);
-                          setRecurringEndDateInput(buildDateInputValue(nextDateKey));
-                        }
-
-                        setOpenCalendarField(null);
-                      }}
-                    >
-                      <Text
-                        style={[
-                          styles.calendarDateText,
-                          !entry.inMonth && styles.calendarDateTextMuted,
-                          selected && styles.calendarDateTextSelected,
-                          disabled && styles.calendarDateTextDisabled,
-                        ]}
-                      >
-                        {entry.date.getDate()}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ))}
-
-            <Text style={styles.helperText}>
-              The date and time are prefilled from your selected timeslot and can still be changed.
-            </Text>
-          </View>
-        ) : null}
-
-        <View style={styles.inputGrid}>
-          <View style={styles.inputBlock}>
-            <Text style={styles.inputLabel}>Start Time</Text>
-            <TouchableOpacity activeOpacity={0.9} onPress={() => setOpenTimeField("start")}>
-              <View style={styles.inputWithAction}>
-                <View style={[styles.fieldInput, styles.fieldInputWithIcon, styles.timeReadonly]}>
-                  <Text style={styles.timeReadonlyText}>{formatTime12h(startTime)}</Text>
-                </View>
-                <View style={styles.inputActionButton}>
-                  <ClockIcon />
-                </View>
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.inputBlock}>
-            <Text style={styles.inputLabel}>End Time</Text>
-            <TouchableOpacity activeOpacity={0.9} onPress={() => setOpenTimeField("end")}>
-              <View style={styles.inputWithAction}>
-                <View style={[styles.fieldInput, styles.fieldInputWithIcon, styles.timeReadonly]}>
-                  <Text style={styles.timeReadonlyText}>{formatTime12h(endTime)}</Text>
-                </View>
-                <View style={styles.inputActionButton}>
-                  <ClockIcon />
-                </View>
-              </View>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {scheduledEntries.length > 0 ? (
-          <View style={styles.selectedTimeslotsCard}>
-            <Text style={styles.selectedTimeslotsTitle}>Request Reservation for these Dates:</Text>
-            {scheduledEntries.map((entry, index) => (
+        <View style={styles.scheduleRequestCard}>
+          <Text style={styles.selectedTimeslotsTitle}>Request Reservation for these Dates:</Text>
+          {scheduledEntries.length > 0 ? (
+            scheduledEntries.map((entry, index) => (
               <View key={`${entry}-${index}`} style={styles.selectionListRow}>
                 <Text style={styles.selectionBullet}>-</Text>
                 <Text style={styles.selectedTimeslotItem}>{entry}</Text>
               </View>
-            ))}
+            ))
+          ) : (
+            <Text style={styles.selectedTimeslotItem}>-</Text>
+          )}
+
+          {!isRecurring ? (
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={handleEditSelectedSchedulePress}
+              style={styles.editScheduleButton}
+            >
+              <Text style={styles.editScheduleButtonText}>
+                {isEditingSelectedSchedule ? "Save selected dates and times" : "Edit selected dates and times"}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+
+        {!isRecurring && isEditingSelectedSchedule ? (
+          <View style={styles.scheduleEditorBlock}>
+            <Text style={styles.scheduleHelperText}>
+              Tap <Text style={styles.scheduleHelperTextGreen}>green</Text> or{" "}
+              <Text style={styles.scheduleHelperTextYellow}>yellow</Text> timeslots to update
+              your reservation schedule. <Text style={styles.scheduleHelperTextRed}>Red</Text>{" "}
+              timeslots are unavailable.
+            </Text>
+            <WeeklyScheduleGrid
+              campus={selectedCampus}
+              roomId={resolvedRoomId}
+              schedules={schedules}
+              weekOffset={scheduleWeekOffset}
+              onWeekChange={setScheduleWeekOffset}
+              onSlotPress={handleScheduleSlotPress}
+              selectedSlotKeys={selectedScheduleSlotKeys}
+              weekNavTopMargin={0}
+            />
           </View>
         ) : null}
       </View>
@@ -1076,7 +1288,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    paddingHorizontal: 14,
+    paddingHorizontal: 12,
     justifyContent: "center",
   },
   fieldInputWithIcon: {
@@ -1114,7 +1326,7 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     fontFamily: fonts.bold,
     fontSize: 14,
-    marginHorizontal: 4,
+    marginHorizontal: 0,
   },
   timeReadonly: {
     justifyContent: "center",
@@ -1209,6 +1421,9 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: colors.border,
   },
+  scheduleRequestCard: {
+    marginTop: 0,
+  },
   selectedTimeslotsTitle: {
     color: colors.text,
     fontFamily: fonts.bold,
@@ -1219,8 +1434,42 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.text,
     fontFamily: fonts.regular,
+    fontSize: 11,
+    lineHeight: 18,
+  },
+  editScheduleButton: {
+    marginTop: 14,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  editScheduleButtonText: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 14,
+  },
+  scheduleEditorBlock: {
+    marginTop: 14,
+  },
+  scheduleHelperText: {
+    color: colors.secondary,
+    fontFamily: fonts.regular,
     fontSize: 12,
     lineHeight: 18,
+    marginBottom: 10,
+  },
+  scheduleHelperTextGreen: {
+    color: colors.successText,
+    fontFamily: fonts.bold,
+  },
+  scheduleHelperTextYellow: {
+    color: "#c2410c",
+    fontFamily: fonts.bold,
+  },
+  scheduleHelperTextRed: {
+    color: colors.dangerText,
+    fontFamily: fonts.bold,
   },
   toggleCard: {
     flexDirection: "row",
@@ -1263,7 +1512,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   weekdayCalendarButton: {
-    minWidth: 48,
+    width: "31%",
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border,
@@ -1283,6 +1532,14 @@ const styles = StyleSheet.create({
   },
   weekdayCalendarTextSelected: {
     color: colors.primary,
+  },
+  recurringDateRow: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 16,
+  },
+  recurringDateField: {
+    flex: 1,
   },
   materialsList: {
     gap: 10,

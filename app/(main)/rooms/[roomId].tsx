@@ -11,6 +11,7 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import WeeklyScheduleGrid from "@/components/WeeklyScheduleGrid";
+import { applySelectedTimeslotPress } from "@/components/selection-room-search/helpers";
 import { colors, fonts } from "@/constants/theme";
 import { formatFullDate, getRoomCampus } from "@/lib/reservation-search";
 import {
@@ -82,34 +83,6 @@ function buildTimeslotLabel(selectedSlots: SelectedTimeslot[]) {
     .join(" | ");
 }
 
-function areSlotsConsecutive(selectedSlots: SelectedTimeslot[]) {
-  const groupedSlots = selectedSlots.reduce<Record<string, SelectedTimeslot[]>>(
-    (result, slot) => {
-      if (!result[slot.dateKey]) {
-        result[slot.dateKey] = [];
-      }
-
-      result[slot.dateKey].push(slot);
-      return result;
-    },
-    {}
-  );
-
-  return Object.values(groupedSlots).every((slots) => {
-    const orderedSlots = [...slots].sort((left, right) =>
-      left.startTime.localeCompare(right.startTime)
-    );
-
-    return orderedSlots.every((slot, index) => {
-      if (index === 0) {
-        return true;
-      }
-
-      return orderedSlots[index - 1].endTime === slot.startTime;
-    });
-  });
-}
-
 export default function RoomDetailsScreen() {
   const router = useRouter();
   const { roomId } = useLocalSearchParams<{ roomId: string }>();
@@ -126,12 +99,9 @@ export default function RoomDetailsScreen() {
   );
   const hasSelection = selectedSlots.length > 0;
   const hasPendingSelection = selectedSlots.some((slot) => slot.state === "pending");
-  const hasNonConsecutiveSelection = hasSelection && !areSlotsConsecutive(selectedSlots);
   const reserveButtonLabel = !hasSelection
     ? "Select timeslots to reserve"
-    : hasNonConsecutiveSelection
-      ? "Timeslots must be consecutive"
-      : "Reserve Selected Timeslots";
+    : "Reserve Selected Timeslots";
 
   useEffect(() => {
     let active = true;
@@ -239,25 +209,13 @@ export default function RoomDetailsScreen() {
       startTime: slot.startTime,
       state: slot.state,
     };
-    const selectedKey = getTimeslotKey(selectedSlot);
-
     setSelectedSlots((currentValue) => {
-      const isSelected = currentValue.some(
-        (currentSlot) => getTimeslotKey(currentSlot) === selectedKey
-      );
-
-      if (isSelected) {
-        return currentValue.filter(
-          (currentSlot) => getTimeslotKey(currentSlot) !== selectedKey
-        );
-      }
-
-      return [...currentValue, selectedSlot];
+      return applySelectedTimeslotPress(currentValue, selectedSlot);
     });
   }
 
   function handleReserveSelectedSlots() {
-    if (!hasSelection || hasNonConsecutiveSelection) {
+    if (!hasSelection) {
       return;
     }
 
@@ -372,8 +330,8 @@ export default function RoomDetailsScreen() {
                 selectedSlotKeys={selectedSlotKeys}
               />
               <Text style={styles.selectionHelperText}>
-                Tap green or yellow timeslots to build a reservation. Selections can
-                span different days, but each day's timeslots must be consecutive.
+                Tap green or yellow timeslots to build a reservation. Picking a later
+                timeslot on the same day automatically selects the full range in between.
               </Text>
               <TouchableOpacity
                 disabled={!hasSelection}
@@ -381,14 +339,12 @@ export default function RoomDetailsScreen() {
                 style={[
                   styles.reserveButton,
                   !hasSelection && styles.reserveButtonDisabled,
-                  hasNonConsecutiveSelection && styles.reserveButtonError,
                 ]}
               >
                 <Text
                   style={[
                     styles.reserveButtonText,
                     !hasSelection && styles.reserveButtonTextDisabled,
-                    hasNonConsecutiveSelection && styles.reserveButtonTextError,
                   ]}
                 >
                   {reserveButtonLabel}

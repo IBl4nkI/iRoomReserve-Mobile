@@ -17,6 +17,7 @@ import SelectionRoomResults from "./SelectionRoomResults";
 import styles from "./styles";
 import {
   addMonths,
+  applySelectedTimeslotPress,
   buildSelectionLabel,
   buildTimeslotLabel,
   collapseSelectedTimeslots,
@@ -39,7 +40,6 @@ import {
   TIME_WHEEL_ITEM_HEIGHT,
   toDateKey,
   toTimeWheelParts,
-  areSelectedSlotsConsecutive,
   formatDisplayDateShort,
 } from "./helpers";
 import { getBuildings } from "@/services/buildings.service";
@@ -430,22 +430,13 @@ export default function SelectionRoomSearch({
       startTime: slot.startTime,
       state: slot.state,
     };
-    const nextKey = getSelectedTimeslotKey(nextSlot);
 
     setSelectedSlotsByRoom((currentValue) => {
       const roomSelections = currentValue[roomId] ?? [];
-      const isSelected = roomSelections.some(
-        (selectedSlot) => getSelectedTimeslotKey(selectedSlot) === nextKey
-      );
-      const nextSelections = isSelected
-        ? roomSelections.filter(
-            (selectedSlot) => getSelectedTimeslotKey(selectedSlot) !== nextKey
-          )
-        : [...roomSelections, nextSlot];
 
       return {
         ...currentValue,
-        [roomId]: nextSelections,
+        [roomId]: applySelectedTimeslotPress(roomSelections, nextSlot),
       };
     });
   }
@@ -461,7 +452,7 @@ export default function SelectionRoomSearch({
       return left.startTime.localeCompare(right.startTime);
     });
 
-    if (selectedSlots.length === 0 || !areSelectedSlotsConsecutive(selectedSlots)) {
+    if (selectedSlots.length === 0) {
       return;
     }
 
