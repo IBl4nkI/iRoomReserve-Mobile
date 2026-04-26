@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import * as DocumentPicker from "expo-document-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import {
   collection,
@@ -18,9 +19,11 @@ import {
 } from "firebase/firestore";
 
 import SelectionScreenLayout from "@/components/SelectionScreenLayout";
+import { useToast } from "@/components/ToastProvider";
 import WeeklyScheduleGrid from "@/components/WeeklyScheduleGrid";
 import RoomTimePickerModal from "@/components/selection-room-search/RoomTimePickerModal";
 import { colors, fonts } from "@/constants/theme";
+import { getUserProfile } from "@/lib/auth";
 import {
   CAMPUS_LABELS,
   formatFullDate,
@@ -28,7 +31,12 @@ import {
   minutesToTimeString,
   timeStringToMinutes,
 } from "@/lib/reservation-search";
-import { db } from "@/services/firebase";
+import { auth, db } from "@/services/firebase";
+import { uploadReservationDocument } from "@/services/reservation-documents.service";
+import {
+  createRecurringReservation,
+  createReservation,
+} from "@/services/reservations.service";
 import { getRoomById } from "@/services/rooms.service";
 import { formatTime12h, getSchedulesByRoomId } from "@/services/schedules.service";
 import type { ReservationCampus, Room, Schedule } from "@/types/reservation";
@@ -73,6 +81,13 @@ type MaterialKey =
 
 type EmailStatus = "idle" | "checking" | "invalid" | "valid";
 
+interface ReservationAttachment {
+  mimeType: string;
+  name: string;
+  size: number;
+  uri: string;
+}
+
 const MATERIAL_ITEMS: Array<{ key: MaterialKey; label: string }> = [
   { key: "fans", label: "Fans" },
   { key: "speakersWithMicrophones", label: "Speakers with Microphones" },
@@ -90,6 +105,13 @@ const WEEKDAY_LABELS: Record<(typeof WEEKDAY_OPTIONS)[number], string> = {
   5: "Fri",
   6: "Sat",
 };
+const DIGITAL_CAMPUS_BUILDING_ADMIN_EMAIL = "kenjimwill.baltero@sdca.edu.ph";
+const ALLOWED_ATTACHMENT_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+]);
+const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
 
 function CalendarIcon() {
   return (
@@ -308,8 +330,17 @@ function expandSelectedTimeslots(
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+function formatFileSize(size: number) {
+  if (size >= 1024 * 1024) {
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  return `${Math.max(1, Math.round(size / 1024))} KB`;
+}
+
 export default function ReservationFormScreen() {
   const router = useRouter();
+  const { showToast } = useToast();
   const {
     roomId,
     roomName,
@@ -431,6 +462,9 @@ export default function ReservationFormScreen() {
     chairs: 0,
     tables: 0,
   });
+  const [attachment, setAttachment] = React.useState<ReservationAttachment | null>(null);
+  const [attachmentError, setAttachmentError] = React.useState("");
+  const [submittingReservation, setSubmittingReservation] = React.useState(false);
 
   const endTimeOptions = React.useMemo(
     () =>
@@ -748,13 +782,13 @@ export default function ReservationFormScreen() {
     if (!trimmedEmail) {
       setEmailStatus("idle");
       setEmailFeedback("");
-      return;
+      return false;
     }
 
     if (!EMAIL_PATTERN.test(trimmedEmail)) {
       setEmailStatus("invalid");
       setEmailFeedback("Please enter a valid email address.");
-      return;
+      return false;
     }
 
     setEmailStatus("checking");
@@ -771,14 +805,234 @@ export default function ReservationFormScreen() {
       if (snapshot.empty) {
         setEmailStatus("invalid");
         setEmailFeedback("No iRoomReserve account matches this email.");
-        return;
+        return false;
       }
 
       setEmailStatus("valid");
       setEmailFeedback("Email found in iRoomReserve.");
+      return true;
     } catch {
       setEmailStatus("invalid");
       setEmailFeedback("Unable to verify the email right now.");
+      return false;
+    }
+  }
+
+  async function handlePickAttachment() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        copyToCacheDirectory: true,
+        multiple: false,
+        type: ["application/pdf", "image/jpeg", "image/png"],
+      });
+
+      if (result.canceled || result.assets.length === 0) {
+        return;
+      }
+
+      const [asset] = result.assets;
+      const mimeType = asset.mimeType ?? "";
+      const fileSize = asset.size ?? 0;
+
+      if (!ALLOWED_ATTACHMENT_MIME_TYPES.has(mimeType)) {
+        setAttachment(null);
+        setAttachmentError("Only PDF, JPG, and PNG files are allowed.");
+        return;
+      }
+
+      if (!fileSize || fileSize > MAX_ATTACHMENT_SIZE_BYTES) {
+        setAttachment(null);
+        setAttachmentError("The selected file must be 10 MB or smaller.");
+        return;
+      }
+
+      setAttachment({
+        mimeType,
+        name: asset.name,
+        size: fileSize,
+        uri: asset.uri,
+      });
+      setAttachmentError("");
+    } catch {
+      setAttachmentError("Unable to open the file picker right now.");
+    }
+  }
+
+  function handleRemoveAttachment() {
+    setAttachment(null);
+    setAttachmentError("");
+  }
+
+  async function handleSubmitReservation() {
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      showToast("You need to sign in again before submitting.", "error");
+      return;
+    }
+
+    if (!room || !selectedCampus) {
+      showToast("Room details are still loading. Please try again.", "error");
+      return;
+    }
+
+    if (!organization.trim() || !purpose.trim()) {
+      showToast("Complete the organization and purpose fields first.", "error");
+      return;
+    }
+
+    if (isRecurring) {
+      if (!effectiveReservationDateKey || !effectiveRecurringEndDateKey || selectedDays.length === 0) {
+        showToast("Select the recurring dates and days before submitting.", "error");
+        return;
+      }
+    } else {
+      if (selectedScheduleSlots.length === 0) {
+        showToast("Select at least one reservation timeslot before submitting.", "error");
+        return;
+      }
+    }
+
+    const adviserEmailValue = adviserEmail.trim().toLowerCase();
+    if (selectedCampus === "main") {
+      if (!EMAIL_PATTERN.test(adviserEmailValue)) {
+        showToast("Enter a valid adviser, department head, or professor email.", "error");
+        return;
+      }
+
+      if (!(await validateAdviserEmail())) {
+        showToast("We could not verify that adviser email.", "error");
+        return;
+      }
+    }
+
+    if (attachment && !ALLOWED_ATTACHMENT_MIME_TYPES.has(attachment.mimeType)) {
+      showToast("Only PDF, JPG, and PNG files are allowed.", "error");
+      return;
+    }
+
+    if (attachment && attachment.size > MAX_ATTACHMENT_SIZE_BYTES) {
+      showToast("The selected file must be 10 MB or smaller.", "error");
+      return;
+    }
+
+    setSubmittingReservation(true);
+
+    try {
+      const profile = await getUserProfile(currentUser.uid);
+      const firstName = profile?.firstName?.trim() ?? "";
+      const lastName = profile?.lastName?.trim() ?? "";
+      const userName = `${firstName} ${lastName}`.trim() || currentUser.displayName?.trim() || "iRoomReserve User";
+      const userRole = profile?.role?.trim() || "Student";
+      const equipment = Object.fromEntries(
+        Object.entries(materials).filter(([, quantity]) => quantity > 0)
+      );
+
+      const uploadedDocument = attachment
+        ? await uploadReservationDocument({
+            file: attachment,
+          })
+        : null;
+
+      const attachmentPayload = uploadedDocument
+        ? {
+            approvalDocumentMimeType: uploadedDocument.contentType,
+            approvalDocumentName: uploadedDocument.name,
+            approvalDocumentPath: uploadedDocument.path,
+            approvalDocumentSize: uploadedDocument.size,
+          }
+        : {};
+
+      if (isRecurring) {
+        const recurringReservationBase = {
+          ...attachmentPayload,
+          ...(Object.keys(equipment).length > 0 ? { equipment } : {}),
+          buildingId: room.buildingId,
+          buildingName: room.buildingName,
+          campus: selectedCampus,
+          endTime,
+          programDepartmentOrganization: organization.trim(),
+          purpose: purpose.trim(),
+          roomId: room.id,
+          roomName: room.name,
+          startTime,
+          userId: currentUser.uid,
+          userName,
+          userRole,
+        } as const;
+
+        if (selectedCampus === "main") {
+          await createRecurringReservation(
+            {
+              ...recurringReservationBase,
+              advisorEmail: adviserEmailValue,
+              campus: "main",
+            },
+            selectedDays,
+            effectiveReservationDateKey,
+            effectiveRecurringEndDateKey
+          );
+        } else {
+          await createRecurringReservation(
+            {
+              ...recurringReservationBase,
+              buildingAdminEmail: DIGITAL_CAMPUS_BUILDING_ADMIN_EMAIL,
+              campus: "digi",
+            },
+            selectedDays,
+            effectiveReservationDateKey,
+            effectiveRecurringEndDateKey
+          );
+        }
+      } else {
+        const collapsedSlots = collapseSelectedTimeslots(selectedScheduleSlots);
+
+        await Promise.all(
+          collapsedSlots.map((slot) => {
+            const singleReservationBase = {
+              ...attachmentPayload,
+              ...(Object.keys(equipment).length > 0 ? { equipment } : {}),
+              buildingId: room.buildingId,
+              buildingName: room.buildingName,
+              campus: selectedCampus,
+              date: slot.dateKey,
+              endTime: slot.endTime,
+              programDepartmentOrganization: organization.trim(),
+              purpose: purpose.trim(),
+              roomId: room.id,
+              roomName: room.name,
+              startTime: slot.startTime,
+              userId: currentUser.uid,
+              userName,
+              userRole,
+            } as const;
+
+            if (selectedCampus === "main") {
+              return createReservation({
+                ...singleReservationBase,
+                advisorEmail: adviserEmailValue,
+                campus: "main",
+              });
+            }
+
+            return createReservation({
+              ...singleReservationBase,
+              buildingAdminEmail: DIGITAL_CAMPUS_BUILDING_ADMIN_EMAIL,
+              campus: "digi",
+            });
+          })
+        );
+      }
+
+      showToast("Reservation submitted successfully.");
+      router.replace("/(main)/dashboard");
+    } catch (error) {
+      showToast(
+        error instanceof Error ? error.message : "Failed to submit the reservation.",
+        "error"
+      );
+    } finally {
+      setSubmittingReservation(false);
     }
   }
 
@@ -1124,49 +1378,99 @@ export default function ReservationFormScreen() {
             </View>
           ))}
         </View>
-        
-        {/* THIS SHOULD ONLY BE FOR STUDENT ROLES
-        <View style={styles.inputBlock}>
-          <Text style={styles.inputLabel}>Email of Adviser / Department Head / Professor</Text>
-          <TextInput
-            autoCapitalize="none"
-            keyboardType="email-address"
-            onBlur={validateAdviserEmail}
-            onChangeText={(value) => {
-              setAdviserEmail(value);
-              setEmailStatus("idle");
-              setEmailFeedback("");
-            }}
-            placeholder="Input email of adviser / department head / professor"
-            placeholderTextColor={colors.mutedText}
-            style={[
-              styles.textInput,
-              emailStatus === "invalid" && styles.textInputInvalid,
-              emailStatus === "valid" && styles.textInputValid,
-            ]}
-            value={adviserEmail}
-          />
-          {emailStatus === "checking" ? (
-            <View style={styles.emailStatusRow}>
-              <ActivityIndicator color={colors.primary} size="small" />
-              <Text style={styles.emailCheckingText}>Checking iRoomReserve account...</Text>
-            </View>
-          ) : emailFeedback ? (
-            <Text
+
+        {selectedCampus === "main" ? (
+          <View style={styles.inputBlock}>
+            <Text style={styles.inputLabel}>Email of Adviser / Department Head / Professor</Text>
+            <TextInput
+              autoCapitalize="none"
+              keyboardType="email-address"
+              onBlur={validateAdviserEmail}
+              onChangeText={(value) => {
+                setAdviserEmail(value);
+                setEmailStatus("idle");
+                setEmailFeedback("");
+              }}
+              placeholder="Input email of adviser / department head / professor"
+              placeholderTextColor={colors.mutedText}
               style={[
-                styles.emailFeedbackText,
-                emailStatus === "valid" ? styles.emailFeedbackSuccess : styles.emailFeedbackError,
+                styles.textInput,
+                emailStatus === "invalid" && styles.textInputInvalid,
+                emailStatus === "valid" && styles.textInputValid,
               ]}
+              value={adviserEmail}
+            />
+            {emailStatus === "checking" ? (
+              <View style={styles.emailStatusRow}>
+                <ActivityIndicator color={colors.primary} size="small" />
+                <Text style={styles.emailCheckingText}>Checking iRoomReserve account...</Text>
+              </View>
+            ) : emailFeedback ? (
+              <Text
+                style={[
+                  styles.emailFeedbackText,
+                  emailStatus === "valid" ? styles.emailFeedbackSuccess : styles.emailFeedbackError,
+                ]}
+              >
+                {emailFeedback}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        <View style={styles.inputBlock}>
+          <Text style={styles.inputLabel}>Concept Paper / Letter of Approval</Text>
+          <Text style={styles.helperText}>
+            Attach a PDF, JPG, or PNG file up to 10 MB.
+          </Text>
+
+          {attachment ? (
+            <View style={styles.attachmentCard}>
+              <View style={styles.attachmentInfo}>
+                <Text numberOfLines={1} style={styles.attachmentName}>
+                  {attachment.name}
+                </Text>
+                <Text style={styles.attachmentMeta}>
+                  {attachment.mimeType} • {formatFileSize(attachment.size)}
+                </Text>
+              </View>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={handleRemoveAttachment}
+                style={styles.attachmentRemoveButton}
+              >
+                <Text style={styles.attachmentRemoveButtonText}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={handlePickAttachment}
+              style={styles.attachmentPickerButton}
             >
-              {emailFeedback}
+              <Text style={styles.attachmentPickerButtonText}>Choose File</Text>
+            </TouchableOpacity>
+          )}
+
+          {attachmentError ? (
+            <Text style={[styles.emailFeedbackText, styles.emailFeedbackError]}>
+              {attachmentError}
             </Text>
           ) : null}
         </View>
-      */}
       </View>
 
-      <TouchableOpacity activeOpacity={0.9} style={styles.submitButton}>
-        <Text style={styles.submitButtonText}>Submit Reservation</Text>
+      <TouchableOpacity
+        activeOpacity={0.9}
+        disabled={submittingReservation}
+        onPress={handleSubmitReservation}
+        style={[styles.submitButton, submittingReservation && styles.submitButtonDisabled]}
+      >
+        {submittingReservation ? (
+          <ActivityIndicator color={colors.white} size="small" />
+        ) : (
+          <Text style={styles.submitButtonText}>Submit Reservation</Text>
+        )}
       </TouchableOpacity>
 
       <RoomTimePickerModal
@@ -1627,11 +1931,67 @@ const styles = StyleSheet.create({
   emailFeedbackSuccess: {
     color: colors.successText,
   },
+  attachmentPickerButton: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  attachmentPickerButtonText: {
+    color: colors.primary,
+    fontFamily: fonts.bold,
+    fontSize: 13,
+  },
+  attachmentCard: {
+    marginTop: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  attachmentInfo: {
+    flex: 1,
+  },
+  attachmentName: {
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 13,
+  },
+  attachmentMeta: {
+    marginTop: 4,
+    color: colors.secondary,
+    fontFamily: fonts.regular,
+    fontSize: 11,
+  },
+  attachmentRemoveButton: {
+    borderRadius: 10,
+    backgroundColor: colors.subtleBackground,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  attachmentRemoveButtonText: {
+    color: colors.primary,
+    fontFamily: fonts.bold,
+    fontSize: 12,
+  },
   submitButton: {
     borderRadius: 12,
     backgroundColor: colors.primary,
     paddingVertical: 14,
     alignItems: "center",
+  },
+  submitButtonDisabled: {
+    opacity: 0.7,
   },
   submitButtonText: {
     color: colors.white,
