@@ -88,6 +88,14 @@ interface ReservationAttachment {
   uri: string;
 }
 
+interface UserProfileSummary {
+  email: string;
+  firstName: string;
+  lastName: string;
+  role?: string;
+  status?: string;
+}
+
 const MATERIAL_ITEMS: Array<{ key: MaterialKey; label: string }> = [
   { key: "fans", label: "Fans" },
   { key: "speakersWithMicrophones", label: "Speakers with Microphones" },
@@ -408,6 +416,34 @@ export default function ReservationFormScreen() {
     };
   }, [resolvedRoomId]);
 
+  React.useEffect(() => {
+    let active = true;
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      setUserProfile(null);
+      return () => {
+        active = false;
+      };
+    }
+
+    getUserProfile(currentUser.uid)
+      .then((profile) => {
+        if (active) {
+          setUserProfile(profile);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setUserProfile(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const initialSlot = parsedTimeslots[0];
   const selectedCampus = room ? getRoomCampus(room) : null;
   const startMinutes = selectedCampus
@@ -465,6 +501,7 @@ export default function ReservationFormScreen() {
   const [attachment, setAttachment] = React.useState<ReservationAttachment | null>(null);
   const [attachmentError, setAttachmentError] = React.useState("");
   const [submittingReservation, setSubmittingReservation] = React.useState(false);
+  const [userProfile, setUserProfile] = React.useState<UserProfileSummary | null>(null);
 
   const endTimeOptions = React.useMemo(
     () =>
@@ -600,6 +637,8 @@ export default function ReservationFormScreen() {
     startTime,
     timeslot,
   ]);
+  const userRole = userProfile?.role?.trim() ?? "";
+  const isStudentUser = userRole === "Student";
 
   function handleReservationDateBlur() {
     const parsedDate = parseEditableDateInput(reservationDateInput);
@@ -894,7 +933,7 @@ export default function ReservationFormScreen() {
     }
 
     const adviserEmailValue = adviserEmail.trim().toLowerCase();
-    if (selectedCampus === "main") {
+    if (isStudentUser && selectedCampus === "main") {
       if (!EMAIL_PATTERN.test(adviserEmailValue)) {
         showToast("Enter a valid adviser, department head, or professor email.", "error");
         return;
@@ -919,16 +958,16 @@ export default function ReservationFormScreen() {
     setSubmittingReservation(true);
 
     try {
-      const profile = await getUserProfile(currentUser.uid);
+      const profile = userProfile ?? (await getUserProfile(currentUser.uid));
       const firstName = profile?.firstName?.trim() ?? "";
       const lastName = profile?.lastName?.trim() ?? "";
+      const resolvedUserRole = profile?.role?.trim() || userRole || "Student";
       const userName = `${firstName} ${lastName}`.trim() || currentUser.displayName?.trim() || "iRoomReserve User";
-      const userRole = profile?.role?.trim() || "Student";
       const equipment = Object.fromEntries(
         Object.entries(materials).filter(([, quantity]) => quantity > 0)
       );
 
-      const uploadedDocument = attachment
+      const uploadedDocument = isStudentUser && attachment
         ? await uploadReservationDocument({
             file: attachment,
           })
@@ -958,7 +997,7 @@ export default function ReservationFormScreen() {
           startTime,
           userId: currentUser.uid,
           userName,
-          userRole,
+          userRole: resolvedUserRole,
         } as const;
 
         if (selectedCampus === "main") {
@@ -1004,7 +1043,7 @@ export default function ReservationFormScreen() {
               startTime: slot.startTime,
               userId: currentUser.uid,
               userName,
-              userRole,
+              userRole: resolvedUserRole,
             } as const;
 
             if (selectedCampus === "main") {
@@ -1379,7 +1418,7 @@ export default function ReservationFormScreen() {
           ))}
         </View>
 
-        {selectedCampus === "main" ? (
+        {isStudentUser && selectedCampus === "main" ? (
           <View style={styles.inputBlock}>
             <Text style={styles.inputLabel}>Email of Adviser / Department Head / Professor</Text>
             <TextInput
@@ -1418,11 +1457,12 @@ export default function ReservationFormScreen() {
           </View>
         ) : null}
 
-        <View style={styles.inputBlock}>
-          <Text style={styles.inputLabel}>Concept Paper / Letter of Approval</Text>
-          <Text style={styles.helperText}>
-            Attach a PDF, JPG, or PNG file up to 10 MB.
-          </Text>
+        {isStudentUser ? (
+          <View style={styles.inputBlock}>
+            <Text style={styles.inputLabel}>Concept Paper / Letter of Approval</Text>
+            <Text style={styles.helperText}>
+              Attach a PDF, JPG, or PNG file up to 10 MB.
+            </Text>
 
           {attachment ? (
             <View style={styles.attachmentCard}>
@@ -1452,12 +1492,13 @@ export default function ReservationFormScreen() {
             </TouchableOpacity>
           )}
 
-          {attachmentError ? (
-            <Text style={[styles.emailFeedbackText, styles.emailFeedbackError]}>
-              {attachmentError}
-            </Text>
-          ) : null}
-        </View>
+            {attachmentError ? (
+              <Text style={[styles.emailFeedbackText, styles.emailFeedbackError]}>
+                {attachmentError}
+              </Text>
+            ) : null}
+          </View>
+        ) : null}
       </View>
 
       <TouchableOpacity
