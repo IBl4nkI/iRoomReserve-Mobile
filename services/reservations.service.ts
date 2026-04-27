@@ -1,5 +1,5 @@
 import { apiRequest } from "@/services/api";
-import type { ReservationCampus } from "@/types/reservation";
+import type { ReservationCampus, ReservationRecord } from "@/types/reservation";
 
 interface ReservationAttachmentPayload {
   approvalDocumentMimeType?: string;
@@ -78,4 +78,28 @@ export async function createRecurringReservation(
   });
 
   return payload.ids;
+}
+
+export async function getReservationsByUser(
+  userId: string
+): Promise<ReservationRecord[]> {
+  return apiRequest<ReservationRecord[]>("/api/reservations", {
+    method: "GET",
+    params: {
+      statuses: "pending,approved,rejected,completed,cancelled",
+      userId,
+    },
+  });
+}
+
+export async function getReservationsByRoom(
+  roomId: string
+): Promise<ReservationRecord[]> {
+  return apiRequest<ReservationRecord[]>("/api/reservations", {
+    method: "GET",
+    params: {
+      roomId,
+      statuses: "pending,approved",
+    },
+  });
 }

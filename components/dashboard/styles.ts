@@ -251,8 +251,8 @@ export const dashboardStyles = StyleSheet.create({
     borderColor: colors.successBorder,
   },
   chipPending: {
-    backgroundColor: colors.subtleBackground,
-    borderColor: colors.border,
+    backgroundColor: '#fff7ed',
+    borderColor: '#fdba74',
   },
   chipRejected: {
     backgroundColor: colors.dangerBackground,
@@ -270,7 +270,7 @@ export const dashboardStyles = StyleSheet.create({
     color: colors.successText,
   },
   chipTextPending: {
-    color: colors.secondary,
+    color: '#c2410c',
   },
   chipTextRejected: {
     color: colors.dangerText,
@@ -293,7 +293,7 @@ export const dashboardStyles = StyleSheet.create({
   reservationPurpose: {
     fontSize: 14,
     lineHeight: 20,
-    fontFamily: fonts.regular,
+    fontFamily: fonts.bold,
     color: colors.text,
     marginTop: 12,
   },

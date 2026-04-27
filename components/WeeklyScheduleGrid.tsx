@@ -19,8 +19,9 @@ import {
   toDateKey,
   type TimeSlotViewModel,
 } from "@/lib/reservation-search";
+import { getReservationsByRoom } from "@/services/reservations.service";
 import { formatTime12h } from "@/services/schedules.service";
-import type { ReservationCampus, Schedule } from "@/types/reservation";
+import type { ReservationCampus, ReservationRecord, Schedule } from "@/types/reservation";
 
 interface WeeklyScheduleGridProps {
   campus: ReservationCampus | null;
@@ -89,6 +90,28 @@ export default function WeeklyScheduleGrid({
   selectedSlotKeys = [],
   weekNavTopMargin = 8,
 }: WeeklyScheduleGridProps) {
+  const [reservations, setReservations] = React.useState<ReservationRecord[]>([]);
+
+  React.useEffect(() => {
+    let active = true;
+
+    getReservationsByRoom(roomId)
+      .then((nextReservations) => {
+        if (active) {
+          setReservations(nextReservations);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setReservations([]);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [roomId]);
+
   const currentWeekDates = getWeekDates(weekOffset);
   const slotDefinitions = getSlotDefinitionsForCampus(campus);
   const columns = currentWeekDates.map((date) => {
@@ -97,7 +120,7 @@ export default function WeeklyScheduleGrid({
     return {
       date,
       dateKey,
-      slots: buildTimeSlots(roomId, dateKey, schedules),
+      slots: buildTimeSlots(roomId, dateKey, schedules, reservations),
     };
   });
 

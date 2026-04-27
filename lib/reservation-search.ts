@@ -1,6 +1,7 @@
 import { DAY_NAMES } from "@/services/schedules.service";
 import type {
   ReservationCampus,
+  ReservationRecord,
   Room,
   Schedule,
 } from "@/types/reservation";
@@ -271,24 +272,19 @@ export function getDeterministicHash(value: string) {
   }, 0);
 }
 
-export function getPendingState(
-  roomId: string,
-  selectionKey: string,
-  slot: TimeSlotDefinition
-) {
-  const hash = getDeterministicHash(`${roomId}-${selectionKey}-${slot.startTime}`);
-  return hash % 7 === 0;
-}
-
 export function buildTimeSlots(
   roomId: string,
   dateKey: string,
-  schedules: Schedule[]
+  schedules: Schedule[],
+  reservations: ReservationRecord[] = []
 ): TimeSlotViewModel[] {
   const date = new Date(`${dateKey}T00:00:00`);
   const dayOfWeek = date.getDay();
   const matchingSchedules = schedules.filter(
     (schedule) => schedule.dayOfWeek === dayOfWeek
+  );
+  const matchingReservations = reservations.filter(
+    (reservation) => reservation.roomId === roomId && reservation.date === dateKey
   );
 
   return SLOT_DEFINITIONS.map((slot) => {
@@ -307,10 +303,45 @@ export function buildTimeSlots(
       };
     }
 
-    if (getPendingState(roomId, dateKey, slot)) {
+    const approvedReservation = matchingReservations.find(
+      (reservation) =>
+        reservation.status === "approved" &&
+        slotsOverlap(slot, {
+          endTime: reservation.endTime,
+          startTime: reservation.startTime,
+        })
+    );
+
+    if (approvedReservation) {
       return {
         ...slot,
-        description: "There is an ongoing reservation request for this timeslot.",
+        description: "This timeslot is already reserved.",
+        state: "unavailable" as const,
+      };
+    }
+
+    const pendingReservation = matchingReservations.find(
+      (reservation) =>
+        reservation.status === "pending" &&
+        slotsOverlap(slot, {
+          endTime: reservation.endTime,
+          startTime: reservation.startTime,
+        })
+    );
+
+    if (pendingReservation) {
+      const currentApprovalStep =
+        pendingReservation.approvalFlow?.[pendingReservation.currentStep];
+      const waitingLabel =
+        currentApprovalStep?.role === "advisor"
+          ? "awaiting faculty approval"
+          : currentApprovalStep?.role === "building_admin"
+            ? "awaiting building admin approval"
+            : "awaiting approval";
+
+      return {
+        ...slot,
+        description: `There is an ongoing reservation request for this timeslot, currently ${waitingLabel}.`,
         state: "pending" as const,
       };
     }
@@ -324,16 +355,12 @@ export function buildTimeSlots(
 }
 
 export function isRoomAvailableForRequest(
-  room: SearchRoom,
+  _room: SearchRoom,
   schedules: Schedule[],
   dateKeys: string[],
   startTime: string,
   endTime: string
 ) {
-  if (room.status !== "Available") {
-    return false;
-  }
-
   if (dateKeys.length === 0 || !startTime || !endTime) {
     return true;
   }

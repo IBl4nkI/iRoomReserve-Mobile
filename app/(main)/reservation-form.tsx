@@ -10,13 +10,6 @@ import {
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import {
-  collection,
-  getDocs,
-  limit,
-  query,
-  where,
-} from "firebase/firestore";
 
 import SelectionScreenLayout from "@/components/SelectionScreenLayout";
 import { useToast } from "@/components/ToastProvider";
@@ -31,7 +24,8 @@ import {
   minutesToTimeString,
   timeStringToMinutes,
 } from "@/lib/reservation-search";
-import { auth, db } from "@/services/firebase";
+import { auth } from "@/services/firebase";
+import { apiRequest } from "@/services/api";
 import { uploadReservationDocument } from "@/services/reservation-documents.service";
 import {
   createRecurringReservation,
@@ -831,25 +825,27 @@ export default function ReservationFormScreen() {
     setEmailFeedback("");
 
     try {
-      const usersQuery = query(
-        collection(db, "users"),
-        where("email", "==", trimmedEmail),
-        limit(1)
+      await apiRequest<{ email: string; ok: true }>(
+        "/api/reservation-approvers/validate",
+        {
+          method: "POST",
+          body: {
+            campus: "main",
+            email: trimmedEmail,
+          },
+        }
       );
-      const snapshot = await getDocs(usersQuery);
-
-      if (snapshot.empty) {
-        setEmailStatus("invalid");
-        setEmailFeedback("No iRoomReserve account matches this email.");
-        return false;
-      }
 
       setEmailStatus("valid");
       setEmailFeedback("Email found in iRoomReserve.");
       return true;
-    } catch {
+    } catch (error) {
       setEmailStatus("invalid");
-      setEmailFeedback("Unable to verify the email right now.");
+      setEmailFeedback(
+        error instanceof Error
+          ? error.message
+          : "Unable to verify the email right now."
+      );
       return false;
     }
   }
@@ -942,6 +938,11 @@ export default function ReservationFormScreen() {
       }
     }
 
+    if (isStudentUser && !attachment) {
+      showToast("Attach the concept paper or letter of approval before submitting.", "error");
+      return;
+    }
+
     if (attachment && !ALLOWED_ATTACHMENT_MIME_TYPES.has(attachment.mimeType)) {
       showToast("Only PDF, JPG, and PNG files are allowed.", "error");
       return;
@@ -964,7 +965,7 @@ export default function ReservationFormScreen() {
         Object.entries(materials).filter(([, quantity]) => quantity > 0)
       );
 
-      const uploadedDocument = isStudentUser && attachment
+      const uploadedDocument = attachment
         ? await uploadReservationDocument({
             file: attachment,
           })
@@ -1474,7 +1475,7 @@ export default function ReservationFormScreen() {
           <View style={styles.inputBlock}>
             <Text style={styles.inputLabel}>Concept Paper / Letter of Approval</Text>
             <Text style={styles.helperText}>
-              Attach a PDF, JPG, or PNG file up to 10 MB.
+              Required. Attach a PDF, JPG, or PNG file up to 10 MB.
             </Text>
 
           {attachment ? (

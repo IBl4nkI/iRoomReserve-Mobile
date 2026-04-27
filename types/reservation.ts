@@ -1,4 +1,54 @@
 export type ReservationCampus = "digi" | "main";
+export type ReservationApprovalRole = "advisor" | "building_admin";
+export type ReservationStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "completed"
+  | "cancelled";
+
+export interface ReservationApprovalStep {
+  role: ReservationApprovalRole;
+  email: string;
+}
+
+export interface ReservationApprovalRecord extends ReservationApprovalStep {
+  date?: {
+    nanoseconds?: number;
+    seconds?: number;
+  } | null;
+  status: "approved";
+}
+
+export interface ReservationRecord {
+  id: string;
+  userId: string;
+  userName: string;
+  userRole: string;
+  roomId: string;
+  roomName: string;
+  buildingId: string;
+  buildingName: string;
+  campus: ReservationCampus;
+  date: string;
+  startTime: string;
+  endTime: string;
+  programDepartmentOrganization?: string;
+  purpose: string;
+  approvalDocumentMimeType?: string;
+  approvalDocumentName?: string;
+  approvalDocumentPath?: string;
+  approvalDocumentSize?: number;
+  equipment?: Record<string, number>;
+  approvalFlow: ReservationApprovalStep[];
+  currentStep: number;
+  approvals: ReservationApprovalRecord[];
+  rejectedBy?: string;
+  reason?: string;
+  status: ReservationStatus;
+  adminUid: string | null;
+  recurringGroupId?: string;
+}
 
 export interface Building {
   id: string;
