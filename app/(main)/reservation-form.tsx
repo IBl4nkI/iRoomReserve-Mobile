@@ -75,7 +75,6 @@ type MaterialKey =
   | "fans"
   | "speakersWithMicrophones"
   | "televisions"
-  | "cables"
   | "chairs"
   | "tables";
 
@@ -97,12 +96,11 @@ interface UserProfileSummary {
 }
 
 const MATERIAL_ITEMS: Array<{ key: MaterialKey; label: string }> = [
-  { key: "fans", label: "Fans" },
+  { key: "fans", label: "Electric Fans" },
   { key: "speakersWithMicrophones", label: "Speakers with Microphones" },
-  { key: "televisions", label: "Televisions" },
-  { key: "cables", label: "Cables" },
-  { key: "chairs", label: "Chairs" },
-  { key: "tables", label: "Tables" },
+  { key: "televisions", label: "Extra Televisions" },
+  { key: "chairs", label: "Extra Chairs" },
+  { key: "tables", label: "Extra Tables" },
 ];
 const WEEKDAY_OPTIONS = [1, 2, 3, 4, 5, 6] as const;
 const WEEKDAY_LABELS: Record<(typeof WEEKDAY_OPTIONS)[number], string> = {
@@ -494,7 +492,6 @@ export default function ReservationFormScreen() {
     fans: 0,
     speakersWithMicrophones: 0,
     televisions: 0,
-    cables: 0,
     chairs: 0,
     tables: 0,
   });
@@ -1085,22 +1082,38 @@ export default function ReservationFormScreen() {
         <Text style={styles.sectionTitle}>Room Details</Text>
         <View style={styles.roomSummaryCard}>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Room Name</Text>
+            <Text style={styles.summaryLabel}>Room Name:</Text>
             <Text style={styles.summaryValue}>{room?.name ?? roomName ?? "Selected Room"}</Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Campus</Text>
+            <Text style={styles.summaryLabel}>Campus:</Text>
             <Text style={styles.summaryValue}>
               {selectedCampus ? CAMPUS_LABELS[selectedCampus] : ""}
             </Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Floor</Text>
+            <Text style={styles.summaryLabel}>Floor:</Text>
             <Text style={styles.summaryValue}>{room?.floor ?? ""}</Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Type</Text>
+            <Text style={styles.summaryLabel}>Type:</Text>
             <Text style={styles.summaryValue}>{room?.roomType ?? ""}</Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Capacity:</Text>
+            <Text style={styles.summaryValue}>
+              {typeof room?.capacity === "number"
+                ? `Approx. ${room.capacity} People`
+                : ""}
+            </Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Air Conditioner Status:</Text>
+            <Text style={styles.summaryValue}>{room?.acStatus ?? ""}</Text>
+          </View>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryLabel}>Television/Projector:</Text>
+            <Text style={styles.summaryValue}>{room?.tvProjectorStatus ?? ""}</Text>
           </View>
         </View>
 
@@ -1387,7 +1400,7 @@ export default function ReservationFormScreen() {
           />
         </View>
 
-        <Text style={styles.sectionTitle}>Materials / Equipment</Text>
+        <Text style={styles.sectionTitle}>Materials/Equipment Needed</Text>
         <View style={styles.materialsList}>
           {MATERIAL_ITEMS.map((item) => (
             <View key={item.key} style={styles.materialRow}>
@@ -1556,8 +1569,8 @@ const styles = StyleSheet.create({
   },
   summaryRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
+    flexWrap: "wrap",
+    gap: 4,
   },
   summaryLabel: {
     color: colors.secondary,
@@ -1569,7 +1582,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     fontSize: 13,
     flexShrink: 1,
-    textAlign: "right",
   },
   selectionText: {
     color: colors.text,

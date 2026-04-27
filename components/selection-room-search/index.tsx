@@ -57,6 +57,8 @@ interface SelectionRoomSearchProps {
   resultsFooter?: React.ReactNode;
 }
 
+const DEFAULT_ROOM_TYPE_OPTIONS = ["Classroom", "Glass Room", "Conference Room", "Specialized Room", "Gymnasium"];
+
 export default function SelectionRoomSearch({
   children,
   onHeaderVisibilityChange,
@@ -98,9 +100,13 @@ export default function SelectionRoomSearch({
   const normalizedQuery = query.trim().toLowerCase();
   const roomTypeOptions = useMemo(
     () =>
-      [...new Set(rooms.map((room) => room.roomType.trim()).filter(Boolean))].sort((a, b) =>
-        a.localeCompare(b)
-      ),
+      [
+        ...new Set(
+          [...DEFAULT_ROOM_TYPE_OPTIONS, ...rooms.map((room) => room.roomType.trim())].filter(
+            Boolean
+          )
+        ),
+      ].sort((a, b) => a.localeCompare(b)),
     [rooms]
   );
   const hasActiveFilters =

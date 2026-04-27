@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import {
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -45,38 +47,46 @@ export default function SelectionScreenLayout({
   );
 
   return (
-    <ScrollView
-      keyboardShouldPersistTaps="handled"
-      contentContainerStyle={[
-        styles.container,
-        searchInteractionActive ? styles.searchContainer : styles.centeredContainer,
-        {
-          paddingTop: Math.max(insets.top, searchInteractionActive ? 64 : 16),
-          paddingBottom: Math.max(insets.bottom, 16),
-        },
-      ]}
+    <KeyboardAvoidingView
+      style={styles.keyboardContainer}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {onBackPress ? (
-        <TouchableOpacity style={styles.backIconButton} onPress={onBackPress}>
-          <Text style={styles.backIconText}>{"<"}</Text>
-        </TouchableOpacity>
-      ) : null}
-      {enableRoomSearch ? (
-        <SelectionRoomSearch
-          onHeaderVisibilityChange={setSearchHeaderVisible}
-          onInteractionChange={setSearchInteractionActive}
-          resultsFooter={footer}
-        >
-          {cardContent}
-        </SelectionRoomSearch>
-      ) : (
-        cardContent
-      )}
-    </ScrollView>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={[
+          styles.container,
+          searchInteractionActive ? styles.searchContainer : styles.centeredContainer,
+          {
+            paddingTop: Math.max(insets.top, searchInteractionActive ? 64 : 16),
+            paddingBottom: Math.max(insets.bottom, 16),
+          },
+        ]}
+      >
+        {onBackPress ? (
+          <TouchableOpacity style={styles.backIconButton} onPress={onBackPress}>
+            <Text style={styles.backIconText}>{"<"}</Text>
+          </TouchableOpacity>
+        ) : null}
+        {enableRoomSearch ? (
+          <SelectionRoomSearch
+            onHeaderVisibilityChange={setSearchHeaderVisible}
+            onInteractionChange={setSearchInteractionActive}
+            resultsFooter={footer}
+          >
+            {cardContent}
+          </SelectionRoomSearch>
+        ) : (
+          cardContent
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  keyboardContainer: {
+    flex: 1,
+  },
   container: {
     flexGrow: 1,
     padding: 16,

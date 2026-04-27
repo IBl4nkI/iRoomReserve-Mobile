@@ -139,7 +139,7 @@ export default function SelectionRoomResults({
                       </Text>
                       <Text style={styles.detailText}>
                         <Text style={styles.detailLabel}>Capacity: </Text>
-                        {room.capacity}
+                        {`Approx. ${room.capacity} People`}
                       </Text>
                     </View>
 
