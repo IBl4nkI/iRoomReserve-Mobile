@@ -19,7 +19,11 @@ import {
   toDateKey,
   type TimeSlotViewModel,
 } from "@/lib/reservation-search";
-import { getReservationsByRoom } from "@/services/reservations.service";
+import { auth } from "@/services/firebase";
+import {
+  getReservationsByRoom,
+  getReservationsByUser,
+} from "@/services/reservations.service";
 import { formatTime12h } from "@/services/schedules.service";
 import type { ReservationCampus, ReservationRecord, Schedule } from "@/types/reservation";
 
@@ -27,6 +31,7 @@ interface WeeklyScheduleGridProps {
   campus: ReservationCampus | null;
   roomId: string;
   schedules: Schedule[];
+  userReservations?: ReservationRecord[];
   weekOffset: number;
   onWeekChange: (nextWeekOffset: number) => void;
   onSlotPress?: (dateKey: string, slot: TimeSlotViewModel) => void;
@@ -84,6 +89,7 @@ export default function WeeklyScheduleGrid({
   campus,
   roomId,
   schedules,
+  userReservations,
   weekOffset,
   onWeekChange,
   onSlotPress,
@@ -91,6 +97,9 @@ export default function WeeklyScheduleGrid({
   weekNavTopMargin = 8,
 }: WeeklyScheduleGridProps) {
   const [reservations, setReservations] = React.useState<ReservationRecord[]>([]);
+  const [currentUserReservations, setCurrentUserReservations] = React.useState<
+    ReservationRecord[]
+  >([]);
 
   React.useEffect(() => {
     let active = true;
@@ -112,6 +121,45 @@ export default function WeeklyScheduleGrid({
     };
   }, [roomId]);
 
+  React.useEffect(() => {
+    if (userReservations) {
+      setCurrentUserReservations([]);
+      return;
+    }
+
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      setCurrentUserReservations([]);
+      return;
+    }
+
+    let active = true;
+
+    getReservationsByUser(currentUser.uid)
+      .then((nextReservations) => {
+        if (active) {
+          setCurrentUserReservations(
+            nextReservations.filter(
+              (reservation) =>
+                reservation.status === "pending" || reservation.status === "approved"
+            )
+          );
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setCurrentUserReservations([]);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [userReservations]);
+
+  const effectiveUserReservations = userReservations ?? currentUserReservations;
+
   const currentWeekDates = getWeekDates(weekOffset);
   const slotDefinitions = getSlotDefinitionsForCampus(campus);
   const columns = currentWeekDates.map((date) => {
@@ -120,7 +168,13 @@ export default function WeeklyScheduleGrid({
     return {
       date,
       dateKey,
-      slots: buildTimeSlots(roomId, dateKey, schedules, reservations),
+      slots: buildTimeSlots(
+        roomId,
+        dateKey,
+        schedules,
+        reservations,
+        effectiveUserReservations
+      ),
     };
   });
 

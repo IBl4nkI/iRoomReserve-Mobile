@@ -6,7 +6,7 @@ import styles from "./styles";
 import { getSelectedTimeslotKey, type SelectedTimeslot } from "./helpers";
 import { colors } from "@/constants/theme";
 import type { SearchRoom } from "@/lib/reservation-search";
-import type { Schedule } from "@/types/reservation";
+import type { ReservationRecord, Schedule } from "@/types/reservation";
 
 interface SelectionRoomResultsProps {
   availabilityLoading: boolean;
@@ -15,6 +15,7 @@ interface SelectionRoomResultsProps {
   resultsFooter?: React.ReactNode;
   resultsHeadingVisible: boolean;
   roomSchedules: Record<string, Schedule[]>;
+  userReservations: ReservationRecord[];
   roomsError: string | null;
   roomsLoading: boolean;
   scheduleLoadingIds: Record<string, boolean>;
@@ -42,6 +43,7 @@ export default function SelectionRoomResults({
   resultsFooter,
   resultsHeadingVisible,
   roomSchedules,
+  userReservations,
   roomsError,
   roomsLoading,
   scheduleLoadingIds,
@@ -164,6 +166,7 @@ export default function SelectionRoomResults({
                         campus={room.campus}
                         roomId={room.id}
                         schedules={schedules}
+                        userReservations={userReservations}
                         weekOffset={weekOffset}
                         weekNavTopMargin={0}
                         onWeekChange={(nextWeekOffset) =>

@@ -276,7 +276,8 @@ export function buildTimeSlots(
   roomId: string,
   dateKey: string,
   schedules: Schedule[],
-  reservations: ReservationRecord[] = []
+  reservations: ReservationRecord[] = [],
+  userReservations: ReservationRecord[] = []
 ): TimeSlotViewModel[] {
   const date = new Date(`${dateKey}T00:00:00`);
   const dayOfWeek = date.getDay();
@@ -285,6 +286,12 @@ export function buildTimeSlots(
   );
   const matchingReservations = reservations.filter(
     (reservation) => reservation.roomId === roomId && reservation.date === dateKey
+  );
+  const matchingUserReservations = userReservations.filter(
+    (reservation) =>
+      reservation.roomId !== roomId &&
+      reservation.date === dateKey &&
+      (reservation.status === "pending" || reservation.status === "approved")
   );
 
   return SLOT_DEFINITIONS.map((slot) => {
@@ -346,6 +353,24 @@ export function buildTimeSlots(
       };
     }
 
+    const conflictingUserReservation = matchingUserReservations.find((reservation) =>
+      slotsOverlap(slot, {
+        endTime: reservation.endTime,
+        startTime: reservation.startTime,
+      })
+    );
+
+    if (conflictingUserReservation) {
+      return {
+        ...slot,
+        description:
+          conflictingUserReservation.status === "approved"
+            ? `You already have an approved reservation for this timeslot in ${conflictingUserReservation.roomName}.`
+            : `You already have an ongoing reservation request for this timeslot in ${conflictingUserReservation.roomName}.`,
+        state: "unavailable" as const,
+      };
+    }
+
     return {
       ...slot,
       description: "This timeslot is available for reservation.",
@@ -355,11 +380,12 @@ export function buildTimeSlots(
 }
 
 export function isRoomAvailableForRequest(
-  _room: SearchRoom,
+  room: SearchRoom,
   schedules: Schedule[],
   dateKeys: string[],
   startTime: string,
-  endTime: string
+  endTime: string,
+  userReservations: ReservationRecord[] = []
 ) {
   if (dateKeys.length === 0 || !startTime || !endTime) {
     return true;
@@ -375,12 +401,27 @@ export function isRoomAvailableForRequest(
       return false;
     }
 
-    return !schedules.some(
+    const hasScheduleConflict = schedules.some(
       (schedule) =>
         schedule.dayOfWeek === dayOfWeek &&
         slotsOverlap(requestSlot, {
           endTime: schedule.endTime,
           startTime: schedule.startTime,
+        })
+    );
+
+    if (hasScheduleConflict) {
+      return false;
+    }
+
+    return !userReservations.some(
+      (reservation) =>
+        reservation.roomId !== room.id &&
+        reservation.date === dateKey &&
+        (reservation.status === "pending" || reservation.status === "approved") &&
+        slotsOverlap(requestSlot, {
+          endTime: reservation.endTime,
+          startTime: reservation.startTime,
         })
     );
   });

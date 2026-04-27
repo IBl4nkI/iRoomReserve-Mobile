@@ -44,8 +44,14 @@ import {
 } from "./helpers";
 import { getBuildings } from "@/services/buildings.service";
 import { getRoomsByBuilding } from "@/services/rooms.service";
+import { auth } from "@/services/firebase";
+import { getReservationsByUser } from "@/services/reservations.service";
 import { formatTime12h, getSchedulesByRoomId } from "@/services/schedules.service";
-import type { ReservationCampus, Schedule } from "@/types/reservation";
+import type {
+  ReservationCampus,
+  ReservationRecord,
+  Schedule,
+} from "@/types/reservation";
 import RoomSearchBar from "./RoomSearchBar";
 import RoomSearchFilters from "./RoomSearchFilters";
 import RoomTimePickerModal from "./RoomTimePickerModal";
@@ -88,6 +94,7 @@ export default function SelectionRoomSearch({
   const [weekOffsets, setWeekOffsets] = useState<Record<string, number>>({});
   const [rooms, setRooms] = useState<SearchRoom[]>([]);
   const [roomSchedules, setRoomSchedules] = useState<Record<string, Schedule[]>>({});
+  const [userReservations, setUserReservations] = useState<ReservationRecord[]>([]);
   const [roomsLoading, setRoomsLoading] = useState(false);
   const [roomsError, setRoomsError] = useState<string | null>(null);
   const [scheduleLoadingIds, setScheduleLoadingIds] = useState<Record<string, boolean>>({});
@@ -233,6 +240,38 @@ export default function SelectionRoomSearch({
       .finally(() => {
         if (active) {
           setRoomsLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      setUserReservations([]);
+      return;
+    }
+
+    let active = true;
+
+    getReservationsByUser(currentUser.uid)
+      .then((nextReservations) => {
+        if (active) {
+          setUserReservations(
+            nextReservations.filter(
+              (reservation) =>
+                reservation.status === "pending" || reservation.status === "approved"
+            )
+          );
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setUserReservations([]);
         }
       });
 
@@ -394,7 +433,8 @@ export default function SelectionRoomSearch({
         roomSchedules[room.id] ?? [],
         reservationDateKeys,
         startTimeDraft,
-        endTimeDraft
+        endTimeDraft,
+        userReservations
       );
     });
   }, [
@@ -405,6 +445,7 @@ export default function SelectionRoomSearch({
     roomSchedules,
     selectedCampusDraft,
     startTimeDraft,
+    userReservations,
   ]);
 
   const availabilityRequiresSchedules = reservationDateKeys.length > 0;
@@ -797,6 +838,7 @@ export default function SelectionRoomSearch({
           resultsFooter={resultsFooter}
           resultsHeadingVisible={resultsHeadingVisible}
           roomSchedules={roomSchedules}
+          userReservations={userReservations}
           roomsError={roomsError}
           roomsLoading={roomsLoading}
           scheduleLoadingIds={scheduleLoadingIds}
