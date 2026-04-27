@@ -44,12 +44,15 @@ export default function RootLayout() {
     if (loading) return;
     const firstSegment = String(segments[0] ?? '');
     const inAuthGroup = firstSegment === '(auth)';
+    const inMainGroup = firstSegment === '(main)';
     const isRoleSelection = segments.includes('role-selection');
 
     const timeout = setTimeout(() => {
       if (!user && !inAuthGroup) {
         router.replace('/(auth)/login');
-      } else if (user && inAuthGroup && hasRole && !isRoleSelection) {
+      } else if (user && hasRole === false && !isRoleSelection) {
+        router.replace('/(auth)/role-selection');
+      } else if (user && hasRole && !inMainGroup) {
         router.replace('/(main)/campus-select');
       }
     }, 100);
