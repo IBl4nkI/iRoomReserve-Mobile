@@ -99,9 +99,7 @@ export default function SelectionRoomResults({
                     onPress={() => onRoomPress(room.id)}
                   >
                     <Text style={styles.roomName}>{room.name}</Text>
-                    <Text style={styles.roomMeta}>
-                      {room.campusName} / {room.buildingName}
-                    </Text>
+                    <Text style={styles.roomMeta}>{room.buildingName}</Text>
                     <Text style={styles.roomMeta}>Floor: {room.floor}</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
