@@ -13,7 +13,11 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import WeeklyScheduleGrid from "@/components/WeeklyScheduleGrid";
 import { applySelectedTimeslotPress } from "@/components/selection-room-search/helpers";
 import { colors, fonts } from "@/constants/theme";
-import { formatFullDate, getRoomCampus } from "@/lib/reservation-search";
+import {
+  formatFullDate,
+  getRoomCampus,
+  type TimeSlotViewModel,
+} from "@/lib/reservation-search";
 import {
   DAY_NAMES,
   formatTime12h,
@@ -176,24 +180,28 @@ export default function RoomDetailsScreen() {
 
   function handleSlotPress(
     dateKey: string,
-    slot: {
-      description: string;
-      endTime: string;
-      startTime: string;
-      state: "available" | "pending" | "unavailable";
-    }
+    slot: TimeSlotViewModel
   ) {
     const selectionLabel = formatFullDate(new Date(`${dateKey}T00:00:00`));
     const timeslot = `${formatTime12h(slot.startTime)} - ${formatTime12h(slot.endTime)}`;
 
     if (slot.state === "unavailable") {
+      if (slot.unavailableReason === "user_conflict") {
+        Alert.alert(
+          "Existing Reservation",
+          "You already have a reservation request for this same timeslot. Press OK to remove or change that reservation first.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+
       Alert.alert(
-        "Timeslot Unavailable",
-        "This timeslot is currently unavailable. Would you like to see other rooms that are similar to your selected preferences?",
+        "Room Unavailable",
+        "This room is unavailable. Would you like to see alternative rooms that are available for this timeslot?",
         [
-          { style: "cancel", text: "No, stay here" },
+          { style: "cancel", text: "No" },
           {
-            text: "Yes, take me there",
+            text: "Yes",
             onPress: () => openAlternativeRooms(selectionLabel, timeslot),
           },
         ]

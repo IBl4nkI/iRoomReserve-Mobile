@@ -5,7 +5,7 @@ import WeeklyScheduleGrid from "@/components/WeeklyScheduleGrid";
 import styles from "./styles";
 import { getSelectedTimeslotKey, type SelectedTimeslot } from "./helpers";
 import { colors } from "@/constants/theme";
-import type { SearchRoom } from "@/lib/reservation-search";
+import type { SearchRoom, TimeSlotViewModel } from "@/lib/reservation-search";
 import type { ReservationRecord, Schedule } from "@/types/reservation";
 
 interface SelectionRoomResultsProps {
@@ -25,13 +25,9 @@ interface SelectionRoomResultsProps {
   onRoomPress: (roomId: string) => void;
   onToggleExpandedRoom: (roomId: string) => void;
   onToggleSelectedTimeslot: (
-    roomId: string,
+    room: SearchRoom,
     dateKey: string,
-    slot: {
-      endTime: string;
-      startTime: string;
-      state: "available" | "pending" | "unavailable";
-    }
+    slot: TimeSlotViewModel
   ) => void;
   onWeekOffsetChange: (roomId: string, nextWeekOffset: number) => void;
 }
@@ -173,7 +169,7 @@ export default function SelectionRoomResults({
                           onWeekOffsetChange(room.id, nextWeekOffset)
                         }
                         onSlotPress={(dateKey, slot) =>
-                          onToggleSelectedTimeslot(room.id, dateKey, slot)
+                          onToggleSelectedTimeslot(room, dateKey, slot)
                         }
                         selectedSlotKeys={selectedSlotKeys}
                       />

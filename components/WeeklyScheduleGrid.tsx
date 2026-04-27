@@ -226,7 +226,7 @@ export default function WeeklyScheduleGrid({
               return (
                 <CellWrapper
                   key={`${dateKey}-${slot.startTime}`}
-                  disabled={!onSlotPress || slot.state === "unavailable"}
+                  disabled={!onSlotPress}
                   onPress={onSlotPress ? () => onSlotPress(dateKey, slot) : undefined}
                   style={[
                     styles.slotCell,

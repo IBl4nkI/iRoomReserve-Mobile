@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  Alert,
   ActivityIndicator,
   StyleSheet,
   Switch,
@@ -23,6 +24,7 @@ import {
   getRoomCampus,
   minutesToTimeString,
   timeStringToMinutes,
+  type TimeSlotViewModel,
 } from "@/lib/reservation-search";
 import { auth } from "@/services/firebase";
 import { apiRequest } from "@/services/api";
@@ -767,15 +769,43 @@ export default function ReservationFormScreen() {
     }));
   }
 
+  function openAlternativeRooms(dateKey: string, slot: Pick<TimeSlotViewModel, "startTime" | "endTime">) {
+    router.push({
+      pathname: "/(main)/alternative-rooms",
+      params: {
+        roomId: resolvedRoomId,
+        roomName: room?.name ?? roomName ?? "Selected Room",
+        selection: formatFullDate(new Date(`${dateKey}T00:00:00`)),
+        timeslot: `${formatTime12h(slot.startTime)} - ${formatTime12h(slot.endTime)}`,
+      },
+    });
+  }
+
   function handleScheduleSlotPress(
     dateKey: string,
-    slot: {
-      endTime: string;
-      startTime: string;
-      state: "available" | "pending" | "unavailable";
-    }
+    slot: TimeSlotViewModel
   ) {
     if (slot.state === "unavailable") {
+      if (slot.unavailableReason === "user_conflict") {
+        Alert.alert(
+          "Existing Reservation",
+          "You already have a reservation request for this same timeslot. Press OK to remove or change that reservation first.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+
+      Alert.alert(
+        "Room Unavailable",
+        "This room is unavailable. Would you like to see alternative rooms that are available for this timeslot?",
+        [
+          { style: "cancel", text: "No" },
+          {
+            text: "Yes",
+            onPress: () => openAlternativeRooms(dateKey, slot),
+          },
+        ]
+      );
       return;
     }
 

@@ -1,16 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { View } from "react-native";
+import { Alert, View } from "react-native";
 import { useRouter } from "expo-router";
 
 import {
   buildRoomSearchText,
   getDayShortLabel,
+  formatFullDate,
   isPastDate,
   isRoomAvailableForRequest,
   isTimeRangeValid,
   minutesToTimeString,
   timeStringToMinutes,
   toSearchRoom,
+  type TimeSlotViewModel,
   type SearchRoom,
 } from "@/lib/reservation-search";
 import SelectionRoomResults from "./SelectionRoomResults";
@@ -458,16 +460,47 @@ export default function SelectionRoomSearch({
     [availabilityRequiresSchedules, filteredRooms, roomSchedules, scheduleLoadingIds]
   );
 
-  function toggleSelectedTimeslot(
-    roomId: string,
+  function openAlternativeRooms(
+    room: SearchRoom,
     dateKey: string,
-    slot: {
-      endTime: string;
-      startTime: string;
-      state: "available" | "pending" | "unavailable";
-    }
+    slot: Pick<TimeSlotViewModel, "startTime" | "endTime">
+  ) {
+    router.push({
+      pathname: "/(main)/alternative-rooms",
+      params: {
+        roomName: room.name,
+        selection: formatFullDate(new Date(`${dateKey}T00:00:00`)),
+        timeslot: `${formatTime12h(slot.startTime)} - ${formatTime12h(slot.endTime)}`,
+      },
+    });
+  }
+
+  function toggleSelectedTimeslot(
+    room: SearchRoom,
+    dateKey: string,
+    slot: TimeSlotViewModel
   ) {
     if (slot.state === "unavailable") {
+      if (slot.unavailableReason === "user_conflict") {
+        Alert.alert(
+          "Existing Reservation",
+          "You already have a reservation request for this same timeslot. Users can only reserve one room per timeslot.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+
+      Alert.alert(
+        "Room Unavailable",
+        "This room is unavailable. Would you like to see alternative rooms that are available for this timeslot?",
+        [
+          { style: "cancel", text: "No" },
+          {
+            text: "Yes",
+            onPress: () => openAlternativeRooms(room, dateKey, slot),
+          },
+        ]
+      );
       return;
     }
 
@@ -479,11 +512,11 @@ export default function SelectionRoomSearch({
     };
 
     setSelectedSlotsByRoom((currentValue) => {
-      const roomSelections = currentValue[roomId] ?? [];
+      const roomSelections = currentValue[room.id] ?? [];
 
       return {
         ...currentValue,
-        [roomId]: applySelectedTimeslotPress(roomSelections, nextSlot),
+        [room.id]: applySelectedTimeslotPress(roomSelections, nextSlot),
       };
     });
   }
