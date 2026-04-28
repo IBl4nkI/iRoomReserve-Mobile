@@ -7,7 +7,7 @@ import { getUserProfile, logout } from '@/lib/auth';
 import { auth } from '@/lib/firebase';
 import { dashboardStyles as styles } from '@/components/dashboard/styles';
 
-const navItems = [
+const defaultNavItems = [
   {
     label: 'Dashboard',
     route: '/(main)/dashboard',
@@ -19,6 +19,29 @@ const navItems = [
   {
     label: 'Reservation History',
     route: '/(main)/dashboard/reservation-history',
+  },
+  {
+    label: 'Account Settings',
+    route: '/(main)/dashboard/account-settings',
+  },
+  {
+    label: 'Feedback',
+    route: '/(main)/dashboard/feedback',
+  },
+  {
+    label: 'Inbox',
+    route: '/(main)/dashboard/inbox',
+  },
+];
+
+const utilityStaffNavItems = [
+  {
+    label: 'Dashboard',
+    route: '/(main)/dashboard',
+  },
+  {
+    label: 'Rooms Status',
+    route: '/(main)/dashboard/rooms-status',
   },
   {
     label: 'Account Settings',
@@ -47,6 +70,7 @@ export default function DashboardTopNav() {
   const [loggingOut, setLoggingOut] = React.useState(false);
   const [userInitials, setUserInitials] = React.useState('IR');
   const [userRole, setUserRole] = React.useState('User');
+  const [isUtilityStaff, setIsUtilityStaff] = React.useState(false);
   const currentPath = normalizeRoutePath(pathname);
 
   React.useEffect(() => {
@@ -68,7 +92,9 @@ export default function DashboardTopNav() {
       const initials = `${firstInitial}${lastInitial}`.trim() || 'IR';
 
       setUserInitials(initials);
-      setUserRole(profile.role?.trim() || 'User');
+      const normalizedRole = profile.role?.trim() || 'User';
+      setUserRole(normalizedRole);
+      setIsUtilityStaff(normalizedRole === 'Utility Staff');
     };
 
     loadUserProfile();
@@ -98,6 +124,8 @@ export default function DashboardTopNav() {
       setLoggingOut(false);
     }
   };
+
+  const navItems = isUtilityStaff ? utilityStaffNavItems : defaultNavItems;
 
   return (
     <View style={[styles.stickyNavWrap, { paddingTop: insets.top + 10 }]}>

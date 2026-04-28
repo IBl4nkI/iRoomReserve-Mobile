@@ -21,6 +21,7 @@ import { getRoomsByIds } from "@/services/rooms.service";
 import {
   checkInReservation,
   completeReservation,
+  getReservationsByCampus,
   getReservationsByUser,
 } from "@/services/reservations.service";
 import { formatTime12h } from "@/services/schedules.service";
@@ -298,10 +299,12 @@ export default function DashboardHomeScreen() {
   const [firstName, setFirstName] = React.useState("My");
   const [reservations, setReservations] = React.useState<ReservationRecord[]>([]);
   const [roomsById, setRoomsById] = React.useState<Record<string, Room>>({});
+  const [userRole, setUserRole] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [reservationActionLoading, setReservationActionLoading] = React.useState(false);
   const isMountedRef = React.useRef(true);
+  const isUtilityStaff = userRole?.trim() === "Utility Staff";
 
   const loadDashboard = React.useCallback(async (showSpinner = true) => {
     const currentUser = auth.currentUser;
@@ -317,10 +320,7 @@ export default function DashboardHomeScreen() {
     }
 
     try {
-      const [profile, nextReservations] = await Promise.all([
-        getUserProfile(currentUser.uid),
-        getReservationsByUser(currentUser.uid),
-      ]);
+      const profile = await getUserProfile(currentUser.uid);
 
       if (!isMountedRef.current) {
         return;
@@ -330,6 +330,16 @@ export default function DashboardHomeScreen() {
         setFirstName(profile.firstName.trim());
       }
 
+      const normalizedRole = profile?.role?.trim() ?? null;
+      const campus = profile?.campus === "main" || profile?.campus === "digi"
+        ? profile.campus
+        : null;
+      setUserRole(normalizedRole);
+
+      const nextReservations =
+        normalizedRole === "Utility Staff" && campus
+          ? await getReservationsByCampus(campus)
+          : await getReservationsByUser(currentUser.uid);
       const roomIds = [...new Set(nextReservations.map((reservation) => reservation.roomId))];
       const rooms = await getRoomsByIds(roomIds);
 
@@ -383,22 +393,32 @@ export default function DashboardHomeScreen() {
       reservation.status === "approved" &&
       isCurrentOrFutureReservation(reservation, todayDateKey, currentTimeKey)
   );
-  const ongoingReservation =
-    approvedReservations.find((reservation) =>
-      isOngoingReservation(reservation, todayDateKey, currentTimeKey)
-    ) ?? null;
-  const upcomingReservations = approvedReservations.filter(
-    (reservation) => reservation.id !== ongoingReservation?.id
-  ).sort(sortUpcomingReservations);
-  const hasUnreadInbox = pendingReservations.length > 0;
-  const isReservationStarted = Boolean(ongoingReservation?.checkedInAt);
+  const ongoingReservations = isUtilityStaff
+    ? approvedReservations.filter(
+        (reservation) =>
+          Boolean(reservation.checkedInAt) &&
+          isOngoingReservation(reservation, todayDateKey, currentTimeKey)
+      )
+    : approvedReservations.filter((reservation) =>
+        isOngoingReservation(reservation, todayDateKey, currentTimeKey)
+      ).slice(0, 1);
+  const ongoingReservation = ongoingReservations[0] ?? null;
+  const upcomingReservations = approvedReservations
+    .filter(
+      (reservation) =>
+        !ongoingReservations.some((ongoingItem) => ongoingItem.id === reservation.id)
+    )
+    .sort(sortUpcomingReservations);
+  const hasUnreadInbox = isUtilityStaff ? false : pendingReservations.length > 0;
+  const isReservationStarted = !isUtilityStaff && Boolean(ongoingReservation?.checkedInAt);
   const canStartOngoingReservation = canStartReservation(
     ongoingReservation,
     todayDateKey,
     currentTimeKey
   );
   const canManageOngoingReservation =
-    isReservationStarted || canStartOngoingReservation;
+    !isUtilityStaff &&
+    (isReservationStarted || canStartOngoingReservation);
   const getRoomLocationLabel = (reservation: ReservationRecord) => {
     const room = roomsById[reservation.roomId];
     return room?.floor
@@ -469,48 +489,57 @@ export default function DashboardHomeScreen() {
           <EmptyStateCard title="Dashboard" message={error} />
         ) : (
           <>
-            {ongoingReservation ? (
+            {ongoingReservations.length > 0 ? (
               <View style={styles.card}>
-                <Text style={styles.sectionTitle}>Ongoing Reservation</Text>
-                <ReservationCard
-                  reservation={ongoingReservation}
-                  compactTitle
-                  locationLabel={getRoomLocationLabel(ongoingReservation)}
-                />
-                {canManageOngoingReservation ? (
-                  <Pressable
-                    style={[
-                      styles.reservationActionButton,
-                      isReservationStarted
-                        ? styles.reservationActionButtonFinish
-                        : styles.reservationActionButtonStart,
-                      reservationActionLoading
-                        ? styles.reservationActionButtonDisabled
-                        : null,
-                    ]}
-                    onPress={handleReservationAction}
-                    disabled={reservationActionLoading}
+                <Text style={styles.sectionTitle}>
+                  {isUtilityStaff ? "Ongoing Reservations" : "Ongoing Reservation"}
+                </Text>
+                {ongoingReservations.map((reservation, index) => (
+                  <View
+                    key={reservation.id}
+                    style={index === ongoingReservations.length - 1 ? null : styles.dashboardGroupItem}
                   >
-                    <Text style={styles.reservationActionButtonText}>
-                      {reservationActionLoading
-                        ? isReservationStarted
-                          ? "Finishing..."
-                          : "Starting..."
-                        : isReservationStarted
-                          ? "Finish Reservation"
-                          : "Start Reservation"}
-                    </Text>
-                  </Pressable>
-                ) : null}
+                    <ReservationCard
+                      reservation={reservation}
+                      compactTitle
+                      locationLabel={getRoomLocationLabel(reservation)}
+                    />
+                    {!isUtilityStaff && canManageOngoingReservation ? (
+                      <Pressable
+                        style={[
+                          styles.reservationActionButton,
+                          isReservationStarted
+                            ? styles.reservationActionButtonFinish
+                            : styles.reservationActionButtonStart,
+                          reservationActionLoading
+                            ? styles.reservationActionButtonDisabled
+                            : null,
+                        ]}
+                        onPress={handleReservationAction}
+                        disabled={reservationActionLoading}
+                      >
+                        <Text style={styles.reservationActionButtonText}>
+                          {reservationActionLoading
+                            ? isReservationStarted
+                              ? "Finishing..."
+                              : "Starting..."
+                            : isReservationStarted
+                              ? "Finish Reservation"
+                              : "Start Reservation"}
+                        </Text>
+                      </Pressable>
+                    ) : null}
+                  </View>
+                ))}
               </View>
             ) : (
               <EmptyStateCard
-                title="Ongoing Reservation"
+                title={isUtilityStaff ? "Ongoing Reservations" : "Ongoing Reservation"}
                 message="There are no ongoing reservations."
               />
             )}
 
-            {pendingReservations.length === 0 ? (
+            {isUtilityStaff ? null : pendingReservations.length === 0 ? (
               <EmptyStateCard
                 title="Pending Requests"
                 message="There are no pending requests."
@@ -536,24 +565,24 @@ export default function DashboardHomeScreen() {
 
                       return (
                         <>
-                    <View style={styles.row}>
-                      <Text style={[styles.reservationTitle, { marginTop: 0 }]}>
-                        {reservation.roomName}
-                      </Text>
-                      <StatusChip status="Pending" />
-                    </View>
-                    <Text style={styles.reservationMeta}>{locationLabel}</Text>
-                    <Text style={styles.reservationMeta}>{formatReservationDate(reservation.date)}</Text>
-                    <Text style={styles.reservationMeta}>
-                      {formatTime12h(reservation.startTime)} - {formatTime12h(reservation.endTime)}
-                    </Text>
-                    <Text style={styles.reservationMeta}>
-                      {reservation.programDepartmentOrganization || "Program / Department / Organization not provided"}
-                    </Text>
-                    <Text style={styles.reservationPurpose}>{reservation.purpose}</Text>
-                    <Text style={[styles.reservationMeta, { color: colors.primary }]}>
-                      {getPendingStageLabel(reservation)}
-                    </Text>
+                          <View style={styles.row}>
+                            <Text style={[styles.reservationTitle, { marginTop: 0 }]}>
+                              {reservation.roomName}
+                            </Text>
+                            <StatusChip status="Pending" />
+                          </View>
+                          <Text style={styles.reservationMeta}>{locationLabel}</Text>
+                          <Text style={styles.reservationMeta}>{formatReservationDate(reservation.date)}</Text>
+                          <Text style={styles.reservationMeta}>
+                            {formatTime12h(reservation.startTime)} - {formatTime12h(reservation.endTime)}
+                          </Text>
+                          <Text style={styles.reservationMeta}>
+                            {reservation.programDepartmentOrganization || "Program / Department / Organization not provided"}
+                          </Text>
+                          <Text style={styles.reservationPurpose}>{reservation.purpose}</Text>
+                          <Text style={[styles.reservationMeta, { color: colors.primary }]}>
+                            {getPendingStageLabel(reservation)}
+                          </Text>
                         </>
                       );
                     })()}
@@ -587,12 +616,14 @@ export default function DashboardHomeScreen() {
           </>
         )}
 
-        <Pressable
-          style={styles.actionButton}
-          onPress={() => router.push("/(main)/dashboard/reserve-now")}
-        >
-          <Text style={styles.actionButtonText}>Reserve Now</Text>
-        </Pressable>
+        {isUtilityStaff ? null : (
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => router.push("/(main)/dashboard/reserve-now")}
+          >
+            <Text style={styles.actionButtonText}>Reserve Now</Text>
+          </Pressable>
+        )}
       </View>
     </ScrollView>
   );

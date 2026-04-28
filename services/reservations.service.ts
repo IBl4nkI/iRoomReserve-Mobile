@@ -92,6 +92,18 @@ export async function getReservationsByUser(
   });
 }
 
+export async function getReservationsByCampus(
+  campus: ReservationCampus
+): Promise<ReservationRecord[]> {
+  return apiRequest<ReservationRecord[]>("/api/reservations", {
+    method: "GET",
+    params: {
+      campus,
+      statuses: "pending,approved,rejected,completed,cancelled",
+    },
+  });
+}
+
 export async function getReservationsByRoom(
   roomId: string
 ): Promise<ReservationRecord[]> {

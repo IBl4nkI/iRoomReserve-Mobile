@@ -23,6 +23,12 @@ import {
   logout,
 } from "@/lib/auth";
 
+function getPostLoginRoute(role?: string | null) {
+  return role?.trim() === "Utility Staff"
+    ? "/(main)/dashboard"
+    : "/(main)/campus-select";
+}
+
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -49,7 +55,7 @@ export default function LoginScreen() {
         router.replace("/(auth)/login?pending=true");
       } else {
         showToast("Login successful!");
-        router.replace("/(main)/campus-select");
+        router.replace(getPostLoginRoute(userProfile.role));
       }
     } catch (err: unknown) {
       const firebaseError = err as { code?: string };
@@ -74,7 +80,7 @@ export default function LoginScreen() {
         router.replace("/(auth)/login?pending=true");
       } else {
         showToast("Login successful!");
-        router.replace("/(main)/campus-select");
+        router.replace(getPostLoginRoute(userProfile?.role));
       }
     } catch (err: unknown) {
       const firebaseError = err as { code?: string };

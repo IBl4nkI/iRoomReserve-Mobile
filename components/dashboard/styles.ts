@@ -399,6 +399,9 @@ export const dashboardStyles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
   },
+  dashboardGroupItem: {
+    marginBottom: 12,
+  },
   accountPairRow: {
     flexDirection: 'row',
     gap: 12,
