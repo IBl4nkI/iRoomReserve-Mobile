@@ -30,6 +30,7 @@ export interface TimeSlotViewModel extends TimeSlotDefinition {
   description: string;
   state: "available" | "pending" | "unavailable";
   unavailableReason?:
+    | "past_time"
     | "schedule_conflict"
     | "room_reserved"
     | "room_pending"
@@ -286,6 +287,10 @@ export function buildTimeSlots(
 ): TimeSlotViewModel[] {
   const date = new Date(`${dateKey}T00:00:00`);
   const dayOfWeek = date.getDay();
+  const todayKey = toDateKey(startOfToday());
+  const currentTime = minutesToTimeString(
+    new Date().getHours() * 60 + new Date().getMinutes()
+  );
   const matchingSchedules = schedules.filter(
     (schedule) => schedule.dayOfWeek === dayOfWeek
   );
@@ -300,6 +305,15 @@ export function buildTimeSlots(
   );
 
   return SLOT_DEFINITIONS.map((slot) => {
+    if (dateKey === todayKey && slot.endTime <= currentTime) {
+      return {
+        ...slot,
+        description: "This timeslot has already passed for today.",
+        state: "unavailable" as const,
+        unavailableReason: "past_time" as const,
+      };
+    }
+
     const blockedSchedule = matchingSchedules.find((schedule) =>
       slotsOverlap(slot, {
         endTime: schedule.endTime,

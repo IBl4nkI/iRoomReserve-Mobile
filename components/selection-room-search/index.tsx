@@ -481,6 +481,15 @@ export default function SelectionRoomSearch({
     slot: TimeSlotViewModel
   ) {
     if (slot.state === "unavailable") {
+      if (slot.unavailableReason === "past_time") {
+        Alert.alert(
+          "Timeslot Unavailable",
+          "This timeslot is no longer available because it is already outside today's current reservation window.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+
       if (slot.unavailableReason === "user_conflict") {
         Alert.alert(
           "Existing Reservation",
