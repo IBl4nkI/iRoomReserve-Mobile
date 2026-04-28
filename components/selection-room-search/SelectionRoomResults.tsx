@@ -162,7 +162,7 @@ export default function SelectionRoomResults({
                         schedules={schedules}
                         userReservations={userReservations}
                         weekOffset={weekOffset}
-                        weekNavTopMargin={0}
+                        weekNavTopMargin={12}
                         onWeekChange={(nextWeekOffset) =>
                           onWeekOffsetChange(room.id, nextWeekOffset)
                         }

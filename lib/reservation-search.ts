@@ -440,8 +440,24 @@ export function getInitialExpandedDates(reservationDateKeys: string[]) {
 }
 
 export function getWeekDates(weekOffset: number) {
-  const monday = addDays(getMondayOfWeek(new Date()), weekOffset * 7);
-  return SELECTABLE_DAY_INDICES.map((dayOffset) => addDays(monday, dayOffset - 1));
+  const anchorDate = startOfToday();
+
+  while (!SELECTABLE_DAY_INDICES.includes(anchorDate.getDay() as 1 | 2 | 3 | 4 | 5 | 6)) {
+    anchorDate.setDate(anchorDate.getDate() + 1);
+  }
+
+  const currentDate = addDays(anchorDate, weekOffset * 7);
+  const dates: Date[] = [];
+
+  while (dates.length < SELECTABLE_DAY_INDICES.length) {
+    if (SELECTABLE_DAY_INDICES.includes(currentDate.getDay() as 1 | 2 | 3 | 4 | 5 | 6)) {
+      dates.push(new Date(currentDate));
+    }
+
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  return dates;
 }
 
 export function formatSelectionLabel(dateKey: string) {
