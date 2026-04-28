@@ -12,6 +12,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
 import DashboardTopNav from "@/components/dashboard/DashboardTopNav";
+import { useToast } from "@/components/ToastProvider";
 import { dashboardStyles as styles } from "@/components/dashboard/styles";
 import { colors } from "@/constants/theme";
 import { getUserProfile } from "@/lib/auth";
@@ -285,6 +286,7 @@ function ReservationCard({
 
 export default function DashboardHomeScreen() {
   const insets = useSafeAreaInsets();
+  const { showToast } = useToast();
   const [firstName, setFirstName] = React.useState("My");
   const [reservations, setReservations] = React.useState<ReservationRecord[]>([]);
   const [roomsById, setRoomsById] = React.useState<Record<string, Room>>({});
@@ -406,8 +408,10 @@ export default function DashboardHomeScreen() {
 
       if (isReservationStarted) {
         await completeReservation(ongoingReservation.id, currentUser.uid);
+        showToast("Reservation finished successfully. Thank you for keeping the room clean.");
       } else if (canStartOngoingReservation) {
         await checkInReservation(ongoingReservation.id, currentUser.uid);
+        showToast("Reservation started successfully. Please wait for utility staff to come.");
       } else {
         return;
       }
