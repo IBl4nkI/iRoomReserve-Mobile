@@ -54,6 +54,12 @@ export interface ReservationRecord {
         seconds?: number;
       }
     | null;
+  completedAt?:
+    | {
+        nanoseconds?: number;
+        seconds?: number;
+      }
+    | null;
   checkInMethod?: "manual" | "bluetooth" | null;
 }
 

@@ -1,14 +1,114 @@
 import { router } from 'expo-router';
 import React from 'react';
-import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import DashboardTopNav from '@/components/dashboard/DashboardTopNav';
-import { reservationHistory } from '@/components/dashboard/data';
 import { dashboardStyles as styles } from '@/components/dashboard/styles';
+import { colors } from '@/constants/theme';
+import { auth } from '@/lib/firebase';
+import { getReservationsByUser } from '@/services/reservations.service';
+import { formatTime12h } from '@/services/schedules.service';
+import type { ReservationRecord } from '@/types/reservation';
+
+type FirestoreTimestampLike = {
+  seconds?: number;
+  nanoseconds?: number;
+} | null | undefined;
+
+function getTimestampDate(timestamp: FirestoreTimestampLike) {
+  if (typeof timestamp?.seconds !== 'number') {
+    return null;
+  }
+
+  return new Date(timestamp.seconds * 1000);
+}
+
+function formatTimestamp(timestamp: FirestoreTimestampLike) {
+  const date = getTimestampDate(timestamp);
+
+  if (!date) {
+    return 'Not available';
+  }
+
+  return date.toLocaleString('en-US', {
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function formatReservationDate(dateKey: string) {
+  return new Date(`${dateKey}T00:00:00`).toLocaleDateString('en-US', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+}
 
 export default function ReservationHistoryScreen() {
   const insets = useSafeAreaInsets();
+  const [reservations, setReservations] = React.useState<ReservationRecord[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    let active = true;
+
+    const loadReservations = async () => {
+      const currentUser = auth.currentUser;
+
+      if (!currentUser) {
+        if (active) {
+          setReservations([]);
+          setLoading(false);
+        }
+        return;
+      }
+
+      try {
+        const nextReservations = await getReservationsByUser(currentUser.uid);
+
+        if (!active) {
+          return;
+        }
+
+        setReservations(
+          nextReservations.filter((reservation) => reservation.status === 'completed')
+        );
+        setError(null);
+      } catch (caughtError) {
+        if (!active) {
+          return;
+        }
+
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : 'Failed to load reservation history.'
+        );
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
+      }
+    };
+
+    void loadReservations();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <ScrollView
@@ -25,27 +125,43 @@ export default function ReservationHistoryScreen() {
       <View style={styles.screenContent}>
         <Text style={styles.screenTitle}>Reservation History</Text>
         <Text style={styles.screenSubtitle}>
-          Past reservations with room, campus, date, time, and purpose details.
+          This is where you will see all finished reservations.
         </Text>
 
-        {reservationHistory.length === 0 ? (
+        {loading ? (
+          <View style={styles.card}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        ) : error ? (
+          <View style={styles.card}>
+            <Text style={styles.emptyText}>{error}</Text>
+          </View>
+        ) : reservations.length === 0 ? (
           <View style={styles.card}>
             <Text style={styles.emptyText}>There is no reservation history.</Text>
           </View>
         ) : (
-          reservationHistory.map((reservation) => (
+          reservations.map((reservation) => (
             <View key={reservation.id} style={styles.listItem}>
-              <Text style={styles.mutedLabel}>{reservation.date}</Text>
+              <Text style={styles.mutedLabel}>{formatReservationDate(reservation.date)}</Text>
               <View style={styles.row}>
-                <Text style={styles.menuTitle}>{reservation.room}</Text>
+                <Text style={styles.menuTitle}>{reservation.roomName}</Text>
                 <View style={[styles.chip, styles.chipApproved]}>
-                  <Text style={[styles.chipText, styles.chipTextApproved]}>{reservation.status}</Text>
+                  <Text style={[styles.chipText, styles.chipTextApproved]}>Finished</Text>
                 </View>
               </View>
-              <Text style={styles.reservationMeta}>{reservation.building}</Text>
-              <Text style={styles.reservationMeta}>{reservation.campus}</Text>
-              <Text style={styles.reservationMeta}>{reservation.time}</Text>
-              <Text style={styles.reservationPurpose}>{reservation.purpose}</Text>
+              <Text style={styles.reservationMeta}>
+                Reservation Window: {formatTime12h(reservation.startTime)} - {formatTime12h(reservation.endTime)}
+              </Text>
+              <Text style={styles.reservationMeta}>
+                Started: {formatTimestamp(reservation.checkedInAt)}
+              </Text>
+              <Text style={styles.reservationMeta}>
+                Finished: {formatTimestamp(reservation.completedAt)}
+              </Text>
+              <Pressable style={styles.inlineSecondaryButton} onPress={() => {}}>
+                <Text style={styles.inlineSecondaryButtonText}>Leave a Review</Text>
+              </Pressable>
             </View>
           ))
         )}

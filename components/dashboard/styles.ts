@@ -325,6 +325,21 @@ export const dashboardStyles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 14,
   },
+  inlineSecondaryButton: {
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    marginTop: 12,
+  },
+  inlineSecondaryButtonText: {
+    color: colors.primary,
+    fontFamily: fonts.bold,
+    fontSize: 14,
+  },
   metricGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
