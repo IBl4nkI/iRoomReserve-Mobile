@@ -2,6 +2,7 @@ import { router } from "expo-router";
 import React from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   Text,
@@ -16,8 +17,12 @@ import { colors } from "@/constants/theme";
 import { getUserProfile } from "@/lib/auth";
 import { auth } from "@/lib/firebase";
 import { getRoomsByIds } from "@/services/rooms.service";
+import {
+  checkInReservation,
+  completeReservation,
+  getReservationsByUser,
+} from "@/services/reservations.service";
 import { formatTime12h } from "@/services/schedules.service";
-import { getReservationsByUser } from "@/services/reservations.service";
 import type {
   ReservationApprovalStep,
   ReservationRecord,
@@ -68,12 +73,20 @@ function BellIcon() {
 function StatusChip({
   status,
 }: {
-  status: "Active" | "Approved" | "Pending" | "Rejected";
+  status: "Active" | "Approved" | "Occupied" | "Pending" | "Rejected";
 }) {
   if (status === "Approved") {
     return (
       <View style={[styles.chip, styles.chipApproved]}>
         <Text style={[styles.chipText, styles.chipTextApproved]}>Approved</Text>
+      </View>
+    );
+  }
+
+  if (status === "Occupied") {
+    return (
+      <View style={[styles.chip, styles.chipOccupied]}>
+        <Text style={[styles.chipText, styles.chipTextOccupied]}>Occupied</Text>
       </View>
     );
   }
@@ -125,10 +138,57 @@ function getLocalDateKey() {
   return `${year}-${month}-${day}`;
 }
 
-function isCurrentOrFutureReservation(reservation: ReservationRecord) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return new Date(`${reservation.date}T00:00:00`).getTime() >= today.getTime();
+function getCurrentTimeKey() {
+  const date = new Date();
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
+}
+
+function isOngoingReservation(
+  reservation: ReservationRecord,
+  todayDateKey: string,
+  currentTimeKey: string
+) {
+  return (
+    reservation.status === "approved" &&
+    reservation.date === todayDateKey &&
+    reservation.startTime <= currentTimeKey &&
+    reservation.endTime > currentTimeKey
+  );
+}
+
+function canStartReservation(
+  reservation: ReservationRecord | null,
+  todayDateKey: string,
+  currentTimeKey: string
+) {
+  if (!reservation) {
+    return false;
+  }
+
+  // Future implementation: require BLE beacon detection before allowing manual start.
+  const hasDetectedBleBeacon = true;
+
+  return (
+    reservation.status === "approved" &&
+    !reservation.checkedInAt &&
+    reservation.date === todayDateKey &&
+    reservation.startTime <= currentTimeKey &&
+    reservation.endTime > currentTimeKey &&
+    hasDetectedBleBeacon
+  );
+}
+
+function isCurrentOrFutureReservation(
+  reservation: ReservationRecord,
+  todayDateKey: string,
+  currentTimeKey: string
+) {
+  return (
+    reservation.date > todayDateKey ||
+    (reservation.date === todayDateKey && reservation.endTime > currentTimeKey)
+  );
 }
 
 function getCurrentApprovalStep(
@@ -161,6 +221,10 @@ function getPendingStageLabel(reservation: ReservationRecord) {
 }
 
 function getDisplayStatus(reservation: ReservationRecord) {
+  if (reservation.checkedInAt) {
+    return "Occupied" as const;
+  }
+
   if (reservation.status === "pending") {
     return "Pending" as const;
   }
@@ -205,6 +269,10 @@ function ReservationCard({
       <Text style={styles.reservationMeta}>
         {formatTime12h(reservation.startTime)} - {formatTime12h(reservation.endTime)}
       </Text>
+      <Text style={styles.reservationMeta}>
+        {reservation.programDepartmentOrganization ||
+          "Program / Department / Organization not provided"}
+      </Text>
       <Text style={styles.reservationPurpose}>{reservation.purpose}</Text>
       {showPendingStage ? (
         <Text style={[styles.reservationMeta, { color: colors.primary }]}>
@@ -222,91 +290,139 @@ export default function DashboardHomeScreen() {
   const [roomsById, setRoomsById] = React.useState<Record<string, Room>>({});
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const [reservationActionLoading, setReservationActionLoading] = React.useState(false);
+  const isMountedRef = React.useRef(true);
 
-  React.useEffect(() => {
-    let active = true;
+  const loadDashboard = React.useCallback(async (showSpinner = true) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
+      return;
+    }
 
-    const loadDashboard = async () => {
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
-        if (active) {
-          setLoading(false);
-        }
+    if (showSpinner && isMountedRef.current) {
+      setLoading(true);
+    }
+
+    try {
+      const [profile, nextReservations] = await Promise.all([
+        getUserProfile(currentUser.uid),
+        getReservationsByUser(currentUser.uid),
+      ]);
+
+      if (!isMountedRef.current) {
         return;
       }
 
-      try {
-        const [profile, nextReservations] = await Promise.all([
-          getUserProfile(currentUser.uid),
-          getReservationsByUser(currentUser.uid),
-        ]);
-
-        if (!active) {
-          return;
-        }
-
-        if (profile?.firstName?.trim()) {
-          setFirstName(profile.firstName.trim());
-        }
-
-        const roomIds = [...new Set(nextReservations.map((reservation) => reservation.roomId))];
-        const rooms = await getRoomsByIds(roomIds);
-
-        if (!active) {
-          return;
-        }
-
-        setReservations(nextReservations.sort(sortReservations));
-        setRoomsById(
-          Object.fromEntries(rooms.map((room) => [room.id, room] as const))
-        );
-        setError(null);
-      } catch (caughtError) {
-        if (!active) {
-          return;
-        }
-
-        setError(
-          caughtError instanceof Error
-            ? caughtError.message
-            : "Failed to load dashboard data."
-        );
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
+      if (profile?.firstName?.trim()) {
+        setFirstName(profile.firstName.trim());
       }
-    };
 
+      const roomIds = [...new Set(nextReservations.map((reservation) => reservation.roomId))];
+      const rooms = await getRoomsByIds(roomIds);
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      setReservations(nextReservations.sort(sortReservations));
+      setRoomsById(
+        Object.fromEntries(rooms.map((room) => [room.id, room] as const))
+      );
+      setError(null);
+    } catch (caughtError) {
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Failed to load dashboard data."
+      );
+    } finally {
+      if (isMountedRef.current) {
+        setLoading(false);
+      }
+    }
+  }, []);
+
+  React.useEffect(() => {
     void loadDashboard();
 
     return () => {
-      active = false;
+      isMountedRef.current = false;
     };
-  }, []);
+  }, [loadDashboard]);
 
   const pendingReservations = reservations.filter(
     (reservation) =>
-      reservation.status === "pending" && isCurrentOrFutureReservation(reservation)
-  );
-  const approvedReservations = reservations.filter(
-    (reservation) =>
-      reservation.status === "approved" && isCurrentOrFutureReservation(reservation)
+      reservation.status === "pending" &&
+      isCurrentOrFutureReservation(
+        reservation,
+        getLocalDateKey(),
+        getCurrentTimeKey()
+      )
   );
   const todayDateKey = getLocalDateKey();
+  const currentTimeKey = getCurrentTimeKey();
+  const approvedReservations = reservations.filter(
+    (reservation) =>
+      reservation.status === "approved" &&
+      isCurrentOrFutureReservation(reservation, todayDateKey, currentTimeKey)
+  );
   const ongoingReservation =
-    approvedReservations.find((reservation) => reservation.date === todayDateKey) ??
-    approvedReservations[0] ??
-    null;
+    approvedReservations.find((reservation) =>
+      isOngoingReservation(reservation, todayDateKey, currentTimeKey)
+    ) ?? null;
   const upcomingReservations = approvedReservations.filter(
     (reservation) => reservation.id !== ongoingReservation?.id
   );
   const hasUnreadInbox = pendingReservations.length > 0;
+  const isReservationStarted = Boolean(ongoingReservation?.checkedInAt);
+  const canStartOngoingReservation = canStartReservation(
+    ongoingReservation,
+    todayDateKey,
+    currentTimeKey
+  );
+  const canManageOngoingReservation =
+    isReservationStarted || canStartOngoingReservation;
   const getRoomLocationLabel = (reservation: ReservationRecord) => {
     const room = roomsById[reservation.roomId];
     return room?.floor
       ? `${reservation.buildingName} - ${room.floor}`
       : reservation.buildingName;
+  };
+  const handleReservationAction = async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser || !ongoingReservation || reservationActionLoading) {
+      return;
+    }
+
+    try {
+      setReservationActionLoading(true);
+
+      if (isReservationStarted) {
+        await completeReservation(ongoingReservation.id, currentUser.uid);
+      } else if (canStartOngoingReservation) {
+        await checkInReservation(ongoingReservation.id, currentUser.uid);
+      } else {
+        return;
+      }
+
+      await loadDashboard(false);
+    } catch (caughtError) {
+      Alert.alert(
+        "Reservation Update Failed",
+        caughtError instanceof Error
+          ? caughtError.message
+          : "We couldn't update this reservation right now."
+      );
+    } finally {
+      setReservationActionLoading(false);
+    }
   };
 
   return (
@@ -349,6 +465,31 @@ export default function DashboardHomeScreen() {
                   compactTitle
                   locationLabel={getRoomLocationLabel(ongoingReservation)}
                 />
+                {canManageOngoingReservation ? (
+                  <Pressable
+                    style={[
+                      styles.reservationActionButton,
+                      isReservationStarted
+                        ? styles.reservationActionButtonFinish
+                        : styles.reservationActionButtonStart,
+                      reservationActionLoading
+                        ? styles.reservationActionButtonDisabled
+                        : null,
+                    ]}
+                    onPress={handleReservationAction}
+                    disabled={reservationActionLoading}
+                  >
+                    <Text style={styles.reservationActionButtonText}>
+                      {reservationActionLoading
+                        ? isReservationStarted
+                          ? "Finishing..."
+                          : "Starting..."
+                        : isReservationStarted
+                          ? "Finish Reservation"
+                          : "Start Reservation"}
+                    </Text>
+                  </Pressable>
+                ) : null}
               </View>
             ) : (
               <EmptyStateCard

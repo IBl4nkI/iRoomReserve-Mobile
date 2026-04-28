@@ -48,6 +48,13 @@ export interface ReservationRecord {
   status: ReservationStatus;
   adminUid: string | null;
   recurringGroupId?: string;
+  checkedInAt?:
+    | {
+        nanoseconds?: number;
+        seconds?: number;
+      }
+    | null;
+  checkInMethod?: "manual" | "bluetooth" | null;
 }
 
 export interface Building {

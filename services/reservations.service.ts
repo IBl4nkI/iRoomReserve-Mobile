@@ -103,3 +103,30 @@ export async function getReservationsByRoom(
     },
   });
 }
+
+export async function checkInReservation(
+  reservationId: string,
+  userId: string
+): Promise<void> {
+  await apiRequest(`/api/reservations/${reservationId}`, {
+    body: {
+      action: "check-in",
+      method: "manual",
+      userId,
+    },
+    method: "PATCH",
+  });
+}
+
+export async function completeReservation(
+  reservationId: string,
+  userId: string
+): Promise<void> {
+  await apiRequest(`/api/reservations/${reservationId}`, {
+    body: {
+      action: "complete",
+      userId,
+    },
+    method: "PATCH",
+  });
+}

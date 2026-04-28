@@ -250,6 +250,10 @@ export const dashboardStyles = StyleSheet.create({
     backgroundColor: colors.successBackground,
     borderColor: colors.successBorder,
   },
+  chipOccupied: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#93c5fd',
+  },
   chipPending: {
     backgroundColor: '#fff7ed',
     borderColor: '#fdba74',
@@ -268,6 +272,9 @@ export const dashboardStyles = StyleSheet.create({
   },
   chipTextApproved: {
     color: colors.successText,
+  },
+  chipTextOccupied: {
+    color: '#1d4ed8',
   },
   chipTextPending: {
     color: '#c2410c',
@@ -295,7 +302,28 @@ export const dashboardStyles = StyleSheet.create({
     lineHeight: 20,
     fontFamily: fonts.bold,
     color: colors.text,
-    marginTop: 12,
+    marginTop: 8,
+  },
+  reservationActionButton: {
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  reservationActionButtonStart: {
+    backgroundColor: '#b91c1c',
+  },
+  reservationActionButtonFinish: {
+    backgroundColor: '#2563eb',
+  },
+  reservationActionButtonDisabled: {
+    opacity: 0.7,
+  },
+  reservationActionButtonText: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 14,
   },
   metricGrid: {
     flexDirection: 'row',
