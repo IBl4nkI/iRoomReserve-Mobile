@@ -216,6 +216,8 @@ export async function getUserProfile(uid: string) {
   const snap = await getDoc(doc(db, "users", uid));
   if (snap.exists()) {
     return snap.data() as {
+      campus?: "digi" | "main" | null;
+      campusName?: string | null;
       firstName: string;
       lastName: string;
       email: string;
@@ -241,15 +243,14 @@ export async function logout() {
 }
 
 export async function resetPassword(email: string) {
-  if (!isAllowedEmail(email)) {
-    throw { code: "auth/unauthorized-domain" };
-  }
   await sendPasswordResetEmail(auth, email);
 }
 
 export async function saveUserProfile(
   uid: string,
   data: {
+    campus?: "digi" | "main" | null;
+    campusName?: string | null;
     firstName: string;
     lastName: string;
     email: string;
