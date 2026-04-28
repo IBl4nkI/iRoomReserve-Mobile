@@ -19,16 +19,25 @@ import { formatTime12h } from '@/services/schedules.service';
 import type { ReservationRecord } from '@/types/reservation';
 
 type FirestoreTimestampLike = {
+  _nanoseconds?: number;
+  _seconds?: number;
   seconds?: number;
   nanoseconds?: number;
 } | null | undefined;
 
 function getTimestampDate(timestamp: FirestoreTimestampLike) {
-  if (typeof timestamp?.seconds !== 'number') {
+  const seconds =
+    typeof timestamp?.seconds === 'number'
+      ? timestamp.seconds
+      : typeof timestamp?._seconds === 'number'
+        ? timestamp._seconds
+        : null;
+
+  if (seconds === null) {
     return null;
   }
 
-  return new Date(timestamp.seconds * 1000);
+  return new Date(seconds * 1000);
 }
 
 function formatTimestamp(timestamp: FirestoreTimestampLike) {
@@ -150,14 +159,15 @@ export default function ReservationHistoryScreen() {
                   <Text style={[styles.chipText, styles.chipTextApproved]}>Finished</Text>
                 </View>
               </View>
+              <Text style={styles.reservationMeta}>Purpose: {reservation.purpose}</Text>
               <Text style={styles.reservationMeta}>
                 Reservation Window: {formatTime12h(reservation.startTime)} - {formatTime12h(reservation.endTime)}
               </Text>
               <Text style={styles.reservationMeta}>
-                Started: {formatTimestamp(reservation.checkedInAt)}
+                Time Started: {formatTimestamp(reservation.checkedInAt)}
               </Text>
               <Text style={styles.reservationMeta}>
-                Finished: {formatTimestamp(reservation.completedAt)}
+                Time Finished: {formatTimestamp(reservation.completedAt)}
               </Text>
               <Pressable style={styles.inlineSecondaryButton} onPress={() => {}}>
                 <Text style={styles.inlineSecondaryButtonText}>Leave a Review</Text>

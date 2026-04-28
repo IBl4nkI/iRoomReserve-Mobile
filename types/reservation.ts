@@ -14,6 +14,8 @@ export interface ReservationApprovalStep {
 
 export interface ReservationApprovalRecord extends ReservationApprovalStep {
   date?: {
+    _nanoseconds?: number;
+    _seconds?: number;
     nanoseconds?: number;
     seconds?: number;
   } | null;
@@ -50,12 +52,16 @@ export interface ReservationRecord {
   recurringGroupId?: string;
   checkedInAt?:
     | {
+        _nanoseconds?: number;
+        _seconds?: number;
         nanoseconds?: number;
         seconds?: number;
       }
     | null;
   completedAt?:
     | {
+        _nanoseconds?: number;
+        _seconds?: number;
         nanoseconds?: number;
         seconds?: number;
       }
