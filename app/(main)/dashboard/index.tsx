@@ -123,6 +123,14 @@ function sortReservations(left: ReservationRecord, right: ReservationRecord) {
   );
 }
 
+function sortUpcomingReservations(left: ReservationRecord, right: ReservationRecord) {
+  return (
+    left.date.localeCompare(right.date) ||
+    left.startTime.localeCompare(right.startTime) ||
+    left.id.localeCompare(right.id)
+  );
+}
+
 function formatReservationDate(dateKey: string) {
   return new Date(`${dateKey}T00:00:00`).toLocaleDateString("en-US", {
     day: "numeric",
@@ -381,7 +389,7 @@ export default function DashboardHomeScreen() {
     ) ?? null;
   const upcomingReservations = approvedReservations.filter(
     (reservation) => reservation.id !== ongoingReservation?.id
-  );
+  ).sort(sortUpcomingReservations);
   const hasUnreadInbox = pendingReservations.length > 0;
   const isReservationStarted = Boolean(ongoingReservation?.checkedInAt);
   const canStartOngoingReservation = canStartReservation(
