@@ -87,6 +87,7 @@ export type RoomStatusValue =
 
 export interface Room {
   id: string;
+  beaconId?: string | null;
   name: string;
   floor: string;
   roomType: string;

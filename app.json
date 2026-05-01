@@ -15,10 +15,18 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.iroomreserve.mobile"
+      "bundleIdentifier": "com.iroomreserve.mobile",
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "Allow iRoomReserve to scan and connect to room beacons for reservation check-in."
+      }
     },
     "android": {
       "package": "com.iroomreserve.mobile",
+      "permissions": [
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -35,6 +43,16 @@
       "expo-web-browser",
       "expo-router",
       "expo-font",
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": false,
+          "modes": [
+            "central"
+          ],
+          "bluetoothAlwaysPermission": "Allow iRoomReserve to connect to room beacons for reservation check-in."
+        }
+      ],
       [
         "@react-native-google-signin/google-signin",
         {

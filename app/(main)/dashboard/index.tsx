@@ -3,11 +3,14 @@ import React from "react";
 import {
   ActivityIndicator,
   Alert,
+  PermissionsAndroid,
+  Platform,
   Pressable,
   ScrollView,
   Text,
   View,
 } from "react-native";
+import { BleManager, type Device, State } from "react-native-ble-plx";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 
@@ -30,6 +33,12 @@ import type {
   ReservationRecord,
   Room,
 } from "@/types/reservation";
+
+const BLE_SERVICE_UUID = "7becefce-f0e2-4a3e-8db6-53a9ee63f176";
+const BLE_BEACON_CHAR_UUID = "2c993f0e-0b22-47c1-b9c2-8d1fbe4b1973";
+const BLE_SCAN_TIMEOUT_MS = 15000;
+const BASE64_ALPHABET =
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 function EmptyStateCard({
   title,
@@ -177,17 +186,34 @@ function canStartReservation(
     return false;
   }
 
-  // Future implementation: require BLE beacon detection before allowing manual start.
-  const hasDetectedBleBeacon = true;
-
   return (
     reservation.status === "approved" &&
     !reservation.checkedInAt &&
     reservation.date === todayDateKey &&
     reservation.startTime <= currentTimeKey &&
-    reservation.endTime > currentTimeKey &&
-    hasDetectedBleBeacon
+    reservation.endTime > currentTimeKey
   );
+}
+
+function encodeAsciiToBase64(value: string) {
+  let output = "";
+
+  for (let index = 0; index < value.length; index += 3) {
+    const first = value.charCodeAt(index);
+    const second = index + 1 < value.length ? value.charCodeAt(index + 1) : NaN;
+    const third = index + 2 < value.length ? value.charCodeAt(index + 2) : NaN;
+    const chunk =
+      (first << 16) |
+      ((Number.isNaN(second) ? 0 : second) << 8) |
+      (Number.isNaN(third) ? 0 : third);
+
+    output += BASE64_ALPHABET[(chunk >> 18) & 63];
+    output += BASE64_ALPHABET[(chunk >> 12) & 63];
+    output += Number.isNaN(second) ? "=" : BASE64_ALPHABET[(chunk >> 6) & 63];
+    output += Number.isNaN(third) ? "=" : BASE64_ALPHABET[chunk & 63];
+  }
+
+  return output;
 }
 
 function isCurrentOrFutureReservation(
@@ -304,7 +330,13 @@ export default function DashboardHomeScreen() {
   const [error, setError] = React.useState<string | null>(null);
   const [reservationActionLoading, setReservationActionLoading] = React.useState(false);
   const isMountedRef = React.useRef(true);
+  const bleManagerRef = React.useRef<BleManager | null>(null);
+  const connectedBeaconDeviceRef = React.useRef<Device | null>(null);
   const isUtilityStaff = userRole?.trim() === "Utility Staff";
+
+  if (!bleManagerRef.current) {
+    bleManagerRef.current = new BleManager();
+  }
 
   const loadDashboard = React.useCallback(async (showSpinner = true) => {
     const currentUser = auth.currentUser;
@@ -374,6 +406,9 @@ export default function DashboardHomeScreen() {
 
     return () => {
       isMountedRef.current = false;
+      bleManagerRef.current?.stopDeviceScan();
+      bleManagerRef.current?.destroy();
+      bleManagerRef.current = null;
     };
   }, [loadDashboard]);
 
@@ -403,6 +438,8 @@ export default function DashboardHomeScreen() {
         isOngoingReservation(reservation, todayDateKey, currentTimeKey)
       ).slice(0, 1);
   const ongoingReservation = ongoingReservations[0] ?? null;
+  const ongoingRoom = ongoingReservation ? roomsById[ongoingReservation.roomId] ?? null : null;
+  const ongoingRoomBeaconId = ongoingRoom?.beaconId?.trim() ?? "";
   const upcomingReservations = approvedReservations
     .filter(
       (reservation) =>
@@ -431,15 +468,185 @@ export default function DashboardHomeScreen() {
       return;
     }
 
+    async function requestBluetoothPermissions() {
+      if (Platform.OS !== "android") {
+        return true;
+      }
+
+      if (Platform.Version >= 31) {
+        const result = await PermissionsAndroid.requestMultiple([
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+          PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+        ]);
+
+        return (
+          result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] ===
+            PermissionsAndroid.RESULTS.GRANTED &&
+          result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] ===
+            PermissionsAndroid.RESULTS.GRANTED
+        );
+      }
+
+      const result = await PermissionsAndroid.request(
+        PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+      );
+
+      return result === PermissionsAndroid.RESULTS.GRANTED;
+    }
+
+    async function ensureBluetoothPoweredOn() {
+      const bleManager = bleManagerRef.current;
+      if (!bleManager) {
+        throw new Error("Bluetooth manager is unavailable.");
+      }
+
+      const currentState = await bleManager.state();
+      if (currentState === State.PoweredOn) {
+        return;
+      }
+
+      throw new Error("Please turn on Bluetooth before starting this reservation.");
+    }
+
+    async function connectToMatchingBeacon(expectedBeaconId: string) {
+      const bleManager = bleManagerRef.current;
+      if (!bleManager) {
+        throw new Error("Bluetooth manager is unavailable.");
+      }
+
+      const expectedBase64 = encodeAsciiToBase64(expectedBeaconId);
+      const attemptedDeviceIds = new Set<string>();
+
+      return await new Promise<Device>((resolve, reject) => {
+        let settled = false;
+
+        const finish = (callback: () => void) => {
+          if (settled) {
+            return;
+          }
+
+          settled = true;
+          bleManager.stopDeviceScan();
+          callback();
+        };
+
+        const timeout = setTimeout(() => {
+          finish(() =>
+            reject(
+              new Error(
+                `Couldn't find the room beacon for ${expectedBeaconId}. Move closer and try again.`
+              )
+            )
+          );
+        }, BLE_SCAN_TIMEOUT_MS);
+
+        bleManager.startDeviceScan([BLE_SERVICE_UUID], null, async (error, device) => {
+          if (settled) {
+            return;
+          }
+
+          if (error) {
+            clearTimeout(timeout);
+            finish(() => reject(new Error(error.message)));
+            return;
+          }
+
+          if (!device?.id || attemptedDeviceIds.has(device.id)) {
+            return;
+          }
+
+          attemptedDeviceIds.add(device.id);
+
+          try {
+            const connectedDevice = await bleManager.connectToDevice(device.id, {
+              timeout: 10000,
+            });
+            const discoveredDevice =
+              await connectedDevice.discoverAllServicesAndCharacteristics();
+            const beaconCharacteristic =
+              await discoveredDevice.readCharacteristicForService(
+                BLE_SERVICE_UUID,
+                BLE_BEACON_CHAR_UUID
+              );
+
+            if (beaconCharacteristic.value === expectedBase64) {
+              clearTimeout(timeout);
+              finish(() => resolve(discoveredDevice));
+              return;
+            }
+
+            await discoveredDevice.cancelConnection().catch(() => undefined);
+          } catch {
+            // Continue scanning until timeout or a matching beacon is found.
+          }
+        });
+      });
+    }
+
     try {
       setReservationActionLoading(true);
 
       if (isReservationStarted) {
         await completeReservation(ongoingReservation.id, currentUser.uid);
+        if (connectedBeaconDeviceRef.current) {
+          await connectedBeaconDeviceRef.current.cancelConnection().catch(() => undefined);
+          connectedBeaconDeviceRef.current = null;
+        }
         showToast("Reservation finished successfully. Thank you for keeping the room clean.");
       } else if (canStartOngoingReservation) {
-        await checkInReservation(ongoingReservation.id, currentUser.uid);
-        showToast("Reservation started successfully. Please wait for utility staff to come.");
+        if (ongoingRoomBeaconId) {
+          Alert.alert(
+            "Bluetooth Check-In Required",
+            `Connect to the room beacon "${ongoingRoomBeaconId}" to start this reservation.`,
+            [
+              {
+                style: "cancel",
+                text: "Cancel",
+              },
+              {
+                text: "Connect",
+                onPress: async () => {
+                  try {
+                    setReservationActionLoading(true);
+
+                    const permissionGranted = await requestBluetoothPermissions();
+                    if (!permissionGranted) {
+                      throw new Error("Bluetooth permission is required for beacon check-in.");
+                    }
+
+                    await ensureBluetoothPoweredOn();
+                    showToast("Scanning for room beacon...");
+
+                    const matchedDevice = await connectToMatchingBeacon(ongoingRoomBeaconId);
+                    connectedBeaconDeviceRef.current = matchedDevice;
+
+                    await checkInReservation(
+                      ongoingReservation.id,
+                      currentUser.uid,
+                      "bluetooth"
+                    );
+
+                    showToast("Reservation started with Bluetooth check-in.");
+                    await loadDashboard(false);
+                  } catch (caughtError) {
+                    Alert.alert(
+                      "Bluetooth Check-In Failed",
+                      caughtError instanceof Error
+                        ? caughtError.message
+                        : "We couldn't connect to the room beacon right now."
+                    );
+                  } finally {
+                    setReservationActionLoading(false);
+                  }
+                },
+              },
+            ]
+          );
+          return;
+        }
+
+        await checkInReservation(ongoingReservation.id, currentUser.uid, "manual");
+        showToast("Reservation started successfully. Please wait for the utility staff to come.");
       } else {
         return;
       }

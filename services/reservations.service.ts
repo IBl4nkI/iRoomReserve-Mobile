@@ -118,12 +118,13 @@ export async function getReservationsByRoom(
 
 export async function checkInReservation(
   reservationId: string,
-  userId: string
+  userId: string,
+  method: "bluetooth" | "manual" = "manual"
 ): Promise<void> {
   await apiRequest(`/api/reservations/${reservationId}`, {
     body: {
       action: "check-in",
-      method: "manual",
+      method,
       userId,
     },
     method: "PATCH",
