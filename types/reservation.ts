@@ -82,7 +82,7 @@ export interface Building {
 export type RoomStatusValue =
   | "Available"
   | "Reserved"
-  | "Ongoing"
+  | "Occupied"
   | "Unavailable";
 
 export interface Room {

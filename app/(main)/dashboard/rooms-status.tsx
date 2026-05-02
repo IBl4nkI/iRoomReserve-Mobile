@@ -22,7 +22,7 @@ import type { ReservationCampus } from "@/types/reservation";
 function StatusChip({
   status,
 }: {
-  status: "Available" | "Reserved" | "Ongoing" | "Unavailable";
+  status: "Available" | "Reserved" | "Occupied" | "Unavailable";
 }) {
   if (status === "Available") {
     return (
@@ -32,10 +32,10 @@ function StatusChip({
     );
   }
 
-  if (status === "Ongoing") {
+  if (status === "Occupied") {
     return (
       <View style={[styles.chip, styles.chipOccupied]}>
-        <Text style={[styles.chipText, styles.chipTextOccupied]}>Ongoing</Text>
+        <Text style={[styles.chipText, styles.chipTextOccupied]}>Occupied</Text>
       </View>
     );
   }
