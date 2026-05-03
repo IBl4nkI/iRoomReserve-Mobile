@@ -34,11 +34,21 @@ import type {
   Room,
 } from "@/types/reservation";
 
-const BLE_SERVICE_UUID = "7becefce-f0e2-4a3e-8db6-53a9ee63f176";
-const BLE_BEACON_CHAR_UUID = "2c993f0e-0b22-47c1-b9c2-8d1fbe4b1973";
+const BLE_SERVICE_UUID =
+  process.env.EXPO_PUBLIC_ESP32_BLE_SERVICE_UUID?.trim() ?? "";
+const BLE_BEACON_CHAR_UUID =
+  process.env.EXPO_PUBLIC_ESP32_BLE_BEACON_CHARACTERISTIC_UUID?.trim() ?? "";
 const BLE_SCAN_TIMEOUT_MS = 15000;
 const BASE64_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+function ensureBleConfiguration() {
+  if (!BLE_SERVICE_UUID || !BLE_BEACON_CHAR_UUID) {
+    throw new Error(
+      "Bluetooth check-in is not configured. Set EXPO_PUBLIC_ESP32_BLE_SERVICE_UUID and EXPO_PUBLIC_ESP32_BLE_BEACON_CHARACTERISTIC_UUID."
+    );
+  }
+}
 
 function EmptyStateCard({
   title,
@@ -509,6 +519,8 @@ export default function DashboardHomeScreen() {
     }
 
     async function connectToMatchingBeacon(expectedBeaconId: string) {
+      ensureBleConfiguration();
+
       const bleManager = bleManagerRef.current;
       if (!bleManager) {
         throw new Error("Bluetooth manager is unavailable.");
