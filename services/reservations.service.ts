@@ -26,7 +26,8 @@ interface ReservationCreateBaseInput extends ReservationAttachmentPayload {
 
 export type SingleReservationCreateInput =
   | (ReservationCreateBaseInput & {
-      advisorEmail: string;
+      advisorEmail?: string;
+      buildingAdminEmail?: string;
       campus: "main";
       date: string;
     })
@@ -38,7 +39,8 @@ export type SingleReservationCreateInput =
 
 export type RecurringReservationCreateInput =
   | (ReservationCreateBaseInput & {
-      advisorEmail: string;
+      advisorEmail?: string;
+      buildingAdminEmail?: string;
       campus: "main";
     })
   | (ReservationCreateBaseInput & {

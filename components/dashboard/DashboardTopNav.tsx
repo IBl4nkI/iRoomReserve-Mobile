@@ -63,6 +63,12 @@ function normalizeRoutePath(path: string) {
   return normalized.length > 1 ? normalized.replace(/\/$/, '') : normalized;
 }
 
+function formatDashboardRole(role: string | null | undefined) {
+  const normalizedRole = role?.trim() || 'User';
+
+  return normalizedRole === 'Faculty Professor' ? 'Faculty' : normalizedRole;
+}
+
 export default function DashboardTopNav() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
@@ -93,7 +99,7 @@ export default function DashboardTopNav() {
 
       setUserInitials(initials);
       const normalizedRole = profile.role?.trim() || 'User';
-      setUserRole(normalizedRole);
+      setUserRole(formatDashboardRole(normalizedRole));
       setIsUtilityStaff(normalizedRole === 'Utility Staff');
     };
 

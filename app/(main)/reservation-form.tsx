@@ -990,6 +990,10 @@ export default function ReservationFormScreen() {
       const firstName = profile?.firstName?.trim() ?? "";
       const lastName = profile?.lastName?.trim() ?? "";
       const resolvedUserRole = profile?.role?.trim() || userRole || "Student";
+      const normalizedResolvedRole = resolvedUserRole.trim().toLowerCase();
+      const isFacultyUser =
+        normalizedResolvedRole === "faculty professor" ||
+        normalizedResolvedRole === "faculty";
       const userName = `${firstName} ${lastName}`.trim() || currentUser.displayName?.trim() || "iRoomReserve User";
       const equipment = Object.fromEntries(
         Object.entries(materials).filter(([, quantity]) => quantity > 0)
@@ -1032,7 +1036,7 @@ export default function ReservationFormScreen() {
           await createRecurringReservation(
             {
               ...recurringReservationBase,
-              advisorEmail: adviserEmailValue,
+              ...(isFacultyUser ? {} : { advisorEmail: adviserEmailValue }),
               campus: "main",
             },
             selectedDays,
@@ -1077,7 +1081,7 @@ export default function ReservationFormScreen() {
             if (selectedCampus === "main") {
               return createReservation({
                 ...singleReservationBase,
-                advisorEmail: adviserEmailValue,
+                ...(isFacultyUser ? {} : { advisorEmail: adviserEmailValue }),
                 campus: "main",
               });
             }
