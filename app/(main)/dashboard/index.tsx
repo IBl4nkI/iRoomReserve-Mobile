@@ -38,6 +38,9 @@ const BLE_SERVICE_UUID =
   process.env.EXPO_PUBLIC_ESP32_BLE_SERVICE_UUID?.trim() ?? "";
 const BLE_BEACON_CHAR_UUID =
   process.env.EXPO_PUBLIC_ESP32_BLE_BEACON_CHARACTERISTIC_UUID?.trim() ?? "";
+const BLE_RSSI_THRESHOLD = Number(
+  process.env.EXPO_PUBLIC_ESP32_BLE_RSSI_THRESHOLD?.trim() ?? "-70"
+);
 const BLE_SCAN_TIMEOUT_MS = 15000;
 const BASE64_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -48,6 +51,14 @@ function ensureBleConfiguration() {
       "Bluetooth check-in is not configured. Set EXPO_PUBLIC_ESP32_BLE_SERVICE_UUID and EXPO_PUBLIC_ESP32_BLE_BEACON_CHARACTERISTIC_UUID."
     );
   }
+}
+
+function isWithinBeaconRange(rssi: number | null | undefined) {
+  if (typeof rssi !== "number") {
+    return false;
+  }
+
+  return rssi >= BLE_RSSI_THRESHOLD;
 }
 
 function EmptyStateCard({
@@ -258,9 +269,7 @@ function getPendingStageLabel(reservation: ReservationRecord) {
   }
 
   if (currentStep?.role === "building_admin") {
-    return reservation.campus === "main"
-      ? "Faculty approved, waiting for building admin approval"
-      : "Waiting for building admin approval";
+    return "Waiting for building admin approval";
   }
 
   return "Waiting for approval";
@@ -528,6 +537,7 @@ export default function DashboardHomeScreen() {
 
       const expectedBase64 = encodeAsciiToBase64(expectedBeaconId);
       const attemptedDeviceIds = new Set<string>();
+      let beaconDetectedButTooFar = false;
 
       return await new Promise<Device>((resolve, reject) => {
         let settled = false;
@@ -546,7 +556,9 @@ export default function DashboardHomeScreen() {
           finish(() =>
             reject(
               new Error(
-                `Couldn't find the room beacon for ${expectedBeaconId}. Move closer and try again.`
+                beaconDetectedButTooFar
+                  ? `The room beacon for ${expectedBeaconId} was detected, but you are too far away. Move closer to the room and try again.`
+                  : `Couldn't find the room beacon for ${expectedBeaconId}. Move closer and try again.`
               )
             )
           );
@@ -564,6 +576,11 @@ export default function DashboardHomeScreen() {
           }
 
           if (!device?.id || attemptedDeviceIds.has(device.id)) {
+            return;
+          }
+
+          if (!isWithinBeaconRange(device.rssi)) {
+            beaconDetectedButTooFar = true;
             return;
           }
 
