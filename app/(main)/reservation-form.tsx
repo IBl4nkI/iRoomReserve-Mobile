@@ -1512,33 +1512,33 @@ export default function ReservationFormScreen() {
               Required. Attach a PDF, JPG, or PNG file up to 10 MB.
             </Text>
 
-          {attachment ? (
-            <View style={styles.attachmentCard}>
-              <View style={styles.attachmentInfo}>
-                <Text numberOfLines={1} style={styles.attachmentName}>
-                  {attachment.name}
-                </Text>
-                <Text style={styles.attachmentMeta}>
-                  {attachment.mimeType} • {formatFileSize(attachment.size)}
-                </Text>
+            {attachment ? (
+              <View style={styles.attachmentCard}>
+                <View style={styles.attachmentInfo}>
+                  <Text numberOfLines={1} style={styles.attachmentName}>
+                    {attachment.name}
+                  </Text>
+                  <Text style={styles.attachmentMeta}>
+                    {attachment.mimeType} • {formatFileSize(attachment.size)}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={handleRemoveAttachment}
+                  style={styles.attachmentRemoveButton}
+                >
+                  <Text style={styles.attachmentRemoveButtonText}>Remove</Text>
+                </TouchableOpacity>
               </View>
+            ) : (
               <TouchableOpacity
                 activeOpacity={0.9}
-                onPress={handleRemoveAttachment}
-                style={styles.attachmentRemoveButton}
+                onPress={handlePickAttachment}
+                style={styles.attachmentPickerButton}
               >
-                <Text style={styles.attachmentRemoveButtonText}>Remove</Text>
+                <Text style={styles.attachmentPickerButtonText}>Choose File</Text>
               </TouchableOpacity>
-            </View>
-          ) : (
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={handlePickAttachment}
-              style={styles.attachmentPickerButton}
-            >
-              <Text style={styles.attachmentPickerButtonText}>Choose File</Text>
-            </TouchableOpacity>
-          )}
+            )}
 
             {attachmentError ? (
               <Text style={[styles.emailFeedbackText, styles.emailFeedbackError]}>
