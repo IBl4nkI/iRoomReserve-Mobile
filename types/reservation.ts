@@ -50,6 +50,10 @@ export interface ReservationRecord {
   status: ReservationStatus;
   adminUid: string | null;
   recurringGroupId?: string;
+  dates?: string[];
+  groupedReservationIds?: string[];
+  isRecurringRequest?: boolean;
+  occurrenceCount?: number;
   checkedInAt?:
     | {
         _nanoseconds?: number;

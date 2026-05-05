@@ -170,6 +170,11 @@ function formatReservationDate(dateKey: string) {
   });
 }
 
+function formatReservationDates(dates?: string[], fallbackDate?: string) {
+  const dateList = dates?.length ? dates : fallbackDate ? [fallbackDate] : [];
+  return dateList.map((date) => formatReservationDate(date)).join(", ");
+}
+
 function getLocalDateKey() {
   const date = new Date();
   const year = date.getFullYear();
@@ -320,7 +325,9 @@ function ReservationCard({
         <StatusChip status={getDisplayStatus(reservation)} />
       </View>
       <Text style={styles.reservationMeta}>{locationLabel ?? reservation.buildingName}</Text>
-      <Text style={styles.reservationMeta}>{formatReservationDate(reservation.date)}</Text>
+      <Text style={styles.reservationMeta}>
+        {formatReservationDates(reservation.dates, reservation.date)}
+      </Text>
       <Text style={styles.reservationMeta}>
         {formatTime12h(reservation.startTime)} - {formatTime12h(reservation.endTime)}
       </Text>
@@ -808,7 +815,9 @@ export default function DashboardHomeScreen() {
                             <StatusChip status="Pending" />
                           </View>
                           <Text style={styles.reservationMeta}>{locationLabel}</Text>
-                          <Text style={styles.reservationMeta}>{formatReservationDate(reservation.date)}</Text>
+                          <Text style={styles.reservationMeta}>
+                            {formatReservationDates(reservation.dates, reservation.date)}
+                          </Text>
                           <Text style={styles.reservationMeta}>
                             {formatTime12h(reservation.startTime)} - {formatTime12h(reservation.endTime)}
                           </Text>
