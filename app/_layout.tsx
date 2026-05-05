@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
 import { getUserProfile } from '@/lib/auth';
 import { auth } from '@/lib/firebase';
+import { PresenceMonitorProvider } from '@/components/PresenceMonitorProvider';
 import { ToastProvider } from '@/components/ToastProvider';
 import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect, useState } from 'react';
@@ -66,12 +67,14 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <ToastProvider>
-        <View style={{ flex: 1, backgroundColor: colors.background }}>
-          <StatusBar style="dark" backgroundColor={colors.background} />
-          <Slot />
-        </View>
-      </ToastProvider>
+      <PresenceMonitorProvider>
+        <ToastProvider>
+          <View style={{ flex: 1, backgroundColor: colors.background }}>
+            <StatusBar style="dark" backgroundColor={colors.background} />
+            <Slot />
+          </View>
+        </ToastProvider>
+      </PresenceMonitorProvider>
     </SafeAreaProvider>
   );
 }
