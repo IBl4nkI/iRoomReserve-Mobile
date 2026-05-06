@@ -10,14 +10,17 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { useSelectionFilters } from "@/components/SelectionFilterContext";
 import SelectionRoomSearch from "@/components/selection-room-search";
 import { colors, fonts } from "@/constants/theme";
+import { formatExpandedFloorLabel } from "@/services/floors.service";
 
 interface SelectionScreenLayoutProps {
   children: React.ReactNode;
   enableRoomSearch?: boolean;
   footer?: React.ReactNode;
   onBackPress?: () => void;
+  roomSearchForceResultsVisible?: boolean;
   subtitle?: string;
   title: string;
 }
@@ -27,17 +30,26 @@ export default function SelectionScreenLayout({
   enableRoomSearch = false,
   footer,
   onBackPress,
+  roomSearchForceResultsVisible = false,
   subtitle,
   title,
 }: SelectionScreenLayoutProps) {
   const insets = useSafeAreaInsets();
+  const { getActiveFilterByLevel } = useSelectionFilters();
   const [searchInteractionActive, setSearchInteractionActive] = useState(false);
   const [searchHeaderVisible, setSearchHeaderVisible] = useState(false);
+  const activeCampus = getActiveFilterByLevel("campus");
+  const activeBuilding = getActiveFilterByLevel("building");
+  const activeFloor = getActiveFilterByLevel("floor");
+  const searchResultsTitle =
+    activeFloor
+      ? `${activeBuilding?.label ?? (activeCampus?.id === "digi" ? "DC" : activeCampus?.label ?? "")} - ${formatExpandedFloorLabel(activeFloor.label)}`
+      : "Available Rooms";
   const cardContent = (
     <View style={styles.card}>
       <>
         <Text style={styles.appName}>iRoomReserve</Text>
-        <Text style={styles.title}>{searchHeaderVisible ? "Available Rooms" : title}</Text>
+        <Text style={styles.title}>{searchHeaderVisible ? searchResultsTitle : title}</Text>
         {!searchHeaderVisible && subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
       </>
 
@@ -69,9 +81,11 @@ export default function SelectionScreenLayout({
         ) : null}
         {enableRoomSearch ? (
           <SelectionRoomSearch
+            forceResultsVisible={roomSearchForceResultsVisible}
             onHeaderVisibilityChange={setSearchHeaderVisible}
             onInteractionChange={setSearchInteractionActive}
             resultsFooter={footer}
+            resultsTitle={searchResultsTitle}
           >
             {cardContent}
           </SelectionRoomSearch>

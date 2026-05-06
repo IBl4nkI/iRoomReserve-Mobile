@@ -14,6 +14,11 @@ export const colors = {
   successBorder: '#86efac',
   successText: '#166534',
   white: '#ffffff',
+  filterChipActive: '#a12124',
+  filterChipActiveBorder: '#8a1b1d',
+  filterChipInactive: '#f2ecec',
+  filterChipInactiveBorder: '#d9d2d2',
+  filterChipInactiveText: '#7b7474',
 } as const;
 
 export const fonts = {

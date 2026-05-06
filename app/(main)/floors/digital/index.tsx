@@ -8,14 +8,19 @@ import {
 import { useRouter } from "expo-router";
 
 import SelectionScreenLayout from "@/components/SelectionScreenLayout";
+import { useSelectionFilters } from "@/components/SelectionFilterContext";
 import { colors, fonts } from "@/constants/theme";
 import { getBuildingsByCampus } from "@/services/buildings.service";
-import { buildCampusFloorOptions } from "@/services/floors.service";
+import {
+  buildCampusFloorOptions,
+  formatCompactFloorLabel,
+} from "@/services/floors.service";
 import { getRoomsByBuilding } from "@/services/rooms.service";
 import type { FloorOption } from "@/types/reservation";
 
 export default function DigitalFloorsScreen() {
   const router = useRouter();
+  const { clearFiltersFrom, pushFilter, setLevelOptions } = useSelectionFilters();
   const [floors, setFloors] = useState<FloorOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +46,15 @@ export default function DigitalFloorsScreen() {
           return;
         }
 
-        setFloors(buildCampusFloorOptions(buildings, roomGroups.flat()));
+        const floorOptions = buildCampusFloorOptions(buildings, roomGroups.flat());
+        setFloors(floorOptions);
+        setLevelOptions(
+          "floor",
+          floorOptions.map((floor) => ({
+            id: floor.id,
+            label: formatCompactFloorLabel(floor.label),
+          }))
+        );
         setError(null);
       })
       .catch((caughtError) => {
@@ -64,11 +77,25 @@ export default function DigitalFloorsScreen() {
     };
   }, []);
 
+  function handleBack() {
+    clearFiltersFrom("campus");
+    router.back();
+  }
+
+  function handleSelectFloor(floor: FloorOption) {
+    pushFilter({
+      level: "floor",
+      id: floor.id,
+      label: formatCompactFloorLabel(floor.label),
+    });
+    router.push(`/(main)/floors/digital/${floor.id}`);
+  }
+
   return (
     <SelectionScreenLayout
       title="Digital Campus"
       subtitle="Select Floor"
-      onBackPress={() => router.back()}
+      onBackPress={handleBack}
       enableRoomSearch
       footer={footer}
     >
@@ -81,7 +108,7 @@ export default function DigitalFloorsScreen() {
           <TouchableOpacity
             key={floor.id}
             style={styles.optionButton}
-            onPress={() => router.push(`/(main)/floors/digital/${floor.id}`)}
+            onPress={() => handleSelectFloor(floor)}
           >
             <Text style={styles.optionLabel}>{floor.label}</Text>
           </TouchableOpacity>

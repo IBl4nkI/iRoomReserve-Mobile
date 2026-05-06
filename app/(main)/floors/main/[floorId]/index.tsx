@@ -4,11 +4,11 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import SelectionScreenLayout from "@/components/SelectionScreenLayout";
+import { useSelectionFilters } from "@/components/SelectionFilterContext";
 import { colors, fonts } from "@/constants/theme";
 import { getBuildingById } from "@/services/buildings.service";
 import {
@@ -21,6 +21,7 @@ import type { Building, Room } from "@/types/reservation";
 
 export default function MainFloorRoomsScreen() {
   const router = useRouter();
+  const { clearFiltersFrom } = useSelectionFilters();
   const { floorId, buildingId } = useLocalSearchParams<{
     floorId: string;
     buildingId?: string;
@@ -95,12 +96,18 @@ export default function MainFloorRoomsScreen() {
     };
   }, [resolvedBuildingId, resolvedFloorId]);
 
+  function handleBack() {
+    clearFiltersFrom("floor");
+    router.back();
+  }
+
   return (
     <SelectionScreenLayout
       title={floorLabel ?? building?.name ?? "Selected Floor"}
       subtitle="Select Room"
-      onBackPress={() => router.back()}
+      onBackPress={handleBack}
       enableRoomSearch
+      roomSearchForceResultsVisible={!loading && !error}
       footer={footer}
     >
       {loading ? (
@@ -108,26 +115,7 @@ export default function MainFloorRoomsScreen() {
       ) : error ? (
         <Text style={styles.statusText}>{error}</Text>
       ) : (
-        <View style={styles.roomGrid}>
-          {rooms.map((room) => (
-            <TouchableOpacity
-              key={room.id}
-              style={styles.roomButton}
-              onPress={() =>
-                router.push({
-                  pathname: "/(main)/rooms/[roomId]",
-                  params: {
-                    roomId: room.id,
-                    buildingId: resolvedBuildingId,
-                    floorId: resolvedFloorId,
-                  },
-                })
-              }
-            >
-              <Text style={styles.roomLabel}>{room.name}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
+        <Text style={styles.statusText}>Loading matching rooms...</Text>
       )}
 
     </SelectionScreenLayout>
@@ -135,12 +123,6 @@ export default function MainFloorRoomsScreen() {
 }
 
 const styles = StyleSheet.create({
-  roomGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    rowGap: 12,
-  },
   statusSpacing: { marginVertical: 24 },
   statusText: {
     width: "100%",
@@ -148,21 +130,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     textAlign: "center",
     marginBottom: 12,
-  },
-  roomButton: {
-    width: "47%",
-    minHeight: 72,
-    backgroundColor: colors.primary,
-    borderRadius: 12,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 10,
-  },
-  roomLabel: {
-    fontSize: 18,
-    fontFamily: fonts.bold,
-    color: colors.white,
-    textAlign: "center",
   },
   linkButton: {},
   linkText: {

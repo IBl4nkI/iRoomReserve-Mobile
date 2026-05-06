@@ -7,12 +7,14 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import SelectionScreenLayout from "@/components/SelectionScreenLayout";
+import { useSelectionFilters } from "@/components/SelectionFilterContext";
 import { colors, fonts } from "@/constants/theme";
 import { getBuildingsByCampus } from "@/services/buildings.service";
 import type { Building } from "@/types/reservation";
 
 export default function BuildingsScreen() {
   const router = useRouter();
+  const { clearFiltersFrom, pushFilter, setLevelOptions } = useSelectionFilters();
   const [buildings, setBuildings] = useState<Building[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +31,13 @@ export default function BuildingsScreen() {
       .then((result) => {
         if (active) {
           setBuildings(result);
+          setLevelOptions(
+            "building",
+            result.map((building) => ({
+              id: building.id,
+              label: building.code || building.name,
+            }))
+          );
           setError(null);
         }
       })
@@ -52,11 +61,25 @@ export default function BuildingsScreen() {
     };
   }, []);
 
+  function handleBack() {
+    clearFiltersFrom("campus");
+    router.back();
+  }
+
+  function handleSelectBuilding(building: Building) {
+    pushFilter({
+      level: "building",
+      id: building.id,
+      label: building.code || building.name,
+    });
+    router.push(`/(main)/buildings/${building.id}`);
+  }
+
   return (
     <SelectionScreenLayout
       title="Main Campus"
       subtitle="Select Building"
-      onBackPress={() => router.back()}
+      onBackPress={handleBack}
       enableRoomSearch
       footer={footer}
     >
@@ -69,9 +92,9 @@ export default function BuildingsScreen() {
           <TouchableOpacity
             key={building.id}
             style={styles.optionButton}
-            onPress={() => router.push(`/(main)/buildings/${building.id}`)}
+            onPress={() => handleSelectBuilding(building)}
           >
-            <Text style={styles.optionLabel}>{building.name}</Text>
+            <Text style={styles.optionLabel}>{building.code || building.name}</Text>
           </TouchableOpacity>
         ))
       )}

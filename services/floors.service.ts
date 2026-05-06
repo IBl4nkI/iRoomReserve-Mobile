@@ -31,6 +31,45 @@ export function normalizeFloorLabel(label?: string | null) {
   return trimmed;
 }
 
+export function formatCompactFloorLabel(label?: string | null) {
+  const normalized = normalizeFloorLabel(label);
+
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized === "Basement") {
+    return "B";
+  }
+
+  const match = normalized.match(/(\d+)/);
+  return match ? match[1] : normalized;
+}
+
+export function formatExpandedFloorLabel(label?: string | null) {
+  const normalized = normalizeFloorLabel(label);
+
+  if (!normalized) {
+    return "";
+  }
+
+  if (normalized === "Basement" || normalized.includes("Floor")) {
+    return normalized;
+  }
+
+  if (normalized === "B") {
+    return "Basement";
+  }
+
+  const level = Number(normalized);
+
+  if (!Number.isNaN(level)) {
+    return formatOrdinalFloor(level);
+  }
+
+  return normalized;
+}
+
 export function getBuildingFloorOptions(buildingId?: string, buildingFloors?: number) {
   switch ((buildingId ?? "").toLowerCase()) {
     case "gd1":

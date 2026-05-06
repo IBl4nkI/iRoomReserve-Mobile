@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Alert, View } from "react-native";
 import { useRouter } from "expo-router";
 
+import { useSelectionFilters } from "@/components/SelectionFilterContext";
+import FilterBar from "@/components/FilterBar";
 import {
   buildRoomSearchText,
   getDayShortLabel,
@@ -45,6 +47,7 @@ import {
   formatDisplayDateShort,
 } from "./helpers";
 import { getBuildings } from "@/services/buildings.service";
+import { createFloorId, normalizeFloorLabel } from "@/services/floors.service";
 import { getRoomsByBuilding } from "@/services/rooms.service";
 import { auth } from "@/services/firebase";
 import { getReservationsByUser } from "@/services/reservations.service";
@@ -60,20 +63,25 @@ import RoomTimePickerModal from "./RoomTimePickerModal";
 
 interface SelectionRoomSearchProps {
   children: React.ReactNode;
+  forceResultsVisible?: boolean;
   onHeaderVisibilityChange?: (visible: boolean) => void;
   onInteractionChange?: (active: boolean) => void;
   resultsFooter?: React.ReactNode;
+  resultsTitle?: string;
 }
 
 const DEFAULT_ROOM_TYPE_OPTIONS = ["Classroom", "Glass Room", "Conference Room", "Specialized Room", "Gymnasium"];
 
 export default function SelectionRoomSearch({
   children,
+  forceResultsVisible = false,
   onHeaderVisibilityChange,
   onInteractionChange,
   resultsFooter,
+  resultsTitle,
 }: SelectionRoomSearchProps) {
   const router = useRouter();
+  const { getActiveFilterByLevel } = useSelectionFilters();
   const [query, setQuery] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
@@ -118,6 +126,9 @@ export default function SelectionRoomSearch({
       ].sort((a, b) => a.localeCompare(b)),
     [rooms]
   );
+  const activeCampusSelection = getActiveFilterByLevel("campus")?.id ?? null;
+  const activeBuildingSelection = getActiveFilterByLevel("building")?.id ?? null;
+  const activeFloorSelection = getActiveFilterByLevel("floor")?.id ?? null;
   const hasActiveFilters =
     selectedCampusDraft !== null ||
     selectedRoomTypesDraft.length > 0 ||
@@ -128,7 +139,8 @@ export default function SelectionRoomSearch({
     recurringEndDateDraft.length > 0 ||
     startTimeDraft !== getDefaultStartTime() ||
     endTimeDraft !== getDefaultEndTime(null);
-  const resultsVisible = filtersOpen || normalizedQuery.length > 0 || hasActiveFilters;
+  const resultsVisible =
+    forceResultsVisible || filtersOpen || normalizedQuery.length > 0 || hasActiveFilters;
   const resultsHeadingVisible = resultsVisible;
   const startTimeOptions = useMemo(
     () =>
@@ -285,8 +297,21 @@ export default function SelectionRoomSearch({
   const filteredRooms = useMemo(() => {
     return rooms.filter((room) => {
       const roomType = room.roomType.trim();
+      const roomFloorId = createFloorId(normalizeFloorLabel(room.floor) ?? room.floor);
 
       if (!room.campus) {
+        return false;
+      }
+
+      if (activeCampusSelection && room.campus !== activeCampusSelection) {
+        return false;
+      }
+
+      if (activeBuildingSelection && room.buildingId !== activeBuildingSelection) {
+        return false;
+      }
+
+      if (activeFloorSelection && roomFloorId !== activeFloorSelection) {
         return false;
       }
 
@@ -307,7 +332,15 @@ export default function SelectionRoomSearch({
 
       return buildRoomSearchText(room).includes(normalizedQuery);
     });
-  }, [normalizedQuery, rooms, selectedCampusDraft, selectedRoomTypesDraft]);
+  }, [
+    activeBuildingSelection,
+    activeCampusSelection,
+    activeFloorSelection,
+    normalizedQuery,
+    rooms,
+    selectedCampusDraft,
+    selectedRoomTypesDraft,
+  ]);
 
   useEffect(() => {
     if (!isRecurringDraft) {
@@ -804,6 +837,7 @@ export default function SelectionRoomSearch({
         onQueryChange={setQuery}
         query={query}
       />
+      <FilterBar />
 
       <RoomSearchFilters
         calendarMonthLabel={getMonthLabel(calendarMonth)}
@@ -879,6 +913,7 @@ export default function SelectionRoomSearch({
           expandedRoomId={expandedRoomId}
           resultsFooter={resultsFooter}
           resultsHeadingVisible={resultsHeadingVisible}
+          resultsTitle={resultsTitle}
           roomSchedules={roomSchedules}
           userReservations={userReservations}
           roomsError={roomsError}

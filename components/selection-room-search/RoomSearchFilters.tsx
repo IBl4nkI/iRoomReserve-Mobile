@@ -2,10 +2,8 @@ import React from "react";
 import { StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { colors, fonts } from "@/constants/theme";
-import { CAMPUS_LABELS } from "@/lib/reservation-search";
 import type { ReservationCampus } from "@/types/reservation";
 
-const CAMPUS_OPTIONS: ReservationCampus[] = ["main", "digi"];
 const WEEKDAY_OPTIONS = [1, 2, 3, 4, 5, 6] as const;
 const CALENDAR_DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
@@ -249,7 +247,6 @@ export default function RoomSearchFilters({
   onReservationDateCalendarPress,
   onResetFilters,
   onStartTimePress,
-  onToggleCampus,
   onToggleRoomType,
   onToggleDay,
   onToggleRecurring,
@@ -258,7 +255,6 @@ export default function RoomSearchFilters({
   reservationDateInput,
   reservationDatesInput,
   roomTypeOptions,
-  selectedCampus,
   selectedRoomTypes,
   selectedDays,
   startTimeLabel,
@@ -269,27 +265,7 @@ export default function RoomSearchFilters({
 
   return (
     <View style={styles.filterCard}>
-      <Text style={styles.filterSectionTitle}>Search by Campus:</Text>
-      <View style={styles.radioGroup}>
-        {CAMPUS_OPTIONS.map((campus) => {
-          const selected = selectedCampus === campus;
-
-          return (
-            <TouchableOpacity
-              key={campus}
-              style={[styles.radioRow, selected && styles.radioRowSelected]}
-              onPress={() => onToggleCampus(campus)}
-            >
-              <View style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
-                {selected ? <View style={styles.radioInner} /> : null}
-              </View>
-              <Text style={styles.radioText}>{CAMPUS_LABELS[campus]}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      <Text style={styles.filterSectionTitle}>Search by Type:</Text>
+      <Text style={styles.filterSectionTitle}>Filter by Room Type:</Text>
       <View style={styles.checkboxGroup}>
         {roomTypeOptions.map((roomType) => {
           const selected = selectedRoomTypes.includes(roomType);
@@ -312,7 +288,7 @@ export default function RoomSearchFilters({
       <View style={styles.toggleCard}>
         <View style={styles.toggleTextBlock}>
           <Text style={styles.toggleTitle}>Recurring Reservation</Text>
-          <Text style={styles.toggleSubtitle}>Book the same time slot on multiple days</Text>
+          <Text style={styles.toggleSubtitle}>Book the same time slot(s) on multiple days</Text>
         </View>
         <Switch
           value={isRecurring}

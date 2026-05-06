@@ -14,6 +14,7 @@ interface SelectionRoomResultsProps {
   expandedRoomId: string | null;
   resultsFooter?: React.ReactNode;
   resultsHeadingVisible: boolean;
+  resultsTitle?: string;
   roomSchedules: Record<string, Schedule[]>;
   userReservations: ReservationRecord[];
   roomsError: string | null;
@@ -38,6 +39,7 @@ export default function SelectionRoomResults({
   expandedRoomId,
   resultsFooter,
   resultsHeadingVisible,
+  resultsTitle,
   roomSchedules,
   userReservations,
   roomsError,
@@ -56,7 +58,7 @@ export default function SelectionRoomResults({
       {resultsHeadingVisible ? (
         <>
           <Text style={styles.resultsAppName}>iRoomReserve</Text>
-          <Text style={styles.resultsTitle}>Available Rooms</Text>
+          <Text style={styles.resultsTitle}>{resultsTitle ?? "Available Rooms"}</Text>
         </>
       ) : null}
       {roomsLoading ? (

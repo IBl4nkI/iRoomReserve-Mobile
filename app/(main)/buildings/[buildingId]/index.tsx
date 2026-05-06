@@ -8,14 +8,19 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import SelectionScreenLayout from "@/components/SelectionScreenLayout";
+import { useSelectionFilters } from "@/components/SelectionFilterContext";
 import { colors, fonts } from "@/constants/theme";
 import { getBuildingById } from "@/services/buildings.service";
-import { buildBuildingFloorOptions } from "@/services/floors.service";
+import {
+  buildBuildingFloorOptions,
+  formatCompactFloorLabel,
+} from "@/services/floors.service";
 import { getRoomsByBuilding } from "@/services/rooms.service";
 import type { Building, FloorOption } from "@/types/reservation";
 
 export default function BuildingDetailsScreen() {
   const router = useRouter();
+  const { clearFiltersFrom, pushFilter, setLevelOptions } = useSelectionFilters();
   const { buildingId } = useLocalSearchParams<{ buildingId: string }>();
   const resolvedBuildingId = String(buildingId);
   const [building, setBuilding] = useState<Building | null>(null);
@@ -44,8 +49,16 @@ export default function BuildingDetailsScreen() {
           throw new Error("Building not found.");
         }
 
+        const floorOptions = buildBuildingFloorOptions(buildingResult, rooms);
         setBuilding(buildingResult);
-        setFloors(buildBuildingFloorOptions(buildingResult, rooms));
+        setFloors(floorOptions);
+        setLevelOptions(
+          "floor",
+          floorOptions.map((floor) => ({
+            id: floor.id,
+            label: formatCompactFloorLabel(floor.label),
+          }))
+        );
         setError(null);
       })
       .catch((caughtError) => {
@@ -68,11 +81,28 @@ export default function BuildingDetailsScreen() {
     };
   }, [resolvedBuildingId]);
 
+  function handleBack() {
+    clearFiltersFrom("building");
+    router.back();
+  }
+
+  function handleSelectFloor(floor: FloorOption) {
+    pushFilter({
+      level: "floor",
+      id: floor.id,
+      label: formatCompactFloorLabel(floor.label),
+    });
+    router.push({
+      pathname: "/(main)/floors/main/[floorId]",
+      params: { floorId: floor.id, buildingId: resolvedBuildingId },
+    });
+  }
+
   return (
     <SelectionScreenLayout
       title={building?.name ?? "Selected Building"}
       subtitle="Select Floor"
-      onBackPress={() => router.back()}
+      onBackPress={handleBack}
       enableRoomSearch
       footer={footer}
     >
@@ -86,12 +116,7 @@ export default function BuildingDetailsScreen() {
             <TouchableOpacity
               key={floor.id}
               style={styles.optionButton}
-              onPress={() =>
-                router.push({
-                  pathname: "/(main)/floors/main/[floorId]",
-                  params: { floorId: floor.id, buildingId: resolvedBuildingId },
-                })
-              }
+              onPress={() => handleSelectFloor(floor)}
             >
               <Text style={styles.optionLabel}>{floor.label}</Text>
             </TouchableOpacity>
