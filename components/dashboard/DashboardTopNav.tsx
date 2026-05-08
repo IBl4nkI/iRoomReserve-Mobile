@@ -137,7 +137,14 @@ export default function DashboardTopNav() {
     <View style={[styles.stickyNavWrap, { paddingTop: insets.top + 10 }]}>
       <View style={styles.topBarRow}>
         <Text style={styles.topBarBrand}>iRoomReserve</Text>
-        <Pressable style={styles.userBadgeRow} onPress={() => handleNavigate('/(main)/dashboard/account-settings')}>
+        <Pressable
+          style={styles.userBadgeRow}
+          onPress={() => {
+            if (pathname !== '/dashboard/account-settings') {
+              handleNavigate('/(main)/dashboard/account-settings')
+            }
+          }}
+        >
           <View style={styles.userInitialsCircle}>
             <Text style={styles.userInitialsText}>{userInitials}</Text>
           </View>
