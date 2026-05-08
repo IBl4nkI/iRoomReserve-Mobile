@@ -41,6 +41,8 @@ export default function SelectionScreenLayout({
   const activeCampus = getActiveFilterByLevel("campus");
   const activeBuilding = getActiveFilterByLevel("building");
   const activeFloor = getActiveFilterByLevel("floor");
+  const hasPersistedSelection = Boolean(activeCampus || activeBuilding || activeFloor);
+  const useSearchContainer = searchInteractionActive || (enableRoomSearch && hasPersistedSelection);
   const searchResultsTitle =
     activeFloor
       ? `${activeBuilding?.label ?? (activeCampus?.id === "digi" ? "DC" : activeCampus?.label ?? "")} - ${formatExpandedFloorLabel(activeFloor.label)}`
@@ -67,9 +69,9 @@ export default function SelectionScreenLayout({
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[
           styles.container,
-          searchInteractionActive ? styles.searchContainer : styles.centeredContainer,
+          useSearchContainer ? styles.searchContainer : styles.centeredContainer,
           {
-            paddingTop: Math.max(insets.top, searchInteractionActive ? 64 : 16),
+            paddingTop: Math.max(insets.top, useSearchContainer ? 64 : 16),
             paddingBottom: Math.max(insets.bottom, 16),
           },
         ]}
