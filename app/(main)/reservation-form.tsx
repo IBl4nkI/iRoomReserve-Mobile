@@ -140,21 +140,21 @@ function ClockIcon() {
 }
 
 function splitDateValue(value: string) {
-  const [rawDay = "", rawMonth = "", rawYear = ""] = value.split("/");
+  const [rawMonth = "", rawDay = "", rawYear = ""] = value.split("/");
 
   return {
-    day: rawDay.replace(/\D/g, "").slice(0, 2),
     month: rawMonth.replace(/\D/g, "").slice(0, 2),
+    day: rawDay.replace(/\D/g, "").slice(0, 2),
     year: rawYear.replace(/\D/g, "").slice(0, 2),
   };
 }
 
-function joinDateValue(day: string, month: string, year: string) {
-  if (!day && !month && !year) {
+function joinDateValue(month: string, day: string, year: string) {
+  if (!month && !day && !year) {
     return "";
   }
 
-  return `${day}/${month}/${year}`.replace(/\/+$/, "");
+  return `${month}/${day}/${year}`.replace(/\/+$/, "");
 }
 
 function clampTwoDigitValue(value: string, min: number, max: number) {
@@ -181,27 +181,10 @@ function SegmentedDateInput({
 }: SegmentedDateInputProps) {
   const monthRef = React.useRef<TextInput | null>(null);
   const yearRef = React.useRef<TextInput | null>(null);
-  const { day, month, year } = splitDateValue(value);
+  const { month, day, year } = splitDateValue(value);
 
-  function updateValue(nextDay: string, nextMonth: string, nextYear: string) {
-    onChange(joinDateValue(nextDay, nextMonth, nextYear));
-  }
-
-  function handleDayChange(rawValue: string) {
-    const digits = rawValue.replace(/\D/g, "").slice(0, 2);
-
-    if (digits.length === 1 && Number(digits) > 3) {
-      updateValue(`0${digits}`, month, year);
-      monthRef.current?.focus();
-      return;
-    }
-
-    const nextDay = digits.length === 2 ? clampTwoDigitValue(digits, 1, 31) : digits;
-    updateValue(nextDay, month, year);
-
-    if (digits.length === 2) {
-      monthRef.current?.focus();
-    }
+  function updateValue(nextMonth: string, nextDay: string, nextYear: string) {
+    onChange(joinDateValue(nextMonth, nextDay, nextYear));
   }
 
   function handleMonthChange(rawValue: string) {
@@ -211,14 +194,31 @@ function SegmentedDateInput({
       const digit = Number(digits);
 
       if (digit >= 2) {
-        updateValue(day, `0${digits}`, year);
-        yearRef.current?.focus();
+        updateValue(`0${digits}`, day, year);
+        monthRef.current?.focus();
         return;
       }
     }
 
     const nextMonth = digits.length === 2 ? clampTwoDigitValue(digits, 1, 12) : digits;
-    updateValue(day, nextMonth, year);
+    updateValue(nextMonth, day, year);
+
+    if (digits.length === 2) {
+      monthRef.current?.focus();
+    }
+  }
+
+  function handleDayChange(rawValue: string) {
+    const digits = rawValue.replace(/\D/g, "").slice(0, 2);
+
+    if (digits.length === 1 && Number(digits) > 3) {
+      updateValue(month, `0${digits}`, year);
+      yearRef.current?.focus();
+      return;
+    }
+
+    const nextDay = digits.length === 2 ? clampTwoDigitValue(digits, 1, 31) : digits;
+    updateValue(month, nextDay, year);
 
     if (digits.length === 2) {
       yearRef.current?.focus();
@@ -228,7 +228,7 @@ function SegmentedDateInput({
   function handleYearChange(rawValue: string) {
     const digits = rawValue.replace(/\D/g, "").slice(0, 2);
     const nextYear = digits.length === 2 ? clampTwoDigitValue(digits, 25, 99) : digits;
-    updateValue(day, month, nextYear);
+    updateValue(month, day, nextYear);
   }
 
   return (
@@ -238,23 +238,23 @@ function SegmentedDateInput({
           keyboardType="number-pad"
           maxLength={2}
           onBlur={onBlur}
-          onChangeText={handleDayChange}
-          placeholder="DD"
+          onChangeText={handleMonthChange}
+          placeholder="MM"
           placeholderTextColor={colors.mutedText}
           style={styles.segmentedDateInput}
-          value={day}
+          value={month}
         />
         <Text style={styles.segmentedDateDivider}>/</Text>
         <TextInput
           keyboardType="number-pad"
           maxLength={2}
           onBlur={onBlur}
-          onChangeText={handleMonthChange}
-          placeholder="MM"
+          onChangeText={handleDayChange}
+          placeholder="DD"
           placeholderTextColor={colors.mutedText}
           ref={monthRef}
           style={styles.segmentedDateInput}
-          value={month}
+          value={day}
         />
         <Text style={styles.segmentedDateDivider}>/</Text>
         <TextInput
@@ -1707,7 +1707,7 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
   },
   segmentedDateInput: {
-    minWidth: 28,
+    minWidth: 24,
     color: colors.text,
     fontFamily: fonts.regular,
     fontSize: 14,
@@ -1718,7 +1718,7 @@ const styles = StyleSheet.create({
     color: colors.mutedText,
     fontFamily: fonts.bold,
     fontSize: 14,
-    marginHorizontal: 0,
+    marginHorizontal: -4,
   },
   timeReadonly: {
     justifyContent: "center",

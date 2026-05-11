@@ -206,46 +206,39 @@ export function formatDisplayDate(dateKey: string) {
   if (!dateKey) {
     return "";
   }
-
-  const [year, month, day] = dateKey.split("-");
-
-  if (!year || !month || !day) {
-    return dateKey;
-  }
-
-  return `${day}/${month}/${year.slice(-2)}`;
+  return new Date(`${dateKey}T00:00:00`).toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 }
 
 export function formatDisplayDateLong(dateKey: string) {
   if (!dateKey) {
     return "";
   }
-
-  const [year, month, day] = dateKey.split("-");
-
-  if (!year || !month || !day) {
-    return dateKey;
-  }
-
-  return `${day}/${month}/${year}`;
+  return new Date(`${dateKey}T00:00:00`).toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
 }
 
 export function formatDisplayDateShort(dateKey: string) {
   if (!dateKey) {
     return "";
   }
-
   const [year, month, day] = dateKey.split("-");
 
   if (!year || !month || !day) {
     return dateKey;
   }
 
-  return `${day}/${month}/${year.slice(-2)}`;
+  return `${month}/${day}/${year.slice(-2)}`;
 }
 
 export function getMonthLabel(date: Date) {
-  return date.toLocaleDateString("en-GB", {
+  return date.toLocaleDateString("en-US", {
     month: "long",
     year: "numeric",
   });
@@ -290,8 +283,8 @@ export function parseEditableDateInput(value: string) {
     return null;
   }
 
-  const day = Number(match[1]);
-  const month = Number(match[2]);
+  const month = Number(match[1]);
+  const day = Number(match[2]);
   const year = match[3].length === 2 ? Number(`20${match[3]}`) : Number(match[3]);
 
   if (month < 1 || month > 12 || day < 1 || day > 31 || year < 2025) {
