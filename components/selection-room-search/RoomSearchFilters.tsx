@@ -2,17 +2,15 @@ import React from "react";
 import { StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import FilterBar from "@/components/FilterBar";
+import AvailabilityCalendar from "@/components/AvailabilityCalendar";
 import type { FilterLevel, LevelOption } from "@/components/SelectionFilterContext";
 import { colors, fonts } from "@/constants/theme";
 import type { ReservationCampus } from "@/types/reservation";
 
 const WEEKDAY_OPTIONS = [1, 2, 3, 4, 5, 6] as const;
-const CALENDAR_DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 function formatDisplayDate(dateKey: string) {
-  if (!dateKey) {
-    return dateKey;
-  }
+  if (!dateKey) return dateKey;
   return new Date(`${dateKey}T00:00:00`).toLocaleDateString("en-US", {
     day: "numeric",
     month: "long",
@@ -96,7 +94,6 @@ function ClockIcon() {
 
 function splitDateValue(value: string) {
   const [rawMonth = "", rawDay = "", rawYear = ""] = value.split("/");
-
   return {
     month: rawMonth.replace(/\D/g, "").slice(0, 2),
     day: rawDay.replace(/\D/g, "").slice(0, 2),
@@ -108,7 +105,6 @@ function joinDateValue(month: string, day: string, year: string) {
   if (!month && !day && !year) {
     return "";
   }
-
   return `${month}/${day}/${year}`.replace(/\/+$/, "");
 }
 
@@ -116,7 +112,6 @@ function clampTwoDigitValue(value: string, min: number, max: number) {
   if (!value) {
     return "";
   }
-
   const numericValue = Number(value);
   return String(Math.min(max, Math.max(min, numericValue))).padStart(2, "0");
 }
@@ -144,20 +139,13 @@ function SegmentedDateInput({
 
   function handleMonthChange(rawValue: string) {
     const digits = rawValue.replace(/\D/g, "").slice(0, 2);
-
-    if (digits.length === 1) {
-      const digit = Number(digits);
-
-      if (digit >= 2) {
-        updateValue(`0${digits}`, day, year);
-        monthRef.current?.focus();
-        return;
-      }
+    if (digits.length === 1 && Number(digits) >= 2) {
+      updateValue(`0${digits}`, day, year);
+      monthRef.current?.focus();
+      return;
     }
-
     const nextMonth = digits.length === 2 ? clampTwoDigitValue(digits, 1, 12) : digits;
     updateValue(nextMonth, day, year);
-
     if (digits.length === 2) {
       monthRef.current?.focus();
     }
@@ -165,16 +153,13 @@ function SegmentedDateInput({
 
   function handleDayChange(rawValue: string) {
     const digits = rawValue.replace(/\D/g, "").slice(0, 2);
-
     if (digits.length === 1 && Number(digits) > 3) {
       updateValue(month, `0${digits}`, year);
       yearRef.current?.focus();
       return;
     }
-
     const nextDay = digits.length === 2 ? clampTwoDigitValue(digits, 1, 31) : digits;
     updateValue(month, nextDay, year);
-
     if (digits.length === 2) {
       yearRef.current?.focus();
     }
@@ -294,7 +279,6 @@ export default function RoomSearchFilters({
       <View style={styles.checkboxGroup}>
         {roomTypeOptions.map((roomType) => {
           const selected = selectedRoomTypes.includes(roomType);
-
           return (
             <TouchableOpacity
               key={roomType}
@@ -329,7 +313,6 @@ export default function RoomSearchFilters({
           <View style={styles.weekdayCalendarRow}>
             {WEEKDAY_OPTIONS.map((dayOfWeek) => {
               const selected = selectedDays.includes(dayOfWeek);
-
               return (
                 <TouchableOpacity
                   key={dayOfWeek}
@@ -381,64 +364,17 @@ export default function RoomSearchFilters({
       </View>
 
       {openCalendarField ? (
-        <View style={styles.calendarCard}>
-          <View style={styles.calendarHeaderRow}>
-            <TouchableOpacity style={styles.calendarNavButton} onPress={onPrevMonth}>
-              <Text style={styles.calendarNavText}>{"<"}</Text>
-            </TouchableOpacity>
-            <Text style={styles.calendarTitle}>{calendarMonthLabel}</Text>
-            <TouchableOpacity style={styles.calendarNavButton} onPress={onNextMonth}>
-              <Text style={styles.calendarNavText}>{">"}</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.calendarWeekRow}>
-            {CALENDAR_DAY_LABELS.map((label) => (
-              <Text key={label} style={styles.calendarWeekLabel}>
-                {label}
-              </Text>
-            ))}
-          </View>
-
-          {calendarWeeks.map((week, weekIndex) => (
-            <View key={`${calendarMonthLabel}-${weekIndex}`} style={styles.calendarWeekRow}>
-              {week.map((entry) => {
-                const selected = isCalendarDateSelected(entry.dateKey);
-                const disabled = isCalendarDateDisabled(entry.date, entry.dateKey);
-
-                return (
-                  <TouchableOpacity
-                    key={entry.dateKey}
-                    disabled={disabled}
-                    style={[
-                      styles.calendarDateButton,
-                      selected && styles.calendarDateButtonSelected,
-                      disabled && styles.calendarDateButtonDisabled,
-                    ]}
-                    onPress={() => onCalendarDateSelect(entry.dateKey)}
-                  >
-                    <Text
-                      style={[
-                        styles.calendarDateText,
-                        !entry.inMonth && styles.calendarDateTextMuted,
-                        selected && styles.calendarDateTextSelected,
-                        disabled && styles.calendarDateTextDisabled,
-                      ]}
-                    >
-                      {entry.date.getDate()}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ))}
-
-          {openCalendarField === "reservationDates" ? (
-            <TouchableOpacity style={styles.calendarDoneButton} onPress={onCalendarDone}>
-              <Text style={styles.calendarDoneButtonText}>Done</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
+        <AvailabilityCalendar
+          calendarMonthLabel={calendarMonthLabel}
+          calendarWeeks={calendarWeeks}
+          isCalendarDateDisabled={isCalendarDateDisabled}
+          isCalendarDateSelected={isCalendarDateSelected}
+          onCalendarDateSelect={onCalendarDateSelect}
+          onCalendarDone={onCalendarDone}
+          onNextMonth={onNextMonth}
+          onPrevMonth={onPrevMonth}
+          showDoneButton={openCalendarField === "reservationDates"}
+        />
       ) : null}
 
       <View style={styles.previewCard}>
@@ -538,11 +474,6 @@ const styles = StyleSheet.create({
   selectionFilterBarShell: {
     marginBottom: 16,
   },
-  radioGroup: {
-    flexDirection: "row",
-    gap: 10,
-    marginBottom: 16,
-  },
   checkboxGroup: {
     gap: 10,
     marginBottom: 16,
@@ -587,45 +518,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 13,
     flex: 1,
-  },
-  radioRow: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-  },
-  radioRowSelected: {
-    borderColor: "#e7aaaa",
-    backgroundColor: "#fbf2f2",
-  },
-  radioOuter: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  radioOuterSelected: {
-    borderColor: colors.primary,
-  },
-  radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.primary,
-  },
-  radioText: {
-    color: colors.text,
-    fontFamily: fonts.bold,
-    fontSize: 13,
   },
   toggleCard: {
     borderRadius: 14,
@@ -817,99 +709,6 @@ const styles = StyleSheet.create({
   },
   resetButtonTextDisabled: {
     color: colors.mutedText,
-  },
-  calendarCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    padding: 14,
-    marginBottom: 16,
-  },
-  calendarHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 12,
-  },
-  calendarNavButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.subtleBackground,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  calendarNavText: {
-    color: colors.primary,
-    fontFamily: fonts.bold,
-    fontSize: 16,
-  },
-  calendarTitle: {
-    color: colors.text,
-    fontFamily: fonts.bold,
-    fontSize: 16,
-  },
-  calendarWeekRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  calendarWeekLabel: {
-    width: "15%",
-    textAlign: "center",
-    color: colors.secondary,
-    fontFamily: fonts.bold,
-    fontSize: 12,
-  },
-  calendarDateButton: {
-    width: "15%",
-    aspectRatio: 1,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.subtleBackground,
-  },
-  calendarDateButtonSelected: {
-    backgroundColor: colors.primary,
-  },
-  calendarDateButtonDisabled: {
-    opacity: 0.35,
-  },
-  calendarDateText: {
-    color: colors.text,
-    fontFamily: fonts.bold,
-    fontSize: 13,
-  },
-  calendarDateTextMuted: {
-    color: colors.mutedText,
-  },
-  calendarDateTextSelected: {
-    color: colors.white,
-  },
-  calendarDateTextDisabled: {
-    color: colors.mutedText,
-  },
-  helperText: {
-    color: colors.secondary,
-    fontFamily: fonts.regular,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 6,
-  },
-  calendarDoneButton: {
-    marginTop: 10,
-    borderRadius: 12,
-    backgroundColor: colors.primary,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  calendarDoneButtonText: {
-    color: colors.white,
-    fontFamily: fonts.bold,
-    fontSize: 14,
   },
   previewCard: {
     borderRadius: 14,
