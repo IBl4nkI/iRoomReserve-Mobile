@@ -10,9 +10,10 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import SelectionScreenLayout from "@/components/SelectionScreenLayout";
 import { useSelectionFilters } from "@/components/SelectionFilterContext";
 import { colors, fonts } from "@/constants/theme";
-import { getBuildingById } from "@/services/buildings.service";
+import { getBuildingById, getBuildingsByCampus } from "@/services/buildings.service";
 import {
   buildBuildingFloorOptions,
+  formatCompactFloorLabel,
   getFloorLabelById,
   isRoomOnFloor,
 } from "@/services/floors.service";
@@ -21,7 +22,7 @@ import type { Building, Room } from "@/types/reservation";
 
 export default function MainFloorRoomsScreen() {
   const router = useRouter();
-  const { clearFiltersFrom } = useSelectionFilters();
+  const { clearFiltersFrom, setLevelOptions } = useSelectionFilters();
   const { floorId, buildingId } = useLocalSearchParams<{
     floorId: string;
     buildingId?: string;
@@ -54,8 +55,9 @@ export default function MainFloorRoomsScreen() {
     Promise.all([
       getBuildingById(resolvedBuildingId),
       getRoomsByBuilding(resolvedBuildingId),
+      getBuildingsByCampus("main"),
     ])
-      .then(([buildingResult, buildingRooms]) => {
+      .then(([buildingResult, buildingRooms, campusBuildings]) => {
         if (!active) {
           return;
         }
@@ -71,6 +73,20 @@ export default function MainFloorRoomsScreen() {
           throw new Error("Floor not found.");
         }
 
+        setLevelOptions(
+          "building",
+          campusBuildings.map((building) => ({
+            id: building.id,
+            label: building.code || building.name,
+          }))
+        );
+        setLevelOptions(
+          "floor",
+          floors.map((floor) => ({
+            id: floor.id,
+            label: formatCompactFloorLabel(floor.label),
+          }))
+        );
         setBuilding(buildingResult);
         setFloorLabel(label);
         setRooms(buildingRooms.filter((room) => isRoomOnFloor(room, label)));
@@ -94,7 +110,7 @@ export default function MainFloorRoomsScreen() {
     return () => {
       active = false;
     };
-  }, [resolvedBuildingId, resolvedFloorId]);
+  }, [resolvedBuildingId, resolvedFloorId, setLevelOptions]);
 
   function handleBack() {
     clearFiltersFrom("floor");

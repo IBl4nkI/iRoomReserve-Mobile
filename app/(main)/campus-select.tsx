@@ -24,7 +24,7 @@ export default function CampusSelectScreen() {
   function handleSelectCampus(campusId: string, campusLabel: string, route: string) {
     clearAll();
     pushFilter({ level: "campus", id: campusId, label: campusLabel });
-    router.push(route as any);
+    router.replace(route as any);
   }
 
   return (

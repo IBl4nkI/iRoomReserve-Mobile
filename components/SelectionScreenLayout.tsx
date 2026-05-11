@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -36,6 +36,7 @@ export default function SelectionScreenLayout({
 }: SelectionScreenLayoutProps) {
   const insets = useSafeAreaInsets();
   const { getActiveFilterByLevel } = useSelectionFilters();
+  const [searchBackOverride, setSearchBackOverride] = useState<(() => void) | null>(null);
   const [searchInteractionActive, setSearchInteractionActive] = useState(false);
   const [searchHeaderVisible, setSearchHeaderVisible] = useState(false);
   const activeCampus = getActiveFilterByLevel("campus");
@@ -47,14 +48,22 @@ export default function SelectionScreenLayout({
     activeFloor
       ? `${activeBuilding?.label ?? (activeCampus?.id === "digi" ? "Digital Campus" : activeCampus?.label ?? "")} - ${formatExpandedFloorLabel(activeFloor.label)}`
       : "Available Rooms";
+  const handleSearchBackOverrideChange = useCallback(
+    (handler: (() => void) | null) => {
+      setSearchBackOverride(() => handler);
+    },
+    []
+  );
   const cardContent = (
     <View style={styles.card}>
       <>
         <Text style={styles.appName}>iRoomReserve</Text>
         <Text style={styles.title}>{searchHeaderVisible ? "Available Rooms" : title}</Text>
-        <Text style={styles.subtitle}>
-          {searchHeaderVisible ? searchResultsTitle : subtitle ?? ""}
-        </Text>
+        {searchHeaderVisible || subtitle ? (
+          <Text style={styles.subtitle}>
+            {searchHeaderVisible ? searchResultsTitle : subtitle}
+          </Text>
+        ) : null}
       </>
 
       <View style={styles.content}>{children}</View>
@@ -79,12 +88,16 @@ export default function SelectionScreenLayout({
         ]}
       >
         {onBackPress ? (
-          <TouchableOpacity style={styles.backIconButton} onPress={onBackPress}>
+          <TouchableOpacity
+            style={styles.backIconButton}
+            onPress={searchBackOverride ?? onBackPress}
+          >
             <Text style={styles.backIconText}>{"<"}</Text>
           </TouchableOpacity>
         ) : null}
         {enableRoomSearch ? (
           <SelectionRoomSearch
+            onBackOverrideChange={handleSearchBackOverrideChange}
             forceResultsVisible={roomSearchForceResultsVisible}
             onHeaderVisibilityChange={setSearchHeaderVisible}
             onInteractionChange={setSearchInteractionActive}

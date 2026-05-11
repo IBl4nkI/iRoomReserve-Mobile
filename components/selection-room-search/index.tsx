@@ -70,6 +70,7 @@ import RoomTimePickerModal from "./RoomTimePickerModal";
 interface SelectionRoomSearchProps {
   children: React.ReactNode;
   forceResultsVisible?: boolean;
+  onBackOverrideChange?: (handler: (() => void) | null) => void;
   onHeaderVisibilityChange?: (visible: boolean) => void;
   onInteractionChange?: (active: boolean) => void;
   resultsFooter?: React.ReactNode;
@@ -81,6 +82,7 @@ const DEFAULT_ROOM_TYPE_OPTIONS = ["Classroom", "Glass Room", "Conference Room",
 export default function SelectionRoomSearch({
   children,
   forceResultsVisible = false,
+  onBackOverrideChange,
   onHeaderVisibilityChange,
   onInteractionChange,
   resultsFooter,
@@ -359,18 +361,71 @@ export default function SelectionRoomSearch({
     () => getBuildingOptionsForCampus(filterCampusId),
     [buildings, filterCampusId]
   );
-  const filterBuildingId =
-    filterCampusId === "digi"
-      ? null
-      : filterBuildingSelection ??
-        (activeBuildingSelection && filterBuildingOptions.some((building) => building.id === activeBuildingSelection)
-          ? activeBuildingSelection
-          : null);
+  const filterBuildingId = useMemo(() => {
+    if (filterCampusId === "digi") {
+      return null;
+    }
+
+    if (
+      filterBuildingSelection &&
+      filterBuildingOptions.some((building) => building.id === filterBuildingSelection)
+    ) {
+      return filterBuildingSelection;
+    }
+
+    if (
+      activeBuildingSelection &&
+      filterBuildingOptions.some((building) => building.id === activeBuildingSelection)
+    ) {
+      return activeBuildingSelection;
+    }
+
+    if (filterCampusId === "main") {
+      return filterBuildingOptions.find((building) => building.id === "gd1")?.id
+        ?? filterBuildingOptions[0]?.id
+        ?? null;
+    }
+
+    return filterBuildingOptions[0]?.id ?? null;
+  }, [
+    activeBuildingSelection,
+    filterBuildingOptions,
+    filterBuildingSelection,
+    filterCampusId,
+  ]);
   const filterFloorOptions = useMemo(
     () => getFloorOptionsForSelection(filterCampusId, filterBuildingId),
     [buildings, filterCampusId, filterBuildingId, rooms]
   );
-  const filterFloorId = filterFloorSelection ?? activeFloorSelection ?? null;
+  const filterFloorId = useMemo(() => {
+    if (
+      filterFloorSelection &&
+      filterFloorOptions.some((floor) => floor.id === filterFloorSelection)
+    ) {
+      return filterFloorSelection;
+    }
+
+    if (
+      activeFloorSelection &&
+      filterFloorOptions.some((floor) => floor.id === activeFloorSelection)
+    ) {
+      return activeFloorSelection;
+    }
+
+    if (filterCampusId === "main" && filterBuildingId === "gd1") {
+      return filterFloorOptions.find((floor) => floor.id === "basement")?.id
+        ?? filterFloorOptions[0]?.id
+        ?? null;
+    }
+
+    return filterFloorOptions[0]?.id ?? null;
+  }, [
+    activeFloorSelection,
+    filterBuildingId,
+    filterCampusId,
+    filterFloorOptions,
+    filterFloorSelection,
+  ]);
   const effectiveResultsTitle = useMemo(() => {
     if (!filtersOpen) {
       return resultsTitle;
@@ -987,23 +1042,31 @@ export default function SelectionRoomSearch({
       return;
     }
 
+    const closingDefaults = getDefaultFilterState();
+    const closingCampusId = filterCampusSelection ?? closingDefaults.campusId;
+    const closingBuildingId =
+      closingCampusId === "digi"
+        ? null
+        : filterBuildingSelection ?? closingDefaults.buildingId;
+    const closingFloorId = filterFloorSelection ?? closingDefaults.floorId;
+
     pushFilter({
       level: "campus",
-      id: filterCampusId,
-      label: getCampusLabel(filterCampusId),
+      id: closingCampusId,
+      label: getCampusLabel(closingCampusId),
     });
 
-    if (filterCampusId === "digi") {
-      if (filterFloorId) {
+    if (closingCampusId === "digi") {
+      if (closingFloorId) {
         pushFilter({
           level: "floor",
-          id: filterFloorId,
-          label: getFloorLabel(filterCampusId, null, filterFloorId),
+          id: closingFloorId,
+          label: getFloorLabel(closingCampusId, null, closingFloorId),
         });
         setFiltersOpen(false);
         router.push({
           pathname: "/(main)/floors/digital/[floorId]",
-          params: { floorId: filterFloorId },
+          params: { floorId: closingFloorId },
         });
         return;
       }
@@ -1013,23 +1076,23 @@ export default function SelectionRoomSearch({
       return;
     }
 
-    if (filterBuildingId) {
+    if (closingBuildingId) {
       pushFilter({
         level: "building",
-        id: filterBuildingId,
-        label: getBuildingLabel(filterCampusId, filterBuildingId),
+        id: closingBuildingId,
+        label: getBuildingLabel(closingCampusId, closingBuildingId),
       });
 
-      if (filterFloorId) {
+      if (closingFloorId) {
         pushFilter({
           level: "floor",
-          id: filterFloorId,
-          label: getFloorLabel(filterCampusId, filterBuildingId, filterFloorId),
+          id: closingFloorId,
+          label: getFloorLabel(closingCampusId, closingBuildingId, closingFloorId),
         });
         setFiltersOpen(false);
         router.push({
           pathname: "/(main)/floors/main/[floorId]",
-          params: { floorId: filterFloorId, buildingId: filterBuildingId },
+          params: { floorId: closingFloorId, buildingId: closingBuildingId },
         });
         return;
       }
@@ -1037,7 +1100,7 @@ export default function SelectionRoomSearch({
       setFiltersOpen(false);
       router.push({
         pathname: "/(main)/buildings/[buildingId]",
-        params: { buildingId: filterBuildingId },
+        params: { buildingId: closingBuildingId },
       });
       return;
     }
@@ -1089,6 +1152,61 @@ export default function SelectionRoomSearch({
 
     setFilterFloorSelection(id);
   }
+
+  useEffect(() => {
+    const hasSelection = Boolean(activeCampusSelection || activeBuildingSelection || activeFloorSelection);
+
+    if (!hasSelection) {
+      onBackOverrideChange?.(null);
+      return;
+    }
+
+    onBackOverrideChange?.(() => {
+      setFiltersOpen(false);
+      setFilterCampusSelection(null);
+      setFilterBuildingSelection(null);
+      setFilterFloorSelection(null);
+
+      if (activeFloorSelection) {
+        clearFiltersFrom("floor");
+
+        if (activeCampusSelection === "digi") {
+          router.replace("/(main)/floors/digital");
+          return;
+        }
+
+        if (activeBuildingSelection) {
+          router.replace({
+            pathname: "/(main)/buildings/[buildingId]",
+            params: { buildingId: activeBuildingSelection },
+          });
+          return;
+        }
+      }
+
+      if (activeBuildingSelection) {
+        clearFiltersFrom("building");
+        router.replace("/(main)/buildings");
+        return;
+      }
+
+      if (activeCampusSelection) {
+        clearFiltersFrom("campus");
+        router.replace("/(main)/campus-select");
+      }
+    });
+
+    return () => {
+      onBackOverrideChange?.(null);
+    };
+  }, [
+    activeBuildingSelection,
+    activeCampusSelection,
+    activeFloorSelection,
+    clearFiltersFrom,
+    onBackOverrideChange,
+    router,
+  ]);
 
   return (
     <View style={styles.wrapper}>
