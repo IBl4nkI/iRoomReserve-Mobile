@@ -4,12 +4,17 @@ import { useRouter } from "expo-router";
 
 import {
   type FilterLevel,
+  type LevelOption,
   useSelectionFilters,
 } from "@/components/SelectionFilterContext";
 import { colors, fonts } from "@/constants/theme";
 import { formatCompactFloorLabel } from "@/services/floors.service";
 
 const LEVEL_DISPLAY_ORDER: FilterLevel[] = ["campus", "building", "floor"];
+const NEXT_LEVEL_BY_LEVEL: Partial<Record<FilterLevel, FilterLevel>> = {
+  campus: "building",
+  building: "floor",
+};
 
 function getDisplayLabel(level: FilterLevel, label: string) {
   if (level === "floor") {
@@ -19,16 +24,43 @@ function getDisplayLabel(level: FilterLevel, label: string) {
   return label;
 }
 
-export default function FilterBar() {
+interface FilterBarProps {
+  defaultCampusId?: string | null;
+  defaultSelections?: Partial<Record<FilterLevel, string>>;
+  disableActivePress?: boolean;
+  levelOptionsOverride?: Partial<Record<FilterLevel, LevelOption[]>>;
+  navigateOnSelect?: boolean;
+  onOptionPress?: (level: FilterLevel, id: string, selected: boolean) => void;
+  selectedByLevelOverride?: Partial<Record<FilterLevel, string | null>>;
+  showAllLevels?: boolean;
+}
+
+export default function FilterBar({
+  defaultCampusId = null,
+  defaultSelections,
+  disableActivePress = false,
+  levelOptionsOverride,
+  navigateOnSelect = true,
+  onOptionPress,
+  selectedByLevelOverride,
+  showAllLevels = false,
+}: FilterBarProps) {
   const router = useRouter();
   const {
     filters,
+    clearFiltersFrom,
     selectFilter,
     levelOptions,
     getActiveFilterByLevel,
   } = useSelectionFilters();
   const activeCampus = getActiveFilterByLevel("campus");
   const activeBuilding = getActiveFilterByLevel("building");
+  const activeFloor = getActiveFilterByLevel("floor");
+  const selectedByLevel: Partial<Record<FilterLevel, string | null>> = {
+    campus: selectedByLevelOverride?.campus ?? activeCampus?.id ?? null,
+    building: selectedByLevelOverride?.building ?? activeBuilding?.id ?? null,
+    floor: selectedByLevelOverride?.floor ?? activeFloor?.id ?? null,
+  };
 
   const grouped = LEVEL_DISPLAY_ORDER.reduce<
     {
@@ -38,9 +70,16 @@ export default function FilterBar() {
   >((result, level) => {
     const levelFilters = filters.filter((filter) => filter.level === level);
     const activeFilter = levelFilters.find((filter) => filter.active);
-    const options = levelOptions[level];
+    const options = levelOptionsOverride?.[level] ?? levelOptions[level];
+    const fallbackSelectionId =
+      defaultSelections?.[level] ?? (level === "campus" ? defaultCampusId : null);
+    const shouldShowCampusFallback = level === "campus" && !activeFilter && Boolean(defaultCampusId);
+    const shouldShowLevel =
+      showAllLevels
+        ? options.length > 0 || Boolean(fallbackSelectionId)
+        : Boolean(activeFilter) || shouldShowCampusFallback;
 
-    if (!activeFilter) {
+    if (!shouldShowLevel) {
       return result;
     }
 
@@ -88,14 +127,59 @@ export default function FilterBar() {
             ]}
           >
             {items.map((item) => {
-              const selected = item.active;
+              const fallbackSelectionId =
+                defaultSelections?.[level] ?? (level === "campus" ? defaultCampusId : null);
+              const selected =
+                item.id === selectedByLevel[level] ||
+                (!selectedByLevel[level] && item.id === fallbackSelectionId);
 
               return (
                 <TouchableOpacity
                   key={item.id}
                   activeOpacity={0.7}
                   onPress={() => {
+                    if (onOptionPress) {
+                      onOptionPress(level, item.id, selected);
+                      return;
+                    }
+
+                    if (selected) {
+                      if (disableActivePress) {
+                        return;
+                      }
+
+                      const nextLevel = NEXT_LEVEL_BY_LEVEL[level];
+
+                      if (nextLevel) {
+                        clearFiltersFrom(nextLevel);
+                      }
+
+                      if (!navigateOnSelect) {
+                        return;
+                      }
+
+                      if (level === "campus") {
+                        router.push(
+                          item.id === "main" ? "/(main)/buildings" : "/(main)/floors/digital"
+                        );
+                        return;
+                      }
+
+                      if (level === "building") {
+                        router.push({
+                          pathname: "/(main)/buildings/[buildingId]",
+                          params: { buildingId: item.id },
+                        });
+                      }
+
+                      return;
+                    }
+
                     selectFilter(level, item.id);
+
+                    if (!navigateOnSelect) {
+                      return;
+                    }
 
                     if (level === "campus") {
                       router.push(

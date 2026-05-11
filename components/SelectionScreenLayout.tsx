@@ -45,14 +45,16 @@ export default function SelectionScreenLayout({
   const useSearchContainer = searchInteractionActive || (enableRoomSearch && hasPersistedSelection);
   const searchResultsTitle =
     activeFloor
-      ? `${activeBuilding?.label ?? (activeCampus?.id === "digi" ? "DC" : activeCampus?.label ?? "")} - ${formatExpandedFloorLabel(activeFloor.label)}`
+      ? `${activeBuilding?.label ?? (activeCampus?.id === "digi" ? "Digital Campus" : activeCampus?.label ?? "")} - ${formatExpandedFloorLabel(activeFloor.label)}`
       : "Available Rooms";
   const cardContent = (
     <View style={styles.card}>
       <>
         <Text style={styles.appName}>iRoomReserve</Text>
-        <Text style={styles.title}>{searchHeaderVisible ? searchResultsTitle : title}</Text>
-        {!searchHeaderVisible && subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+        <Text style={styles.title}>{searchHeaderVisible ? "Available Rooms" : title}</Text>
+        <Text style={styles.subtitle}>
+          {searchHeaderVisible ? searchResultsTitle : subtitle ?? ""}
+        </Text>
       </>
 
       <View style={styles.content}>{children}</View>

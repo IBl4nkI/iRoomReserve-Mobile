@@ -1,6 +1,8 @@
 import React from "react";
 import { StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 
+import FilterBar from "@/components/FilterBar";
+import type { FilterLevel, LevelOption } from "@/components/SelectionFilterContext";
 import { colors, fonts } from "@/constants/theme";
 import type { ReservationCampus } from "@/types/reservation";
 
@@ -26,6 +28,9 @@ interface RoomSearchFiltersProps {
   calendarWeeks: CalendarEntry[][];
   endDateInput: string;
   endTimeLabel: string;
+  filterBarDefaultSelections: Partial<Record<FilterLevel, string>>;
+  filterBarLevelOptions: Partial<Record<FilterLevel, LevelOption[]>>;
+  filterBarSelectedByLevel: Partial<Record<FilterLevel, string | null>>;
   filtersOpen: boolean;
   getDayShortLabel: (dayOfWeek: number) => string;
   hasActiveFilters: boolean;
@@ -45,6 +50,7 @@ interface RoomSearchFiltersProps {
   onReservationDateChange: (value: string) => void;
   onReservationDateCalendarPress: () => void;
   onResetFilters: () => void;
+  onSelectionOptionPress: (level: FilterLevel, id: string, selected: boolean) => void;
   onStartTimePress: () => void;
   onToggleCampus: (campus: ReservationCampus) => void;
   onToggleRoomType: (roomType: string) => void;
@@ -227,6 +233,9 @@ export default function RoomSearchFilters({
   calendarWeeks,
   endDateInput,
   endTimeLabel,
+  filterBarDefaultSelections,
+  filterBarLevelOptions,
+  filterBarSelectedByLevel,
   filtersOpen,
   getDayShortLabel,
   hasActiveFilters,
@@ -246,6 +255,7 @@ export default function RoomSearchFilters({
   onReservationDateChange,
   onReservationDateCalendarPress,
   onResetFilters,
+  onSelectionOptionPress,
   onStartTimePress,
   onToggleRoomType,
   onToggleDay,
@@ -265,6 +275,18 @@ export default function RoomSearchFilters({
 
   return (
     <View style={styles.filterCard}>
+      <Text style={styles.filterSectionTitle}>Filter by Campus, Building, and Floor:</Text>
+      <View style={styles.selectionFilterBarShell}>
+        <FilterBar
+          defaultCampusId="main"
+          defaultSelections={filterBarDefaultSelections}
+          levelOptionsOverride={filterBarLevelOptions}
+          onOptionPress={onSelectionOptionPress}
+          selectedByLevelOverride={filterBarSelectedByLevel}
+          showAllLevels
+        />
+      </View>
+
       <Text style={styles.filterSectionTitle}>Filter by Room Type:</Text>
       <View style={styles.checkboxGroup}>
         {roomTypeOptions.map((roomType) => {
@@ -408,10 +430,6 @@ export default function RoomSearchFilters({
             </View>
           ))}
 
-          <Text style={styles.helperText}>
-            Sundays are excluded. Only Monday to Saturday can be selected.
-          </Text>
-
           {openCalendarField === "reservationDates" ? (
             <TouchableOpacity style={styles.calendarDoneButton} onPress={onCalendarDone}>
               <Text style={styles.calendarDoneButtonText}>Done</Text>
@@ -513,6 +531,9 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 16,
     marginBottom: 10,
+  },
+  selectionFilterBarShell: {
+    marginBottom: 16,
   },
   radioGroup: {
     flexDirection: "row",

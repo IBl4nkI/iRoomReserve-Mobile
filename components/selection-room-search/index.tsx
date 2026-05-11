@@ -47,12 +47,18 @@ import {
   formatDisplayDateShort,
 } from "./helpers";
 import { getBuildings } from "@/services/buildings.service";
-import { createFloorId, normalizeFloorLabel } from "@/services/floors.service";
+import {
+  buildBuildingFloorOptions,
+  buildCampusFloorOptions,
+  createFloorId,
+  normalizeFloorLabel,
+} from "@/services/floors.service";
 import { getRoomsByBuilding } from "@/services/rooms.service";
 import { auth } from "@/services/firebase";
 import { getReservationsByUser } from "@/services/reservations.service";
 import { formatTime12h, getSchedulesByRoomId } from "@/services/schedules.service";
 import type {
+  Building,
   ReservationCampus,
   ReservationRecord,
   Schedule,
@@ -70,7 +76,7 @@ interface SelectionRoomSearchProps {
   resultsTitle?: string;
 }
 
-const DEFAULT_ROOM_TYPE_OPTIONS = ["Classroom", "Glass Room", "Conference Room", "Specialized Room", "Gymnasium"];
+const DEFAULT_ROOM_TYPE_OPTIONS = ["Classroom", "Glass Room", "Conference Room", "Specialized Room", "Gymnasium", "Open Area"];
 
 export default function SelectionRoomSearch({
   children,
@@ -81,9 +87,12 @@ export default function SelectionRoomSearch({
   resultsTitle,
 }: SelectionRoomSearchProps) {
   const router = useRouter();
-  const { getActiveFilterByLevel } = useSelectionFilters();
+  const { clearFiltersFrom, getActiveFilterByLevel, pushFilter, selectFilter } = useSelectionFilters();
   const [query, setQuery] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filterCampusSelection, setFilterCampusSelection] = useState<string | null>(null);
+  const [filterBuildingSelection, setFilterBuildingSelection] = useState<string | null>(null);
+  const [filterFloorSelection, setFilterFloorSelection] = useState<string | null>(null);
   const [searchFocused, setSearchFocused] = useState(false);
   const [isRecurringDraft, setIsRecurringDraft] = useState(false);
   const [selectedCampusDraft, setSelectedCampusDraft] = useState<ReservationCampus | null>(null);
@@ -102,6 +111,7 @@ export default function SelectionRoomSearch({
     Record<string, SelectedTimeslot[]>
   >({});
   const [weekOffsets, setWeekOffsets] = useState<Record<string, number>>({});
+  const [buildings, setBuildings] = useState<Building[]>([]);
   const [rooms, setRooms] = useState<SearchRoom[]>([]);
   const [roomSchedules, setRoomSchedules] = useState<Record<string, Schedule[]>>({});
   const [userReservations, setUserReservations] = useState<ReservationRecord[]>([]);
@@ -136,9 +146,9 @@ export default function SelectionRoomSearch({
     selectedDaysDraft.length > 0 ||
     reservationDatesDraft.length > 0 ||
     reservationDateDraft.length > 0 ||
-    recurringEndDateDraft.length > 0 ||
-    startTimeDraft !== getDefaultStartTime() ||
-    endTimeDraft !== getDefaultEndTime(null);
+      recurringEndDateDraft.length > 0 ||
+      startTimeDraft !== getDefaultStartTime() ||
+      endTimeDraft !== getDefaultEndTime(null);
   const resultsVisible =
     forceResultsVisible || filtersOpen || normalizedQuery.length > 0 || hasActiveFilters;
   const resultsHeadingVisible = resultsVisible;
@@ -239,6 +249,7 @@ export default function SelectionRoomSearch({
           return;
         }
 
+        setBuildings(buildings);
         setRooms(roomGroups.flat().map(toSearchRoom));
         setRoomsError(null);
       })
@@ -261,6 +272,141 @@ export default function SelectionRoomSearch({
       active = false;
     };
   }, []);
+
+  const filterCampusOptions = useMemo(
+    () => [
+      { id: "main", label: "Main Campus" },
+      { id: "digi", label: "Digital Campus" },
+    ],
+    []
+  );
+
+  function getBuildingOptionsForCampus(campusId: string | null) {
+    return buildings
+      .filter((building) => building.campus === campusId)
+      .map((building) => ({
+        id: building.id,
+        label: building.code || building.name,
+      }));
+  }
+
+  function getFloorOptionsForSelection(campusId: string | null, buildingId: string | null) {
+    if (campusId === "digi") {
+      return buildCampusFloorOptions(
+        buildings.filter((building) => building.campus === "digi"),
+        rooms.filter((room) => room.campus === "digi")
+      ).map((floor) => ({
+        id: floor.id,
+        label: floor.label,
+      }));
+    }
+
+    if (!buildingId) {
+      return [];
+    }
+
+    const building = buildings.find((entry) => entry.id === buildingId);
+
+    if (!building) {
+      return [];
+    }
+
+    return buildBuildingFloorOptions(
+      building,
+      rooms.filter((room) => room.buildingId === building.id)
+    ).map((floor) => ({
+      id: floor.id,
+      label: floor.label,
+    }));
+  }
+
+  function getCampusLabel(campusId: string | null) {
+    return filterCampusOptions.find((campus) => campus.id === campusId)?.label ?? campusId ?? "";
+  }
+
+  function getBuildingLabel(campusId: string | null, buildingId: string | null) {
+    return getBuildingOptionsForCampus(campusId).find((building) => building.id === buildingId)?.label ?? buildingId ?? "";
+  }
+
+  function getFloorLabel(campusId: string | null, buildingId: string | null, floorId: string | null) {
+    return getFloorOptionsForSelection(campusId, buildingId).find((floor) => floor.id === floorId)?.label ?? floorId ?? "";
+  }
+
+  function getDefaultFilterState() {
+    const campusId = activeCampusSelection ?? "main";
+    const buildingOptions = getBuildingOptionsForCampus(campusId);
+    const buildingId =
+      campusId === "digi"
+        ? null
+        : activeBuildingSelection && buildingOptions.some((building) => building.id === activeBuildingSelection)
+          ? activeBuildingSelection
+          : !activeCampusSelection && !activeBuildingSelection
+            ? "gd1"
+            : buildingOptions[0]?.id ?? null;
+    const floorOptions = getFloorOptionsForSelection(campusId, buildingId);
+    const floorId =
+      activeFloorSelection && floorOptions.some((floor) => floor.id === activeFloorSelection)
+        ? activeFloorSelection
+        : !activeCampusSelection && !activeBuildingSelection && campusId === "main" && buildingId === "gd1"
+          ? (floorOptions.find((floor) => floor.id === "basement")?.id ?? floorOptions[0]?.id ?? null)
+          : floorOptions[0]?.id ?? null;
+
+    return { campusId, buildingId, floorId };
+  }
+
+  const filterCampusId = filterCampusSelection ?? activeCampusSelection ?? "main";
+  const filterBuildingOptions = useMemo(
+    () => getBuildingOptionsForCampus(filterCampusId),
+    [buildings, filterCampusId]
+  );
+  const filterBuildingId =
+    filterCampusId === "digi"
+      ? null
+      : filterBuildingSelection ??
+        (activeBuildingSelection && filterBuildingOptions.some((building) => building.id === activeBuildingSelection)
+          ? activeBuildingSelection
+          : null);
+  const filterFloorOptions = useMemo(
+    () => getFloorOptionsForSelection(filterCampusId, filterBuildingId),
+    [buildings, filterCampusId, filterBuildingId, rooms]
+  );
+  const filterFloorId = filterFloorSelection ?? activeFloorSelection ?? null;
+  const effectiveResultsTitle = useMemo(() => {
+    if (!filtersOpen) {
+      return resultsTitle;
+    }
+
+    const campusLabel = getCampusLabel(filterCampusId);
+    const buildingLabel = filterBuildingId
+      ? getBuildingLabel(filterCampusId, filterBuildingId)
+      : campusLabel;
+    const floorLabel = filterFloorId
+      ? getFloorLabel(filterCampusId, filterBuildingId, filterFloorId)
+      : null;
+
+    if (!floorLabel) {
+      return buildingLabel;
+    }
+
+    return `${buildingLabel} - ${floorLabel}`;
+  }, [
+    filterBuildingId,
+    filterCampusId,
+    filterFloorId,
+    filtersOpen,
+    resultsTitle,
+  ]);
+
+  useEffect(() => {
+    if (!filtersOpen) {
+      return;
+    }
+
+    const defaults = getDefaultFilterState();
+    setFilterCampusSelection(defaults.campusId);
+    setFilterBuildingSelection(defaults.buildingId);
+    setFilterFloorSelection(defaults.floorId);
+  }, [filtersOpen, activeCampusSelection, activeBuildingSelection, activeFloorSelection, buildings, rooms]);
 
   useEffect(() => {
     const currentUser = auth.currentUser;
@@ -295,6 +441,10 @@ export default function SelectionRoomSearch({
   }, []);
 
   const filteredRooms = useMemo(() => {
+    const effectiveCampusSelection = filtersOpen ? filterCampusId : activeCampusSelection;
+    const effectiveBuildingSelection = filtersOpen ? filterBuildingId : activeBuildingSelection;
+    const effectiveFloorSelection = filtersOpen ? filterFloorId : activeFloorSelection;
+
     return rooms.filter((room) => {
       const roomType = room.roomType.trim();
       const roomFloorId = createFloorId(normalizeFloorLabel(room.floor) ?? room.floor);
@@ -303,15 +453,15 @@ export default function SelectionRoomSearch({
         return false;
       }
 
-      if (activeCampusSelection && room.campus !== activeCampusSelection) {
+      if (effectiveCampusSelection && room.campus !== effectiveCampusSelection) {
         return false;
       }
 
-      if (activeBuildingSelection && room.buildingId !== activeBuildingSelection) {
+      if (effectiveBuildingSelection && room.buildingId !== effectiveBuildingSelection) {
         return false;
       }
 
-      if (activeFloorSelection && roomFloorId !== activeFloorSelection) {
+      if (effectiveFloorSelection && roomFloorId !== effectiveFloorSelection) {
         return false;
       }
 
@@ -336,6 +486,10 @@ export default function SelectionRoomSearch({
     activeBuildingSelection,
     activeCampusSelection,
     activeFloorSelection,
+    filterBuildingId,
+    filterCampusId,
+    filterFloorId,
+    filtersOpen,
     normalizedQuery,
     rooms,
     selectedCampusDraft,
@@ -827,23 +981,147 @@ export default function SelectionRoomSearch({
     }));
   }
 
+  function handleToggleFilters() {
+    if (!filtersOpen) {
+      setFiltersOpen(true);
+      return;
+    }
+
+    pushFilter({
+      level: "campus",
+      id: filterCampusId,
+      label: getCampusLabel(filterCampusId),
+    });
+
+    if (filterCampusId === "digi") {
+      if (filterFloorId) {
+        pushFilter({
+          level: "floor",
+          id: filterFloorId,
+          label: getFloorLabel(filterCampusId, null, filterFloorId),
+        });
+        setFiltersOpen(false);
+        router.push({
+          pathname: "/(main)/floors/digital/[floorId]",
+          params: { floorId: filterFloorId },
+        });
+        return;
+      }
+
+      setFiltersOpen(false);
+      router.push("/(main)/floors/digital");
+      return;
+    }
+
+    if (filterBuildingId) {
+      pushFilter({
+        level: "building",
+        id: filterBuildingId,
+        label: getBuildingLabel(filterCampusId, filterBuildingId),
+      });
+
+      if (filterFloorId) {
+        pushFilter({
+          level: "floor",
+          id: filterFloorId,
+          label: getFloorLabel(filterCampusId, filterBuildingId, filterFloorId),
+        });
+        setFiltersOpen(false);
+        router.push({
+          pathname: "/(main)/floors/main/[floorId]",
+          params: { floorId: filterFloorId, buildingId: filterBuildingId },
+        });
+        return;
+      }
+
+      setFiltersOpen(false);
+      router.push({
+        pathname: "/(main)/buildings/[buildingId]",
+        params: { buildingId: filterBuildingId },
+      });
+      return;
+    }
+
+    clearFiltersFrom("building");
+    setFiltersOpen(false);
+    router.push("/(main)/buildings");
+  }
+
+  function handleFilterBarPress(level: "campus" | "building" | "floor", id: string, selected: boolean) {
+    if (selected) {
+      return;
+    }
+
+    if (level === "campus") {
+      setFilterCampusSelection(id);
+
+      if (id === "digi") {
+        const nextFloorOptions = getFloorOptionsForSelection("digi", null);
+        setFilterBuildingSelection(null);
+        setFilterFloorSelection(nextFloorOptions[0]?.id ?? null);
+        return;
+      }
+
+      const nextBuildingOptions = getBuildingOptionsForCampus(id);
+      const nextBuildingId =
+        nextBuildingOptions.find((building) => building.id === filterBuildingSelection)?.id ??
+        (id === "main" ? "gd1" : nextBuildingOptions[0]?.id ?? null);
+      const nextFloorOptions = getFloorOptionsForSelection(id, nextBuildingId);
+      const nextFloorId =
+        nextBuildingId === "gd1"
+          ? (nextFloorOptions.find((floor) => floor.id === "basement")?.id ?? nextFloorOptions[0]?.id ?? null)
+          : nextFloorOptions[0]?.id ?? null;
+      setFilterBuildingSelection(nextBuildingId);
+      setFilterFloorSelection(nextFloorId);
+      return;
+    }
+
+    if (level === "building") {
+      setFilterBuildingSelection(id);
+      const nextFloorOptions = getFloorOptionsForSelection(filterCampusId, id);
+      const nextFloorId =
+        nextFloorOptions.find((floor) => floor.id === filterFloorSelection)?.id ??
+        nextFloorOptions[0]?.id ??
+        null;
+      setFilterFloorSelection(nextFloorId);
+      return;
+    }
+
+    setFilterFloorSelection(id);
+  }
+
   return (
     <View style={styles.wrapper}>
       <RoomSearchBar
         filtersOpen={filtersOpen}
         onQueryBlur={() => setSearchFocused(false)}
         onQueryFocus={() => setSearchFocused(true)}
-        onToggleFilters={() => setFiltersOpen((currentValue) => !currentValue)}
+        onToggleFilters={handleToggleFilters}
         onQueryChange={setQuery}
         query={query}
       />
-      <FilterBar />
+      {!filtersOpen ? <FilterBar /> : null}
 
       <RoomSearchFilters
         calendarMonthLabel={getMonthLabel(calendarMonth)}
         calendarWeeks={calendarWeeks}
         endDateInput={recurringEndDateInputDraft}
         endTimeLabel={formatTime12h(endTimeDraft)}
+        filterBarDefaultSelections={{
+          campus: "main",
+          building: "gd1",
+          floor: "basement",
+        }}
+        filterBarLevelOptions={{
+          campus: filterCampusOptions,
+          building: filterCampusId === "digi" ? [] : filterBuildingOptions,
+          floor: filterFloorOptions,
+        }}
+        filterBarSelectedByLevel={{
+          campus: filterCampusId,
+          building: filterBuildingId,
+          floor: filterFloorId,
+        }}
         filtersOpen={filtersOpen}
         getDayShortLabel={getDayShortLabel}
         hasActiveFilters={hasActiveFilters}
@@ -874,6 +1152,7 @@ export default function SelectionRoomSearch({
           openCalendar(isRecurringDraft ? "reservationDate" : "reservationDates")
         }
         onResetFilters={resetFilters}
+        onSelectionOptionPress={handleFilterBarPress}
         onStartTimePress={() => toggleTimePicker("start")}
         onToggleCampus={toggleCampus}
         onToggleRoomType={toggleRoomType}
@@ -913,7 +1192,7 @@ export default function SelectionRoomSearch({
           expandedRoomId={expandedRoomId}
           resultsFooter={resultsFooter}
           resultsHeadingVisible={resultsHeadingVisible}
-          resultsTitle={resultsTitle}
+          resultsTitle={effectiveResultsTitle}
           roomSchedules={roomSchedules}
           userReservations={userReservations}
           roomsError={roomsError}

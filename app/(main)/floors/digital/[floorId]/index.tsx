@@ -21,7 +21,7 @@ import type { Room } from "@/types/reservation";
 
 export default function DigitalFloorRoomsScreen() {
   const router = useRouter();
-  const { clearFiltersFrom } = useSelectionFilters();
+  const { clearFiltersFrom, setLevelOptions } = useSelectionFilters();
   const { floorId } = useLocalSearchParams<{ floorId: string }>();
   const resolvedFloorId = String(floorId);
   const [floorLabel, setFloorLabel] = useState<string | null>(null);
@@ -57,6 +57,13 @@ export default function DigitalFloorRoomsScreen() {
           throw new Error("Floor not found.");
         }
 
+        setLevelOptions(
+          "floor",
+          floorOptions.map((floor) => ({
+            id: floor.id,
+            label: floor.label,
+          }))
+        );
         setFloorLabel(label);
         setRooms(allRooms.filter((room) => isRoomOnFloor(room, label)));
         setError(null);
@@ -79,7 +86,7 @@ export default function DigitalFloorRoomsScreen() {
     return () => {
       active = false;
     };
-  }, [resolvedFloorId]);
+  }, [resolvedFloorId, setLevelOptions]);
 
   function handleBack() {
     clearFiltersFrom("floor");

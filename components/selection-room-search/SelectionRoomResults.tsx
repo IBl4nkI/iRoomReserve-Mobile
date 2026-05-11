@@ -58,7 +58,10 @@ export default function SelectionRoomResults({
       {resultsHeadingVisible ? (
         <>
           <Text style={styles.resultsAppName}>iRoomReserve</Text>
-          <Text style={styles.resultsTitle}>{resultsTitle ?? "Available Rooms"}</Text>
+          <Text style={styles.resultsTitle}>Available Rooms</Text>
+          {resultsTitle ? (
+            <Text style={styles.resultsSubtitle}>{resultsTitle}</Text>
+          ) : null}
         </>
       ) : null}
       {roomsLoading ? (

@@ -573,6 +573,13 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 24,
     textAlign: "center",
+  },
+  resultsSubtitle: {
+    color: colors.secondary,
+    fontFamily: fonts.regular,
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 6,
     marginBottom: 18,
   },
   resultsFooter: {
