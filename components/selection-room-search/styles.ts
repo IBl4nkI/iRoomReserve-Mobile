@@ -629,7 +629,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.subtleBackground,
     padding: 12,
   },
-  schedulePreviewTitle: { color: colors.primary, fontFamily: fonts.bold, fontSize: 16 },
+  schedulePreviewTitle: {
+    color: colors.primary,
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    marginBottom: 10,
+  },
   weekNavRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -670,7 +675,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
   },
   reserveSelectedButton: {
-    marginTop: 12,
+    marginTop: 0,
     borderRadius: 12,
     backgroundColor: colors.primary,
     paddingVertical: 14,

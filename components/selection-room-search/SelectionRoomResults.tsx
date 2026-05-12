@@ -1,12 +1,13 @@
-import React from "react";
+import React, { useMemo, useState } from "react";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 
-import WeeklyScheduleGrid from "@/components/WeeklyScheduleGrid";
+import AvailabilityCalendar from "@/components/AvailabilityCalendar";
+import DayScheduleModal from "@/components/DayScheduleModal";
 import styles from "./styles";
-import { getSelectedTimeslotKey, type SelectedTimeslot } from "./helpers";
+import { addMonths, getCalendarWeeks, getMonthLabel, getSelectedTimeslotKey, type SelectedTimeslot } from "./helpers";
 import { colors } from "@/constants/theme";
-import type { SearchRoom, TimeSlotViewModel } from "@/lib/reservation-search";
-import type { ReservationRecord, Schedule } from "@/types/reservation";
+import { isPastDate, type SearchRoom, type TimeSlotViewModel } from "@/lib/reservation-search";
+import type { ReservationCampus, ReservationRecord, Schedule } from "@/types/reservation";
 
 interface SelectionRoomResultsProps {
   availabilityLoading: boolean;
@@ -21,7 +22,6 @@ interface SelectionRoomResultsProps {
   roomsLoading: boolean;
   scheduleLoadingIds: Record<string, boolean>;
   selectedSlotsByRoom: Record<string, SelectedTimeslot[]>;
-  weekOffsets: Record<string, number>;
   onOpenReservationFormForRoom: (room: SearchRoom) => void;
   onRoomPress: (roomId: string) => void;
   onToggleExpandedRoom: (roomId: string) => void;
@@ -30,7 +30,6 @@ interface SelectionRoomResultsProps {
     dateKey: string,
     slot: TimeSlotViewModel
   ) => void;
-  onWeekOffsetChange: (roomId: string, nextWeekOffset: number) => void;
 }
 
 export default function SelectionRoomResults({
@@ -46,13 +45,16 @@ export default function SelectionRoomResults({
   roomsLoading,
   scheduleLoadingIds,
   selectedSlotsByRoom,
-  weekOffsets,
   onOpenReservationFormForRoom,
   onRoomPress,
   onToggleExpandedRoom,
   onToggleSelectedTimeslot,
-  onWeekOffsetChange,
 }: SelectionRoomResultsProps) {
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [modalDateKey, setModalDateKey] = useState<string | null>(null);
+  const calendarWeeks = useMemo(() => getCalendarWeeks(calendarMonth), [calendarMonth]);
+  const calendarMonthLabel = getMonthLabel(calendarMonth);
+
   return (
     <View style={styles.resultsShell}>
       {resultsHeadingVisible ? (
@@ -94,7 +96,6 @@ export default function SelectionRoomResults({
               getSelectedTimeslotKey(slot)
             );
             const hasSelectedSlots = selectedSlots.length > 0;
-            const weekOffset = weekOffsets[room.id] ?? 0;
 
             return (
               <View key={room.id} style={styles.roomCard}>
@@ -146,35 +147,35 @@ export default function SelectionRoomResults({
 
                     <View style={styles.schedulePreviewCard}>
                       <Text style={styles.schedulePreviewTitle}>View Schedules</Text>
-                      <Text style={styles.schedulePreviewSubtitle}>
-                        <Text style={styles.schedulePreviewGreen}>Green</Text>
-                        {" means available, "}
-                        <Text style={styles.schedulePreviewYellow}>yellow</Text>
-                        {" means there is an ongoing reservation request, and "}
-                        <Text style={styles.schedulePreviewRed}>red</Text>
-                        {" means unavailable."}
-                      </Text>
-                      <Text style={styles.schedulePreviewHelperText}>
-                        <Text style={styles.schedulePreviewHelperTextBold}>
-                          Tap the timeslots
-                        </Text>{" "}
-                        to reserve this room. Selecting a later timeslot on the same day
-                        automatically fills the full range in between.
-                      </Text>
-                      <WeeklyScheduleGrid
-                        campus={room.campus}
-                        roomId={room.id}
-                        schedules={schedules}
-                        userReservations={userReservations}
-                        weekOffset={weekOffset}
-                        weekNavTopMargin={12}
-                        onWeekChange={(nextWeekOffset) =>
-                          onWeekOffsetChange(room.id, nextWeekOffset)
+                      <AvailabilityCalendar
+                        calendarMonthLabel={calendarMonthLabel}
+                        calendarWeeks={calendarWeeks}
+                        isCalendarDateDisabled={(date) =>
+                          isPastDate(date) || date.getDay() === 0
                         }
+                        isCalendarDateSelected={(dateKey) =>
+                          selectedSlots.some((slot) => slot.dateKey === dateKey)
+                        }
+                        onCalendarDateSelect={(dateKey) => setModalDateKey(dateKey)}
+                        onNextMonth={() =>
+                          setCalendarMonth((prev) => addMonths(prev, 1))
+                        }
+                        onPrevMonth={() =>
+                          setCalendarMonth((prev) => addMonths(prev, -1))
+                        }
+                      />
+                      <DayScheduleModal
+                        campus={room.campus as ReservationCampus | null}
+                        dateKey={modalDateKey ?? ""}
+                        onClose={() => setModalDateKey(null)}
                         onSlotPress={(dateKey, slot) =>
                           onToggleSelectedTimeslot(room, dateKey, slot)
                         }
+                        roomId={room.id}
+                        schedules={schedules}
                         selectedSlotKeys={selectedSlotKeys}
+                        userReservations={userReservations}
+                        visible={modalDateKey !== null}
                       />
                       <TouchableOpacity
                         disabled={!hasSelectedSlots}

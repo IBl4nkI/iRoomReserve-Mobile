@@ -10,12 +10,14 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import SelectionScreenLayout from "@/components/SelectionScreenLayout";
-import WeeklyScheduleGrid from "@/components/WeeklyScheduleGrid";
-import { applySelectedTimeslotPress } from "@/components/selection-room-search/helpers";
+import AvailabilityCalendar from "@/components/AvailabilityCalendar";
+import DayScheduleModal from "@/components/DayScheduleModal";
+import { addMonths, applySelectedTimeslotPress, getCalendarWeeks, getMonthLabel } from "@/components/selection-room-search/helpers";
 import { colors, fonts } from "@/constants/theme";
 import {
   formatFullDate,
   getRoomCampus,
+  isPastDate,
   type TimeSlotViewModel,
 } from "@/lib/reservation-search";
 import {
@@ -93,7 +95,6 @@ export default function RoomDetailsScreen() {
   const resolvedRoomId = String(roomId);
   const [room, setRoom] = useState<Room | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [weekOffset, setWeekOffset] = useState(0);
   const [selectedSlots, setSelectedSlots] = useState<SelectedTimeslot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +102,10 @@ export default function RoomDetailsScreen() {
     () => selectedSlots.map((slot) => getTimeslotKey(slot)),
     [selectedSlots]
   );
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [modalDateKey, setModalDateKey] = useState<string | null>(null);
+  const calendarWeeks = useMemo(() => getCalendarWeeks(calendarMonth), [calendarMonth]);
+  const calendarMonthLabel = getMonthLabel(calendarMonth);
   const hasSelection = selectedSlots.length > 0;
   const hasPendingSelection = selectedSlots.some((slot) => slot.state === "pending");
   const reserveButtonLabel = !hasSelection
@@ -335,19 +340,36 @@ export default function RoomDetailsScreen() {
               <Text style={styles.selectionHintRed}>red</Text>
               {" means unavailable."}
             </Text>
-            <WeeklyScheduleGrid
+            <Text style={styles.selectionHelperText}>
+              Tap a date to view and select timeslots for reservation.
+            </Text>
+            <AvailabilityCalendar
+              calendarMonthLabel={calendarMonthLabel}
+              calendarWeeks={calendarWeeks}
+              isCalendarDateDisabled={(date) =>
+                isPastDate(date) || date.getDay() === 0
+              }
+              isCalendarDateSelected={(dateKey) =>
+                selectedSlots.some((slot) => slot.dateKey === dateKey)
+              }
+              onCalendarDateSelect={(dateKey) => setModalDateKey(dateKey)}
+              onNextMonth={() =>
+                setCalendarMonth((prev) => addMonths(prev, 1))
+              }
+              onPrevMonth={() =>
+                setCalendarMonth((prev) => addMonths(prev, -1))
+              }
+            />
+            <DayScheduleModal
               campus={room ? getRoomCampus(room) : null}
+              dateKey={modalDateKey ?? ""}
+              onClose={() => setModalDateKey(null)}
+              onSlotPress={handleSlotPress}
               roomId={resolvedRoomId}
               schedules={schedules}
-              weekOffset={weekOffset}
-              onWeekChange={setWeekOffset}
-              onSlotPress={handleSlotPress}
               selectedSlotKeys={selectedSlotKeys}
+              visible={modalDateKey !== null}
             />
-            <Text style={styles.selectionHelperText}>
-              Tap green or yellow timeslots to build a reservation. Picking a later
-              timeslot on the same day automatically selects the full range in between.
-            </Text>
             <TouchableOpacity
               disabled={!hasSelection}
               onPress={handleReserveSelectedSlots}
@@ -432,7 +454,7 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontFamily: fonts.bold,
     fontSize: 18,
-    marginBottom: 12,
+    marginBottom: 20,
   },
   selectionHint: {
     color: colors.secondary,

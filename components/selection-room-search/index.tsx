@@ -1317,7 +1317,6 @@ export default function SelectionRoomSearch({
           roomsLoading={roomsLoading}
           scheduleLoadingIds={scheduleLoadingIds}
           selectedSlotsByRoom={selectedSlotsByRoom}
-          weekOffsets={weekOffsets}
           onOpenReservationFormForRoom={openReservationFormForRoom}
           onRoomPress={(roomId) =>
             router.push({
@@ -1327,12 +1326,6 @@ export default function SelectionRoomSearch({
           }
           onToggleExpandedRoom={toggleExpandedRoom}
           onToggleSelectedTimeslot={toggleSelectedTimeslot}
-          onWeekOffsetChange={(roomId, nextWeekOffset) =>
-            setWeekOffsets((currentValue) => ({
-              ...currentValue,
-              [roomId]: nextWeekOffset,
-            }))
-          }
         />
       )}
     </View>
