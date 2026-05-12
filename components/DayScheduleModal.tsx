@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -31,7 +32,10 @@ interface DayScheduleModalProps {
   campus: ReservationCampus | null;
   dateKey: string;
   onClose: () => void;
+  onDiscardChanges?: () => void;
+  onSave?: () => void;
   onSlotPress: (dateKey: string, slot: TimeSlotViewModel) => void;
+  saveButtonLabel?: string;
   roomId: string;
   schedules: Schedule[];
   selectedSlotKeys: string[];
@@ -68,7 +72,7 @@ function getStatusStyles(state: TimeSlotViewModel["state"]) {
 
 function formatModalHeading(dateKey: string) {
   const date = new Date(`${dateKey}T00:00:00`);
-  const weekday = date.toLocaleDateString("en-US", {weekday: "short" });
+  const weekday = date.toLocaleDateString("en-US", { weekday: "short" });
   const fullDate = date.toLocaleDateString("en-US", {
     month: "long",
     day: "numeric",
@@ -81,7 +85,10 @@ export default function DayScheduleModal({
   campus,
   dateKey,
   onClose,
+  onDiscardChanges,
+  onSave,
   onSlotPress,
+  saveButtonLabel,
   roomId,
   schedules,
   selectedSlotKeys,
@@ -160,6 +167,16 @@ export default function DayScheduleModal({
   }, [userReservations, visible]);
 
   const effectiveUserReservations = userReservations ?? currentUserReservations;
+  const selectedKeysForDate = useMemo(
+    () =>
+      selectedSlotKeys
+        .filter((slotKey) => slotKey.startsWith(`${dateKey}-`))
+        .sort((left, right) => left.localeCompare(right)),
+    [dateKey, selectedSlotKeys]
+  );
+  const [initialSelectedKeysForDate, setInitialSelectedKeysForDate] = useState<string[]>(
+    []
+  );
 
   const visibleSlots = useMemo(() => {
     if (!dateKey) {
@@ -191,27 +208,72 @@ export default function DayScheduleModal({
     schedules,
   ]);
 
+  useEffect(() => {
+    if (!visible || !dateKey) {
+      return;
+    }
+
+    setInitialSelectedKeysForDate(selectedKeysForDate);
+  }, [dateKey, visible]);
+
   if (!dateKey) {
     return null;
   }
 
   const heading = formatModalHeading(dateKey);
+  const hasUnsavedChanges =
+    initialSelectedKeysForDate.length !== selectedKeysForDate.length ||
+    initialSelectedKeysForDate.some(
+      (slotKey, index) => slotKey !== selectedKeysForDate[index]
+    );
+
+  function handleClosePress() {
+    if (!hasUnsavedChanges) {
+      onClose();
+      return;
+    }
+
+    Alert.alert(
+      "Discard changes?",
+      "You have unsaved timeslot changes for this date. If you close now, those changes will be lost.",
+      [
+        { style: "cancel", text: "Keep editing" },
+        {
+          style: "destructive",
+          text: "Discard",
+          onPress: () => {
+            onDiscardChanges?.();
+            onClose();
+          },
+        },
+      ]
+    );
+  }
+
+  function handleSavePress() {
+    if (onSave) {
+      onSave();
+      return;
+    }
+
+    onClose();
+  }
 
   return (
     <Modal
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={handleClosePress}
       transparent
       visible={visible}
     >
       <View style={styles.backdrop}>
-        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <Pressable style={StyleSheet.absoluteFill} onPress={handleClosePress} />
         <View style={styles.card}>
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <Text style={styles.heading}>{heading}</Text>
             </View>
-            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+            <TouchableOpacity style={styles.closeButton} onPress={handleClosePress}>
               <Text style={styles.closeButtonText}>X</Text>
             </TouchableOpacity>
           </View>
@@ -322,10 +384,14 @@ export default function DayScheduleModal({
             )}
           </ScrollView>
 
-          <Text style={styles.helperText}>
-            Tap a timeslot to select it. Selecting a later timeslot on the same
-            day automatically fills the full range in between.
-          </Text>
+          {onSave ? (
+            <TouchableOpacity
+              onPress={handleSavePress}
+              style={styles.saveButton}
+            >
+              <Text style={styles.saveButtonText}>{saveButtonLabel}</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
     </Modal>
@@ -486,12 +552,17 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 18,
   },
-  helperText: {
-    color: colors.secondary,
-    fontFamily: fonts.regular,
-    fontSize: 11,
-    lineHeight: 16,
+  saveButton: {
     marginTop: 10,
-    textAlign: "center",
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: "center",
+  },
+  saveButtonText: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 14,
   },
 });

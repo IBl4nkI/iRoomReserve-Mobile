@@ -96,6 +96,9 @@ export default function RoomDetailsScreen() {
   const [room, setRoom] = useState<Room | null>(null);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [selectedSlots, setSelectedSlots] = useState<SelectedTimeslot[]>([]);
+  const [modalSelectionSnapshot, setModalSelectionSnapshot] = useState<
+    SelectedTimeslot[] | null
+  >(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const selectedSlotKeys = useMemo(
@@ -265,6 +268,22 @@ export default function RoomDetailsScreen() {
     openReservationForm(selectionLabel, timeslot, selectedTimeslots);
   }
 
+  function handleOpenDayScheduleModal(dateKey: string) {
+    setModalSelectionSnapshot(selectedSlots);
+    setModalDateKey(dateKey);
+  }
+
+  function handleCloseDayScheduleModal() {
+    setModalDateKey(null);
+    setModalSelectionSnapshot(null);
+  }
+
+  function handleDiscardDayScheduleChanges() {
+    if (modalSelectionSnapshot) {
+      setSelectedSlots(modalSelectionSnapshot);
+    }
+  }
+
   if (!loading && (!room || error)) {
     return (
       <SelectionScreenLayout
@@ -352,7 +371,7 @@ export default function RoomDetailsScreen() {
               isCalendarDateSelected={(dateKey) =>
                 selectedSlots.some((slot) => slot.dateKey === dateKey)
               }
-              onCalendarDateSelect={(dateKey) => setModalDateKey(dateKey)}
+              onCalendarDateSelect={handleOpenDayScheduleModal}
               onNextMonth={() =>
                 setCalendarMonth((prev) => addMonths(prev, 1))
               }
@@ -363,8 +382,11 @@ export default function RoomDetailsScreen() {
             <DayScheduleModal
               campus={room ? getRoomCampus(room) : null}
               dateKey={modalDateKey ?? ""}
-              onClose={() => setModalDateKey(null)}
+              onClose={handleCloseDayScheduleModal}
+              onDiscardChanges={handleDiscardDayScheduleChanges}
+              onSave={handleCloseDayScheduleModal}
               onSlotPress={handleSlotPress}
+              saveButtonLabel="Save"
               roomId={resolvedRoomId}
               schedules={schedules}
               selectedSlotKeys={selectedSlotKeys}

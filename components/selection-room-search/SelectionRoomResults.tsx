@@ -24,6 +24,7 @@ interface SelectionRoomResultsProps {
   selectedSlotsByRoom: Record<string, SelectedTimeslot[]>;
   onOpenReservationFormForRoom: (room: SearchRoom) => void;
   onRoomPress: (roomId: string) => void;
+  onSetSelectedSlotsForRoom: (roomId: string, slots: SelectedTimeslot[]) => void;
   onToggleExpandedRoom: (roomId: string) => void;
   onToggleSelectedTimeslot: (
     room: SearchRoom,
@@ -47,13 +48,43 @@ export default function SelectionRoomResults({
   selectedSlotsByRoom,
   onOpenReservationFormForRoom,
   onRoomPress,
+  onSetSelectedSlotsForRoom,
   onToggleExpandedRoom,
   onToggleSelectedTimeslot,
 }: SelectionRoomResultsProps) {
   const [calendarMonth, setCalendarMonth] = useState(new Date());
   const [modalDateKey, setModalDateKey] = useState<string | null>(null);
+  const [modalSelectionSnapshot, setModalSelectionSnapshot] = useState<{
+    roomId: string;
+    slots: SelectedTimeslot[];
+  } | null>(null);
   const calendarWeeks = useMemo(() => getCalendarWeeks(calendarMonth), [calendarMonth]);
   const calendarMonthLabel = getMonthLabel(calendarMonth);
+
+  function handleOpenDayScheduleModal(
+    roomId: string,
+    dateKey: string,
+    selectedSlots: SelectedTimeslot[]
+  ) {
+    setModalSelectionSnapshot({
+      roomId,
+      slots: selectedSlots,
+    });
+    setModalDateKey(dateKey);
+  }
+
+  function handleCloseDayScheduleModal() {
+    setModalDateKey(null);
+    setModalSelectionSnapshot(null);
+  }
+
+  function handleDiscardDayScheduleChanges(room: SearchRoom) {
+    if (modalSelectionSnapshot?.roomId !== room.id) {
+      return;
+    }
+
+    onSetSelectedSlotsForRoom(room.id, modalSelectionSnapshot.slots);
+  }
 
   return (
     <View style={styles.resultsShell}>
@@ -96,6 +127,8 @@ export default function SelectionRoomResults({
               getSelectedTimeslotKey(slot)
             );
             const hasSelectedSlots = selectedSlots.length > 0;
+            const isModalOpenForRoom =
+              modalDateKey !== null && modalSelectionSnapshot?.roomId === room.id;
 
             return (
               <View key={room.id} style={styles.roomCard}>
@@ -156,7 +189,9 @@ export default function SelectionRoomResults({
                         isCalendarDateSelected={(dateKey) =>
                           selectedSlots.some((slot) => slot.dateKey === dateKey)
                         }
-                        onCalendarDateSelect={(dateKey) => setModalDateKey(dateKey)}
+                        onCalendarDateSelect={(dateKey) =>
+                          handleOpenDayScheduleModal(room.id, dateKey, selectedSlots)
+                        }
                         onNextMonth={() =>
                           setCalendarMonth((prev) => addMonths(prev, 1))
                         }
@@ -166,16 +201,19 @@ export default function SelectionRoomResults({
                       />
                       <DayScheduleModal
                         campus={room.campus as ReservationCampus | null}
-                        dateKey={modalDateKey ?? ""}
-                        onClose={() => setModalDateKey(null)}
+                        dateKey={isModalOpenForRoom ? modalDateKey ?? "" : ""}
+                        onClose={handleCloseDayScheduleModal}
+                        onDiscardChanges={() => handleDiscardDayScheduleChanges(room)}
+                        onSave={handleCloseDayScheduleModal}
                         onSlotPress={(dateKey, slot) =>
                           onToggleSelectedTimeslot(room, dateKey, slot)
                         }
+                        saveButtonLabel="Save Selected Timeslots"
                         roomId={room.id}
                         schedules={schedules}
                         selectedSlotKeys={selectedSlotKeys}
                         userReservations={userReservations}
-                        visible={modalDateKey !== null}
+                        visible={isModalOpenForRoom}
                       />
                       <TouchableOpacity
                         disabled={!hasSelectedSlots}

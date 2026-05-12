@@ -772,6 +772,13 @@ export default function SelectionRoomSearch({
     });
   }
 
+  function setSelectedSlotsForRoom(roomId: string, slots: SelectedTimeslot[]) {
+    setSelectedSlotsByRoom((currentValue) => ({
+      ...currentValue,
+      [roomId]: slots,
+    }));
+  }
+
   function openReservationFormForRoom(room: SearchRoom) {
     const selectedSlots = [...(selectedSlotsByRoom[room.id] ?? [])].sort((left, right) => {
       const dateComparison = left.dateKey.localeCompare(right.dateKey);
@@ -1324,6 +1331,7 @@ export default function SelectionRoomSearch({
               params: { roomId },
             })
           }
+          onSetSelectedSlotsForRoom={setSelectedSlotsForRoom}
           onToggleExpandedRoom={toggleExpandedRoom}
           onToggleSelectedTimeslot={toggleSelectedTimeslot}
         />
