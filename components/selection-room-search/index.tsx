@@ -1325,12 +1325,6 @@ export default function SelectionRoomSearch({
           scheduleLoadingIds={scheduleLoadingIds}
           selectedSlotsByRoom={selectedSlotsByRoom}
           onOpenReservationFormForRoom={openReservationFormForRoom}
-          onRoomPress={(roomId) =>
-            router.push({
-              pathname: "/(main)/rooms/[roomId]",
-              params: { roomId },
-            })
-          }
           onSetSelectedSlotsForRoom={setSelectedSlotsForRoom}
           onToggleExpandedRoom={toggleExpandedRoom}
           onToggleSelectedTimeslot={toggleSelectedTimeslot}

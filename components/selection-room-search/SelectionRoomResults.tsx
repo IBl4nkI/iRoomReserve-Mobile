@@ -23,7 +23,6 @@ interface SelectionRoomResultsProps {
   scheduleLoadingIds: Record<string, boolean>;
   selectedSlotsByRoom: Record<string, SelectedTimeslot[]>;
   onOpenReservationFormForRoom: (room: SearchRoom) => void;
-  onRoomPress: (roomId: string) => void;
   onSetSelectedSlotsForRoom: (roomId: string, slots: SelectedTimeslot[]) => void;
   onToggleExpandedRoom: (roomId: string) => void;
   onToggleSelectedTimeslot: (
@@ -47,7 +46,6 @@ export default function SelectionRoomResults({
   scheduleLoadingIds,
   selectedSlotsByRoom,
   onOpenReservationFormForRoom,
-  onRoomPress,
   onSetSelectedSlotsForRoom,
   onToggleExpandedRoom,
   onToggleSelectedTimeslot,
@@ -135,7 +133,7 @@ export default function SelectionRoomResults({
                 <View style={styles.roomHeader}>
                   <TouchableOpacity
                     style={styles.roomInfoPressable}
-                    onPress={() => onRoomPress(room.id)}
+                    onPress={() => onToggleExpandedRoom(room.id)}
                   >
                     <Text style={styles.roomName}>{room.name}</Text>
                     <Text style={styles.roomMeta}>{room.buildingName}</Text>
