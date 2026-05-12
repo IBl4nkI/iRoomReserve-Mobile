@@ -1566,7 +1566,6 @@ export default function ReservationFormScreen() {
         endTime={endTime}
         endTimeParts={endTimeParts}
         hourOptions={timeWheelHoursForPeriod}
-        minuteOptions={timeWheelMinutesForHour}
         onClose={() => setOpenTimeField(null)}
         onTimeWheelScroll={handleTimeWheelScroll}
         openTimeField={openTimeField}

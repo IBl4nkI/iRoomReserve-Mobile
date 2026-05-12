@@ -9,7 +9,6 @@ interface RoomTimePickerModalProps {
   endTime: string;
   endTimeParts: { hour: string; minute: "00" | "30"; period: "AM" | "PM" };
   hourOptions: string[];
-  minuteOptions: Array<"00" | "30">;
   onClose: () => void;
   onTimeWheelScroll: (
     field: "start" | "end",
@@ -27,7 +26,6 @@ export default function RoomTimePickerModal({
   endTime,
   endTimeParts,
   hourOptions,
-  minuteOptions,
   onClose,
   onTimeWheelScroll,
   openTimeField,
@@ -102,46 +100,11 @@ export default function RoomTimePickerModal({
 
               <Text style={styles.divider}>:</Text>
 
-              <ScrollView
-                key={`${openTimeField}-${openTimeField === "start" ? startTime : endTime}-minute`}
-                style={styles.wheelColumn}
-                contentContainerStyle={styles.wheelContent}
-                showsVerticalScrollIndicator={false}
-                nestedScrollEnabled
-                snapToInterval={TIME_WHEEL_ITEM_HEIGHT}
-                decelerationRate="fast"
-                scrollEventThrottle={16}
-                onScrollEndDrag={(event) =>
-                  onTimeWheelScroll(openTimeField, "minute", event.nativeEvent.contentOffset.y)
-                }
-                onMomentumScrollEnd={(event) =>
-                  onTimeWheelScroll(openTimeField, "minute", event.nativeEvent.contentOffset.y)
-                }
-                contentOffset={{
-                  x: 0,
-                  y:
-                    Math.max(
-                      0,
-                      minuteOptions.indexOf(
-                      openTimeField === "start" ? startTimeParts.minute : endTimeParts.minute
-                      )
-                    ) * TIME_WHEEL_ITEM_HEIGHT,
-                }}
-              >
-                {minuteOptions.map((minute) => {
-                  const selected =
-                    minute ===
-                    (openTimeField === "start" ? startTimeParts.minute : endTimeParts.minute);
-
-                  return (
-                    <View key={minute} style={styles.wheelItem}>
-                      <Text style={[styles.wheelText, selected && styles.wheelTextSelected]}>
-                        {minute}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </ScrollView>
+              <View style={styles.minuteColumn}>
+                <View style={styles.wheelItem}>
+                  <Text style={[styles.wheelText, styles.wheelTextSelected]}>00</Text>
+                </View>
+              </View>
 
               <ScrollView
                 key={`${openTimeField}-${openTimeField === "start" ? startTime : endTime}-period`}
@@ -256,6 +219,11 @@ const styles = StyleSheet.create({
   wheelColumn: {
     width: 88,
     maxHeight: TIME_WHEEL_ITEM_HEIGHT * 3,
+  },
+  minuteColumn: {
+    width: 88,
+    maxHeight: TIME_WHEEL_ITEM_HEIGHT * 3,
+    justifyContent: "center",
   },
   periodColumn: {
     width: 92,

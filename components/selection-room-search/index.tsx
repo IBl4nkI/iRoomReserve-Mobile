@@ -896,12 +896,9 @@ export default function SelectionRoomSearch({
       parts.hour ?? (validHours.includes(currentParts.hour) ? currentParts.hour : validHours[0] ?? currentParts.hour);
     const normalizedHour = validHours.includes(nextHour) ? nextHour : validHours[0] ?? nextHour;
     const validMinutes = getTimeWheelMinutesForHour(fieldOptions, nextPeriod, normalizedHour);
-    const requestedMinute = (parts.minute ?? currentParts.minute) as (typeof TIME_MINUTE_OPTIONS)[number];
-    const nextMinute =
-      validMinutes.includes(requestedMinute)
-        ? requestedMinute
-        : validMinutes[0] ?? currentParts.minute;
-    const normalizedMinute = validMinutes.includes(nextMinute) ? nextMinute : validMinutes[0] ?? nextMinute;
+    const normalizedMinute = validMinutes.includes("00")
+      ? "00"
+      : (validMinutes[0] ?? currentParts.minute);
 
     applyTimeValue(
       field,
@@ -933,11 +930,6 @@ export default function SelectionRoomSearch({
     }
 
     if (wheel === "minute") {
-      const index = Math.max(
-        0,
-        Math.min(timeWheelMinutesForHour.length - 1, Math.round(offsetY / TIME_WHEEL_ITEM_HEIGHT))
-      );
-      updateTimeFromPicker(field, { minute: timeWheelMinutesForHour[index] });
       return;
     }
 
@@ -1298,7 +1290,6 @@ export default function SelectionRoomSearch({
         endTime={endTimeDraft}
         endTimeParts={endTimeParts}
         hourOptions={timeWheelHoursForPeriod}
-        minuteOptions={timeWheelMinutesForHour}
         onClose={() => setOpenTimeField(null)}
         onTimeWheelScroll={handleTimeWheelScroll}
         openTimeField={openTimeField}
