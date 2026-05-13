@@ -21,7 +21,6 @@ import {
   getReservationsByRoom,
   getReservationsByUser,
 } from "@/services/reservations.service";
-import { formatTime12h } from "@/services/schedules.service";
 import type {
   ReservationCampus,
   ReservationRecord,
@@ -79,6 +78,57 @@ function formatModalHeading(dateKey: string) {
     year: "numeric",
   });
   return `(${weekday}) ${fullDate}`;
+}
+
+function formatHourOnly(timeString: string) {
+  return new Date(`2000-01-01T${timeString}:00`).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    hour12: true,
+  });
+}
+
+function formatHourRangeLabel(startTime: string, endTime: string) {
+  const start = new Date(`2000-01-01T${startTime}:00`).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    hour12: true,
+  });
+  const end = new Date(`2000-01-01T${endTime}:00`).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    hour12: true,
+  });
+
+  return `${start} - ${end}`;
+}
+
+function formatSelectedDateLabel(dateKey: string) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  const weekday = date.toLocaleDateString("en-US", { weekday: "short" });
+  const monthDay = date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+
+  return `${weekday}, ${monthDay}`;
+}
+
+function formatFullTime(timeString: string) {
+  return new Date(`2000-01-01T${timeString}:00`).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+function getStateLabel(state: TimeSlotViewModel["state"]) {
+  if (state === "pending") {
+    return "Pending";
+  }
+
+  if (state === "unavailable") {
+    return "Unavailable";
+  }
+
+  return "Available";
 }
 
 export default function DayScheduleModal({
@@ -216,6 +266,75 @@ export default function DayScheduleModal({
     setInitialSelectedKeysForDate(selectedKeysForDate);
   }, [dateKey, visible]);
 
+  const selectedRangeLabel = useMemo(() => {
+    if (!dateKey || selectedKeysForDate.length === 0) {
+      return null;
+    }
+
+    const orderedKeys = [...selectedKeysForDate].sort((left, right) =>
+      left.localeCompare(right)
+    );
+    const firstKeyParts = orderedKeys[0]?.split("-");
+    const lastKeyParts = orderedKeys[orderedKeys.length - 1]?.split("-");
+
+    if (!firstKeyParts || !lastKeyParts || firstKeyParts.length < 5 || lastKeyParts.length < 5) {
+      return null;
+    }
+
+    const startTime = firstKeyParts[3];
+    const endTime = lastKeyParts[4];
+
+    if (!startTime || !endTime) {
+      return null;
+    }
+
+    return `Reserve ${formatHourRangeLabel(startTime, endTime)} for ${formatSelectedDateLabel(
+      dateKey
+    )}`;
+  }, [dateKey, selectedKeysForDate]);
+  const selectedSlotContentByKey = useMemo(() => {
+    const contentByKey: Record<string, string> = {};
+    const selectedSlots = visibleSlots.filter((slot) =>
+      selectedKeysForDate.includes(`${dateKey}-${slot.startTime}-${slot.endTime}`)
+    );
+
+    if (selectedSlots.length === 0) {
+      return contentByKey;
+    }
+
+    let groupStart = 0;
+
+    while (groupStart < selectedSlots.length) {
+      let groupEnd = groupStart;
+
+      while (
+        groupEnd + 1 < selectedSlots.length &&
+        selectedSlots[groupEnd]?.endTime === selectedSlots[groupEnd + 1]?.startTime
+      ) {
+        groupEnd += 1;
+      }
+
+      const group = selectedSlots.slice(groupStart, groupEnd + 1);
+      const firstSlot = group[0];
+      const lastSlot = group[group.length - 1];
+      const stateLabel = getStateLabel(lastSlot.state);
+
+      if (group.length === 1) {
+        contentByKey[`${dateKey}-${firstSlot.startTime}-${firstSlot.endTime}`] =
+          `${formatFullTime(firstSlot.startTime)} - ${formatFullTime(firstSlot.endTime)} (${stateLabel})`;
+      } else {
+        contentByKey[`${dateKey}-${firstSlot.startTime}-${firstSlot.endTime}`] =
+          `${formatFullTime(firstSlot.startTime)} -`;
+        contentByKey[`${dateKey}-${lastSlot.startTime}-${lastSlot.endTime}`] =
+          `${formatFullTime(lastSlot.endTime)} (${stateLabel})`;
+      }
+
+      groupStart = groupEnd + 1;
+    }
+
+    return contentByKey;
+  }, [dateKey, selectedKeysForDate, visibleSlots]);
+
   if (!dateKey) {
     return null;
   }
@@ -318,67 +437,53 @@ export default function DayScheduleModal({
                 </Text>
               </View>
             ) : (
-              visibleSlots.map((slot) => {
+              visibleSlots.map((slot, index) => {
                 const slotKey = `${dateKey}-${slot.startTime}-${slot.endTime}`;
                 const isSelected = selectedSlotKeys.includes(slotKey);
                 const statusStyles = getStatusStyles(slot.state);
-
+                const selectedContent = selectedSlotContentByKey[slotKey];
+                const showEndLabel = index < visibleSlots.length - 1;
                 return (
-                  <TouchableOpacity
-                    key={slotKey}
-                    activeOpacity={0.8}
-                    onPress={() => onSlotPress(dateKey, slot)}
-                    style={styles.slotRow}
-                  >
-                    <View style={styles.timeLabelColumn}>
-                      <Text style={styles.timeLabel}>
-                        {formatTime12h(slot.startTime)}
-                      </Text>
+                  <View key={slotKey} style={styles.slotSection}>
+                    <View style={styles.slotRow}>
+                      <View style={styles.timeColumn} />
+                      <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => onSlotPress(dateKey, slot)}
+                        style={styles.slotTrack}
+                      >
+                        <View
+                          style={[
+                            styles.slotBody,
+                            {
+                              backgroundColor: isSelected
+                                ? colors.primary
+                                : statusStyles.backgroundColor,
+                              borderColor: isSelected
+                                ? colors.primary
+                                : statusStyles.borderColor,
+                            },
+                            isSelected && styles.slotBodySelected,
+                          ]}
+                        >
+                          {selectedContent ? (
+                            <Text style={styles.selectedSlotText}>
+                              {selectedContent}
+                            </Text>
+                          ) : null}
+                        </View>
+                      </TouchableOpacity>
                     </View>
 
-                    <View style={styles.slotTrack}>
-                      <View
-                        style={[
-                          styles.slotBody,
-                          {
-                            backgroundColor: isSelected
-                              ? colors.primary
-                              : statusStyles.backgroundColor,
-                            borderColor: isSelected
-                              ? colors.primary
-                              : statusStyles.borderColor,
-                          },
-                          isSelected && styles.slotBodySelected,
-                        ]}
-                      >
-                        <Text
-                          style={[
-                            styles.slotTimeRange,
-                            {
-                              color: isSelected
-                                ? colors.white
-                                : statusStyles.textColor,
-                            },
-                          ]}
-                        >
-                          {formatTime12h(slot.startTime)} -{" "}
-                          {formatTime12h(slot.endTime)}
+                    {showEndLabel ? (
+                      <View style={styles.timeMarkerRow}>
+                        <Text style={styles.timeLabel}>
+                          {formatHourOnly(slot.endTime)}
                         </Text>
-                        <Text
-                          style={[
-                            styles.slotDescription,
-                            {
-                              color: isSelected
-                                ? "rgba(255,255,255,0.84)"
-                                : statusStyles.labelColor,
-                            },
-                          ]}
-                        >
-                          {slot.description}
-                        </Text>
+                        <View style={styles.timeMarkerSpacer} />
                       </View>
-                    </View>
-                  </TouchableOpacity>
+                    ) : null}
+                  </View>
                 );
               })
             )}
@@ -389,7 +494,9 @@ export default function DayScheduleModal({
               onPress={handleSavePress}
               style={styles.saveButton}
             >
-              <Text style={styles.saveButtonText}>{saveButtonLabel}</Text>
+              <Text style={styles.saveButtonText}>
+                {selectedRangeLabel ?? saveButtonLabel}
+              </Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -505,34 +612,49 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     textAlign: "center",
   },
+  slotSection: {
+    marginBottom: 2,
+    position: "relative",
+  },
+  timeMarkerRow: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: -7,
+    flexDirection: "row",
+    alignItems: "flex-end",
+  },
+  timeMarkerSpacer: {
+    flex: 1,
+  },
   slotRow: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    marginBottom: 10,
+    alignItems: "stretch",
   },
-  timeLabelColumn: {
-    width: 62,
-    paddingTop: 10,
+  timeColumn: {
+    width: 64,
     paddingRight: 8,
+    alignItems: "flex-end",
   },
   timeLabel: {
     color: colors.secondary,
     fontFamily: fonts.bold,
     fontSize: 12,
+    width: 52,
     textAlign: "right",
   },
   slotTrack: {
     flex: 1,
-    minHeight: 76,
+    minHeight: 52,
     justifyContent: "center",
   },
   slotBody: {
     flex: 1,
-    minHeight: 76,
-    borderRadius: 16,
+    minHeight: 52,
+    borderRadius: 4,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    backgroundColor: colors.subtleBackground,
+    alignItems: "center",
     justifyContent: "center",
   },
   slotBodySelected: {
@@ -542,15 +664,13 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 3,
   },
-  slotTimeRange: {
+  selectedSlotText: {
+    color: colors.white,
     fontFamily: fonts.bold,
-    fontSize: 14,
-    marginBottom: 4,
-  },
-  slotDescription: {
-    fontFamily: fonts.regular,
     fontSize: 12,
     lineHeight: 18,
+    paddingHorizontal: 10,
+    textAlign: "center",
   },
   saveButton: {
     marginTop: 10,
