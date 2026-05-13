@@ -1,5 +1,14 @@
 import React from "react";
-import { Modal, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  Alert,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 import { colors, fonts } from "@/constants/theme";
 
@@ -8,8 +17,11 @@ const TIME_WHEEL_ITEM_HEIGHT = 72;
 interface RoomTimePickerModalProps {
   endTime: string;
   endTimeParts: { hour: string; minute: "00" | "30"; period: "AM" | "PM" };
+  hasUnsavedChanges?: boolean;
   hourOptions: string[];
   onClose: () => void;
+  onDiscardChanges?: () => void;
+  onSave?: () => void;
   onTimeWheelScroll: (
     field: "start" | "end",
     wheel: "hour" | "minute" | "period",
@@ -17,6 +29,7 @@ interface RoomTimePickerModalProps {
   ) => void;
   openTimeField: "start" | "end" | null;
   periodOptions: Array<"AM" | "PM">;
+  saveButtonLabel?: string;
   selectedCampus: string | null;
   startTime: string;
   startTimeParts: { hour: string; minute: "00" | "30"; period: "AM" | "PM" };
@@ -25,29 +38,62 @@ interface RoomTimePickerModalProps {
 export default function RoomTimePickerModal({
   endTime,
   endTimeParts,
+  hasUnsavedChanges = false,
   hourOptions,
   onClose,
+  onDiscardChanges,
+  onSave,
   onTimeWheelScroll,
   openTimeField,
   periodOptions,
+  saveButtonLabel = "Save Time",
   selectedCampus,
   startTime,
   startTimeParts,
 }: RoomTimePickerModalProps) {
+  function handleClosePress() {
+    if (!hasUnsavedChanges) {
+      onClose();
+      return;
+    }
+
+    Alert.alert(
+      "Discard changes?",
+      "You have unsaved time changes. If you close now, those changes will be lost.",
+      [
+        { style: "cancel", text: "Keep editing" },
+        {
+          style: "destructive",
+          text: "Discard",
+          onPress: () => {
+            onDiscardChanges?.();
+            onClose();
+          },
+        },
+      ]
+    );
+  }
+
+  function handleSavePress() {
+    onSave?.();
+    onClose();
+  }
+
   return (
     <Modal
       visible={Boolean(openTimeField)}
       transparent
       animationType="fade"
-      onRequestClose={onClose}
+      onRequestClose={handleClosePress}
     >
       <View style={styles.backdrop}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={handleClosePress} />
         <View style={styles.card}>
           <View style={styles.header}>
             <Text style={styles.title}>
               {openTimeField === "start" ? "Choose Start Time" : "Choose End Time"}
             </Text>
-            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+            <TouchableOpacity style={styles.closeButton} onPress={handleClosePress}>
               <Text style={styles.closeText}>X</Text>
             </TouchableOpacity>
           </View>
@@ -154,6 +200,12 @@ export default function RoomTimePickerModal({
               </ScrollView>
             </View>
           ) : null}
+
+          {onSave ? (
+            <TouchableOpacity onPress={handleSavePress} style={styles.saveButton}>
+              <Text style={styles.saveButtonText}>{saveButtonLabel}</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
     </Modal>
@@ -173,6 +225,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.surface,
     padding: 18,
+    zIndex: 1,
   },
   header: {
     flexDirection: "row",
@@ -257,5 +310,17 @@ const styles = StyleSheet.create({
     fontSize: 52,
     lineHeight: 56,
     marginHorizontal: 4,
+  },
+  saveButton: {
+    marginTop: 12,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    alignItems: "center",
+  },
+  saveButtonText: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 14,
   },
 });

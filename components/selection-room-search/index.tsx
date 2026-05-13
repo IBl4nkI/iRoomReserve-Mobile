@@ -124,6 +124,11 @@ export default function SelectionRoomSearch({
     "reservationDates" | "reservationDate" | "recurringEndDate" | null
   >(null);
   const [openTimeField, setOpenTimeField] = useState<"start" | "end" | null>(null);
+  const [timePickerSnapshot, setTimePickerSnapshot] = useState<{
+    endTime: string;
+    field: "start" | "end";
+    startTime: string;
+  } | null>(null);
   const [calendarMonth, setCalendarMonth] = useState(new Date());
 
   const normalizedQuery = query.trim().toLowerCase();
@@ -912,8 +917,33 @@ export default function SelectionRoomSearch({
 
   function toggleTimePicker(field: "start" | "end") {
     setOpenCalendarField(null);
-    setOpenTimeField((currentValue) => (currentValue === field ? null : field));
+    setTimePickerSnapshot({
+      endTime: endTimeDraft,
+      field,
+      startTime: startTimeDraft,
+    });
+    setOpenTimeField(field);
   }
+
+  function closeTimePicker() {
+    setOpenTimeField(null);
+    setTimePickerSnapshot(null);
+  }
+
+  function discardTimePickerChanges() {
+    if (!timePickerSnapshot) {
+      return;
+    }
+
+    setStartTimeDraft(timePickerSnapshot.startTime);
+    setEndTimeDraft(timePickerSnapshot.endTime);
+  }
+
+  const hasUnsavedTimePickerChanges =
+    openTimeField !== null &&
+    timePickerSnapshot !== null &&
+    (timePickerSnapshot.startTime !== startTimeDraft ||
+      timePickerSnapshot.endTime !== endTimeDraft);
 
   function handleTimeWheelScroll(
     field: "start" | "end",
@@ -1289,11 +1319,17 @@ export default function SelectionRoomSearch({
       <RoomTimePickerModal
         endTime={endTimeDraft}
         endTimeParts={endTimeParts}
+        hasUnsavedChanges={hasUnsavedTimePickerChanges}
         hourOptions={timeWheelHoursForPeriod}
-        onClose={() => setOpenTimeField(null)}
+        onClose={closeTimePicker}
+        onDiscardChanges={discardTimePickerChanges}
+        onSave={closeTimePicker}
         onTimeWheelScroll={handleTimeWheelScroll}
         openTimeField={openTimeField}
         periodOptions={timeWheelPeriods}
+        saveButtonLabel={
+          openTimeField === "start" ? "Save Start Time" : "Save End Time"
+        }
         selectedCampus={selectedCampusDraft}
         startTime={startTimeDraft}
         startTimeParts={startTimeParts}

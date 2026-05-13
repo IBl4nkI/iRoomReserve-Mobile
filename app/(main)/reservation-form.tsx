@@ -473,6 +473,11 @@ export default function ReservationFormScreen() {
     "reservation" | "recurringEnd" | null
   >(null);
   const [openTimeField, setOpenTimeField] = React.useState<"start" | "end" | null>(null);
+  const [timePickerSnapshot, setTimePickerSnapshot] = React.useState<{
+    endTime: string;
+    field: "start" | "end";
+    startTime: string;
+  } | null>(null);
   const [isRecurring, setIsRecurring] = React.useState(false);
   const [selectedDays, setSelectedDays] = React.useState<number[]>([]);
   const [startTime, setStartTime] = React.useState(initialSlot?.startTime ?? "07:00");
@@ -761,6 +766,34 @@ export default function ReservationFormScreen() {
       updateTimeFromPicker(field, { period: nextPeriod });
     }
   }
+
+  function openTimePicker(field: "start" | "end") {
+    setTimePickerSnapshot({
+      endTime,
+      field,
+      startTime,
+    });
+    setOpenTimeField(field);
+  }
+
+  function closeTimePicker() {
+    setOpenTimeField(null);
+    setTimePickerSnapshot(null);
+  }
+
+  function discardTimePickerChanges() {
+    if (!timePickerSnapshot) {
+      return;
+    }
+
+    setStartTime(timePickerSnapshot.startTime);
+    setEndTime(timePickerSnapshot.endTime);
+  }
+
+  const hasUnsavedTimePickerChanges =
+    openTimeField !== null &&
+    timePickerSnapshot !== null &&
+    (timePickerSnapshot.startTime !== startTime || timePickerSnapshot.endTime !== endTime);
 
   function updateMaterialQuantity(key: MaterialKey, nextValue: number) {
     setMaterials((currentValue) => ({
@@ -1329,7 +1362,7 @@ export default function ReservationFormScreen() {
             <View style={styles.inputGrid}>
               <View style={styles.inputBlock}>
                 <Text style={styles.inputLabel}>Start Time</Text>
-                <TouchableOpacity activeOpacity={0.9} onPress={() => setOpenTimeField("start")}>
+                <TouchableOpacity activeOpacity={0.9} onPress={() => openTimePicker("start")}>
                   <View style={styles.inputWithAction}>
                     <View
                       style={[styles.fieldInput, styles.fieldInputWithIcon, styles.timeReadonly]}
@@ -1345,7 +1378,7 @@ export default function ReservationFormScreen() {
 
               <View style={styles.inputBlock}>
                 <Text style={styles.inputLabel}>End Time</Text>
-                <TouchableOpacity activeOpacity={0.9} onPress={() => setOpenTimeField("end")}>
+                <TouchableOpacity activeOpacity={0.9} onPress={() => openTimePicker("end")}>
                   <View style={styles.inputWithAction}>
                     <View
                       style={[styles.fieldInput, styles.fieldInputWithIcon, styles.timeReadonly]}
@@ -1565,11 +1598,17 @@ export default function ReservationFormScreen() {
       <RoomTimePickerModal
         endTime={endTime}
         endTimeParts={endTimeParts}
+        hasUnsavedChanges={hasUnsavedTimePickerChanges}
         hourOptions={timeWheelHoursForPeriod}
-        onClose={() => setOpenTimeField(null)}
+        onClose={closeTimePicker}
+        onDiscardChanges={discardTimePickerChanges}
+        onSave={closeTimePicker}
         onTimeWheelScroll={handleTimeWheelScroll}
         openTimeField={openTimeField}
         periodOptions={timeWheelPeriods}
+        saveButtonLabel={
+          openTimeField === "start" ? "Save Start Time" : "Save End Time"
+        }
         selectedCampus={selectedCampus}
         startTime={startTime}
         startTimeParts={startTimeParts}
