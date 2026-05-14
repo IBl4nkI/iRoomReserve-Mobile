@@ -122,4 +122,5 @@ export interface FloorOption {
   id: string;
   label: string;
   roomCount: number;
+  value?: string;
 }

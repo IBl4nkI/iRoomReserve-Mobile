@@ -50,8 +50,7 @@ import { getBuildings } from "@/services/buildings.service";
 import {
   buildBuildingFloorOptions,
   buildCampusFloorOptions,
-  createFloorId,
-  normalizeFloorLabel,
+  getRoomFloorId,
 } from "@/services/floors.service";
 import { getRoomsByBuilding } from "@/services/rooms.service";
 import { auth } from "@/services/firebase";
@@ -507,7 +506,7 @@ export default function SelectionRoomSearch({
 
     return rooms.filter((room) => {
       const roomType = room.roomType.trim();
-      const roomFloorId = createFloorId(normalizeFloorLabel(room.floor) ?? room.floor);
+      const roomFloorId = getRoomFloorId(room);
 
       if (!room.campus) {
         return false;

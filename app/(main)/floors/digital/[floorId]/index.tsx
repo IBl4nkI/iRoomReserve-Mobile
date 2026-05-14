@@ -14,6 +14,7 @@ import { getBuildingsByCampus } from "@/services/buildings.service";
 import {
   buildCampusFloorOptions,
   getFloorLabelById,
+  getFloorValueById,
   isRoomOnFloor,
 } from "@/services/floors.service";
 import { getRoomsByBuilding } from "@/services/rooms.service";
@@ -48,12 +49,13 @@ export default function DigitalFloorRoomsScreen() {
         const allRooms = roomGroups.flat();
         const floorOptions = buildCampusFloorOptions(buildings, allRooms);
         const label = getFloorLabelById(floorOptions, resolvedFloorId);
+        const value = getFloorValueById(floorOptions, resolvedFloorId);
 
         if (!active) {
           return;
         }
 
-        if (!label) {
+        if (!label || !value) {
           throw new Error("Floor not found.");
         }
 
@@ -65,7 +67,7 @@ export default function DigitalFloorRoomsScreen() {
           }))
         );
         setFloorLabel(label);
-        setRooms(allRooms.filter((room) => isRoomOnFloor(room, label)));
+        setRooms(allRooms.filter((room) => isRoomOnFloor(room, value)));
         setError(null);
       })
       .catch((caughtError) => {
