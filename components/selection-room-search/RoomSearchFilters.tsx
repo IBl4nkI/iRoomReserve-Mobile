@@ -475,10 +475,15 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   checkboxGroup: {
-    gap: 10,
+    flexDirection: "row",
+    flexWrap: "wrap",
+    columnGap: 10,
+    rowGap: 10,
+    justifyContent: "space-between",
     marginBottom: 16,
   },
   checkboxRow: {
+    width: "48%",
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
@@ -516,7 +521,7 @@ const styles = StyleSheet.create({
   checkboxText: {
     color: colors.text,
     fontFamily: fonts.bold,
-    fontSize: 13,
+    fontSize: 10,
     flex: 1,
   },
   toggleCard: {
