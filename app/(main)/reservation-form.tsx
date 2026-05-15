@@ -806,9 +806,12 @@ export default function ReservationFormScreen() {
     router.push({
       pathname: "/(main)/alternative-rooms",
       params: {
+        dateKey,
+        endTime: slot.endTime,
         roomId: resolvedRoomId,
         roomName: room?.name ?? roomName ?? "Selected Room",
         selection: formatFullDate(new Date(`${dateKey}T00:00:00`)),
+        startTime: slot.startTime,
         timeslot: `${formatTime12h(slot.startTime)} - ${formatTime12h(slot.endTime)}`,
       },
     });

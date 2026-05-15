@@ -714,8 +714,12 @@ export default function SelectionRoomSearch({
     router.push({
       pathname: "/(main)/alternative-rooms",
       params: {
+        dateKey,
+        endTime: slot.endTime,
+        roomId: room.id,
         roomName: room.name,
         selection: formatFullDate(new Date(`${dateKey}T00:00:00`)),
+        startTime: slot.startTime,
         timeslot: `${formatTime12h(slot.startTime)} - ${formatTime12h(slot.endTime)}`,
       },
     });
