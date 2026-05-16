@@ -103,6 +103,24 @@ function getRoomBuildingLabel(room: Pick<Room, "buildingId" | "buildingName">) {
   return room.buildingName?.trim() || room.buildingId;
 }
 
+function getBuildingShortLabel(building: Pick<Building, "id" | "name">) {
+  const normalizedBuildingId = normalizeText(building.id);
+
+  if (normalizedBuildingId === "gd1") {
+    return "GD1";
+  }
+
+  if (normalizedBuildingId === "gd2") {
+    return "GD2";
+  }
+
+  if (normalizedBuildingId === "gd3") {
+    return "GD3";
+  }
+
+  return building.name;
+}
+
 function matchesSelectedFilters(
   originalRoom: Room,
   candidateRoom: SearchRoom,
@@ -595,7 +613,7 @@ export default function AlternativeRoomsScreen() {
   );
 
   const relaxedBuildingOptions = useMemo<LevelOption[]>(() => {
-    if (!relaxedSelection.campus) {
+    if (!relaxedSelection.campus || relaxedSelection.campus === "digi") {
       return [];
     }
 
@@ -604,10 +622,7 @@ export default function AlternativeRoomsScreen() {
       .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id))
       .map((building) => ({
         id: building.id,
-        label: getRoomBuildingLabel({
-          buildingId: building.id,
-          buildingName: building.name,
-        }),
+        label: getBuildingShortLabel(building),
       }));
   }, [buildings, relaxedSelection.campus]);
 
