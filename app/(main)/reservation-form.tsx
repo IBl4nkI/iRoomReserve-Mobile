@@ -115,6 +115,10 @@ const ALLOWED_ATTACHMENT_MIME_TYPES = new Set([
 ]);
 const MAX_ATTACHMENT_SIZE_BYTES = 10 * 1024 * 1024;
 
+function isSpecializedRoomType(roomType?: string | null) {
+  return String(roomType ?? "").trim().toLowerCase().includes("specialized");
+}
+
 function CalendarIcon() {
   return (
     <View style={styles.calendarIcon}>
@@ -826,6 +830,15 @@ export default function ReservationFormScreen() {
         Alert.alert(
           "Existing Reservation",
           "You already have a reservation request for this same timeslot. Press OK to remove or change that reservation first.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+
+      if (isSpecializedRoomType(room?.roomType)) {
+        Alert.alert(
+          "Room Unavailable",
+          "This specialized room is unavailable for the selected timeslot.",
           [{ text: "OK" }]
         );
         return;

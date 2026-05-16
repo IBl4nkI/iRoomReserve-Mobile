@@ -78,6 +78,10 @@ interface SelectionRoomSearchProps {
 
 const DEFAULT_ROOM_TYPE_OPTIONS = ["Classroom", "Glass Room", "Conference Room", "Specialized Room", "Gymnasium", "Open Area"];
 
+function isSpecializedRoomType(roomType?: string | null) {
+  return String(roomType ?? "").trim().toLowerCase().includes("specialized");
+}
+
 export default function SelectionRoomSearch({
   children,
   forceResultsVisible = false,
@@ -744,6 +748,15 @@ export default function SelectionRoomSearch({
         Alert.alert(
           "Existing Reservation",
           "You already have a reservation request for this same timeslot. Users can only reserve one room per timeslot.",
+          [{ text: "OK" }]
+        );
+        return;
+      }
+
+      if (isSpecializedRoomType(room.roomType)) {
+        Alert.alert(
+          "Room Unavailable",
+          "This specialized room is unavailable for the selected timeslot.",
           [{ text: "OK" }]
         );
         return;
