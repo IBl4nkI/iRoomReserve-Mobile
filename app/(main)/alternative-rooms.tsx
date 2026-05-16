@@ -343,7 +343,9 @@ export default function AlternativeRoomsScreen() {
           .map(toSearchRoom)
           .filter(
             (candidateRoom) =>
-              candidateRoom.id !== room.id && isExactRoomMatch(room, candidateRoom)
+              candidateRoom.id !== room.id &&
+              !isSpecializedRoom(candidateRoom) &&
+              isExactRoomMatch(room, candidateRoom)
           );
       }
 
@@ -354,6 +356,7 @@ export default function AlternativeRoomsScreen() {
           .filter(
             (candidateRoom) =>
               candidateRoom.id !== room.id &&
+              !isSpecializedRoom(candidateRoom) &&
               candidateRoom.floor !== room.floor &&
               isExactRoomMatch(room, candidateRoom)
           );
@@ -369,7 +372,10 @@ export default function AlternativeRoomsScreen() {
         fetchState.sameCampusBuildingIndex += 1;
         return (await getRoomsByBuilding(nextBuilding.id))
           .map(toSearchRoom)
-          .filter((candidateRoom) => isExactRoomMatch(room, candidateRoom));
+          .filter(
+            (candidateRoom) =>
+              !isSpecializedRoom(candidateRoom) && isExactRoomMatch(room, candidateRoom)
+          );
       }
 
       if (fetchState.stage === 3) {
@@ -383,7 +389,10 @@ export default function AlternativeRoomsScreen() {
         fetchState.otherCampusBuildingIndex += 1;
         return (await getRoomsByBuilding(nextBuilding.id))
           .map(toSearchRoom)
-          .filter((candidateRoom) => isExactRoomMatch(room, candidateRoom));
+          .filter(
+            (candidateRoom) =>
+              !isSpecializedRoom(candidateRoom) && isExactRoomMatch(room, candidateRoom)
+          );
       }
 
       fetchState.exhausted = true;
@@ -463,7 +472,12 @@ export default function AlternativeRoomsScreen() {
       const loadedRooms = await Promise.all(
         buildingsRef.current.map((building) => getRoomsByBuilding(building.id))
       );
-      setRooms(loadedRooms.flat().map(toSearchRoom));
+      setRooms(
+        loadedRooms
+          .flat()
+          .map(toSearchRoom)
+          .filter((room) => !isSpecializedRoom(room))
+      );
       setRelaxedRoomsLoaded(true);
     } catch (caughtError) {
       setScreenError(
