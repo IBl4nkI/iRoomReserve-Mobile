@@ -9,6 +9,8 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+import FilterBar from "@/components/FilterBar";
+import type { FilterLevel, LevelOption } from "@/components/SelectionFilterContext";
 import SelectionScreenLayout from "@/components/SelectionScreenLayout";
 import { colors, fonts } from "@/constants/theme";
 import {
@@ -20,6 +22,11 @@ import {
 } from "@/lib/reservation-search";
 import { auth } from "@/services/firebase";
 import { getBuildings } from "@/services/buildings.service";
+import {
+  buildBuildingFloorOptions,
+  buildCampusFloorOptions,
+  getRoomFloorId,
+} from "@/services/floors.service";
 import {
   getReservationsByRoom,
   getReservationsByUser,
@@ -74,11 +81,55 @@ function isExactRoomMatch(originalRoom: Room, candidateRoom: SearchRoom) {
   );
 }
 
+function getRoomBuildingLabel(room: Pick<Room, "buildingId" | "buildingName">) {
+  const normalizedBuildingId = normalizeText(room.buildingId);
+
+  if (normalizedBuildingId === "gd1") {
+    return "GD1 Main Campus";
+  }
+
+  if (normalizedBuildingId === "gd2") {
+    return "GD2 Main Campus";
+  }
+
+  if (normalizedBuildingId === "gd3") {
+    return "GD3 Main Campus";
+  }
+
+  if (normalizedBuildingId === "sdca") {
+    return "SDCA Digital Campus";
+  }
+
+  return room.buildingName?.trim() || room.buildingId;
+}
+
 function matchesSelectedFilters(
   originalRoom: Room,
   candidateRoom: SearchRoom,
-  filters: MatchFilters
+  filters: MatchFilters,
+  selection: Partial<Record<FilterLevel, string | null>>
 ) {
+  if (
+    selection.campus &&
+    selection.campus !== candidateRoom.campus
+  ) {
+    return false;
+  }
+
+  if (
+    selection.building &&
+    normalizeText(selection.building) !== normalizeText(candidateRoom.buildingId)
+  ) {
+    return false;
+  }
+
+  if (
+    selection.floor &&
+    selection.floor !== getRoomFloorId(candidateRoom)
+  ) {
+    return false;
+  }
+
   if (
     filters.sameCapacity &&
     originalRoom.capacity !== candidateRoom.capacity
@@ -195,6 +246,14 @@ export default function AlternativeRoomsScreen() {
   const [loadingMoreExactRooms, setLoadingMoreExactRooms] = useState(false);
   const [loadingRelaxedRooms, setLoadingRelaxedRooms] = useState(false);
   const [relaxedRoomsLoaded, setRelaxedRoomsLoaded] = useState(false);
+  const [showRelaxedSection, setShowRelaxedSection] = useState(false);
+  const [relaxedSelection, setRelaxedSelection] = useState<
+    Partial<Record<FilterLevel, string | null>>
+  >({
+    building: null,
+    campus: null,
+    floor: null,
+  });
   const [visibleRelaxedRoomCount, setVisibleRelaxedRoomCount] = useState(EXACT_MATCH_PAGE_SIZE);
   const [loadingMoreRelaxedRooms, setLoadingMoreRelaxedRooms] = useState(false);
   const [loadingExactCandidates, setLoadingExactCandidates] = useState(false);
@@ -455,6 +514,12 @@ export default function AlternativeRoomsScreen() {
         setOriginalRoom(roomResult);
         setRooms([]);
         setRelaxedRoomsLoaded(false);
+        setShowRelaxedSection(false);
+        setRelaxedSelection({
+          building: roomResult.buildingId,
+          campus: getRoomCampus(roomResult),
+          floor: getRoomFloorId(roomResult),
+        });
         setUserReservations(
           currentUserReservations.filter(
             (reservation) =>
@@ -507,6 +572,72 @@ export default function AlternativeRoomsScreen() {
     return rooms.filter((room) => room.id !== originalRoom.id);
   }, [originalRoom, rooms]);
 
+  const relaxedCampusOptions = useMemo<LevelOption[]>(
+    () => [
+      { id: "main", label: "Main Campus" },
+      { id: "digi", label: "Digital Campus" },
+    ],
+    []
+  );
+
+  const relaxedBuildingOptions = useMemo<LevelOption[]>(() => {
+    if (!relaxedSelection.campus) {
+      return [];
+    }
+
+    return buildings
+      .filter((building) => building.campus === relaxedSelection.campus)
+      .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id))
+      .map((building) => ({
+        id: building.id,
+        label: getRoomBuildingLabel({
+          buildingId: building.id,
+          buildingName: building.name,
+        }),
+      }));
+  }, [buildings, relaxedSelection.campus]);
+
+  const relaxedFloorOptions = useMemo<LevelOption[]>(() => {
+    if (!relaxedSelection.campus) {
+      return [];
+    }
+
+    if (relaxedSelection.building) {
+      const selectedBuilding = buildings.find(
+        (building) => building.id === relaxedSelection.building
+      );
+
+      if (!selectedBuilding) {
+        return [];
+      }
+
+      return buildBuildingFloorOptions(selectedBuilding, []).map((floor) => ({
+        id: floor.id,
+        label: floor.label,
+      }));
+    }
+
+    const campusBuildings = buildings.filter(
+      (building) => building.campus === relaxedSelection.campus
+    );
+
+    return buildCampusFloorOptions(campusBuildings, []).map((floor) => ({
+      id: floor.id,
+      label: floor.label,
+    }));
+  }, [buildings, relaxedSelection.building, relaxedSelection.campus]);
+
+  const relaxedFilterBarLevelOptions = useMemo<
+    Partial<Record<FilterLevel, LevelOption[]>>
+  >(
+    () => ({
+      building: relaxedBuildingOptions,
+      campus: relaxedCampusOptions,
+      floor: relaxedFloorOptions,
+    }),
+    [relaxedBuildingOptions, relaxedCampusOptions, relaxedFloorOptions]
+  );
+
   const relaxedCandidateRooms = useMemo(() => {
     if (!originalRoom || isSpecializedRoom(originalRoom)) {
       return [];
@@ -515,9 +646,9 @@ export default function AlternativeRoomsScreen() {
     return baseCandidateRooms.filter(
       (room) =>
         !isExactRoomMatch(originalRoom, room) &&
-        matchesSelectedFilters(originalRoom, room, matchFilters)
+        matchesSelectedFilters(originalRoom, room, matchFilters, relaxedSelection)
     );
-  }, [baseCandidateRooms, matchFilters, originalRoom]);
+  }, [baseCandidateRooms, matchFilters, originalRoom, relaxedSelection]);
 
   const neededRoomIds = useMemo(() => {
     return [...new Set([...exactRooms, ...relaxedCandidateRooms].map((room) => room.id))];
@@ -671,6 +802,7 @@ export default function AlternativeRoomsScreen() {
     setVisibleRelaxedRoomCount(EXACT_MATCH_PAGE_SIZE);
     setLoadingMoreRelaxedRooms(false);
   }, [
+    relaxedSelection,
     resolvedRoomId,
     resolvedDateKey,
     resolvedStartTime,
@@ -717,7 +849,8 @@ export default function AlternativeRoomsScreen() {
     visibleRelaxedRoomIds.some((candidateRoomId) => Boolean(loadingRoomIds[candidateRoomId]));
   const shouldShowRelaxedSection =
     !screenLoading &&
-    !isSpecializedRoom(originalRoom ?? { roomType: "" });
+    !isSpecializedRoom(originalRoom ?? { roomType: "" }) &&
+    showRelaxedSection;
 
   useEffect(() => {
     if (!loadingMoreExactRooms) {
@@ -788,7 +921,55 @@ export default function AlternativeRoomsScreen() {
     }));
   }
 
+  function handleRelaxedSelectionOptionPress(
+    level: FilterLevel,
+    id: string,
+    selected: boolean
+  ) {
+    if (!relaxedRoomsLoaded) {
+      void loadRelaxedRoomPool();
+    }
+
+    setRelaxedSelection((currentValue) => {
+      if (selected) {
+        return currentValue;
+      }
+
+      if (level === "campus") {
+        return {
+          building: null,
+          campus: id,
+          floor: null,
+        };
+      }
+
+      if (level === "building") {
+        return {
+          ...currentValue,
+          building: id,
+          floor: null,
+        };
+      }
+
+      return {
+        ...currentValue,
+        floor: id,
+      };
+    });
+  }
+
   async function loadMoreExactRooms() {
+    if (!canLoadMoreExactRooms) {
+      setShowRelaxedSection(true);
+
+      if (!relaxedRoomsLoaded) {
+        await loadRelaxedRoomPool();
+      }
+
+      setLoadingMoreExactRooms(false);
+      return;
+    }
+
     setLoadingMoreExactRooms(true);
     const nextVisibleCount = visibleExactRoomCount + EXACT_MATCH_PAGE_SIZE;
     setVisibleExactRoomCount(nextVisibleCount);
@@ -832,16 +1013,16 @@ export default function AlternativeRoomsScreen() {
       <View key={room.id} style={styles.roomCard}>
         <View style={styles.roomHeader}>
           <Text style={styles.roomName}>{room.name}</Text>
+          <Text style={styles.roomBuildingName}>
+            <Text style={styles.roomDetailLabel}>Building: </Text>
+            {getRoomBuildingLabel(room)}
+          </Text>
         </View>
 
         <View style={styles.roomDetailGrid}>
           <Text style={styles.roomDetail}>
             <Text style={styles.roomDetailLabel}>Floor: </Text>
             {room.floor}
-          </Text>
-          <Text style={styles.roomDetail}>
-            <Text style={styles.roomDetailLabel}>Campus: </Text>
-            {room.campusName}
           </Text>
           <Text style={styles.roomDetail}>
             <Text style={styles.roomDetailLabel}>Type: </Text>
@@ -905,9 +1086,6 @@ export default function AlternativeRoomsScreen() {
           <>
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Exact Matches</Text>
-              <Text style={styles.sectionDescription}>
-                Rooms on the same floor and in the same building are shown first.
-              </Text>
               {visibleExactRooms.length === 0 ? (
                 <Text style={styles.emptySectionText}>
                   No exact-match rooms are available for this timeslot.
@@ -915,7 +1093,7 @@ export default function AlternativeRoomsScreen() {
               ) : (
                 visibleExactRooms.map(renderRoomCard)
               )}
-              {canLoadMoreExactRooms ? (
+              {canLoadMoreExactRooms || !showRelaxedSection ? (
                 <TouchableOpacity
                   style={[
                     styles.loadMoreButton,
@@ -941,9 +1119,25 @@ export default function AlternativeRoomsScreen() {
                 <Text style={styles.sectionTitle}>Broaden Your Match</Text>
                 <Text style={styles.sectionDescription}>
                   {hasExactMatches
-                    ? "Need more options? Adjust the matching parts of the room below."
-                    : "No exact alternatives were found. Adjust the matching parts of the room below."}
+                    ? "No exact matches? Adjust the matching parts of the room below."
+                    : "No exact matches? Adjust the room details below."}
                 </Text>
+
+                <View style={styles.selectionFilterBarShell}>
+                  <FilterBar
+                    defaultSelections={{
+                      building: originalRoom?.buildingId,
+                      campus: originalRoom ? getRoomCampus(originalRoom) : undefined,
+                      floor: originalRoom ? getRoomFloorId(originalRoom) : undefined,
+                    }}
+                    disableActivePress
+                    levelOptionsOverride={relaxedFilterBarLevelOptions}
+                    navigateOnSelect={false}
+                    onOptionPress={handleRelaxedSelectionOptionPress}
+                    selectedByLevelOverride={relaxedSelection}
+                    showAllLevels
+                  />
+                </View>
 
                 <View style={styles.filterList}>
                   <TouchableOpacity
@@ -1129,6 +1323,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
   },
+  selectionFilterBarShell: {
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
   emptySectionText: {
     color: colors.secondary,
     fontFamily: fonts.regular,
@@ -1155,6 +1356,12 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontFamily: fonts.bold,
     fontSize: 17,
+  },
+  roomBuildingName: {
+    color: colors.secondary,
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    lineHeight: 18,
   },
   roomDetailGrid: {
     gap: 6,
