@@ -42,6 +42,8 @@ const DEFAULT_MATCH_FILTERS: MatchFilters = {
   sameType: true,
 };
 
+const EXACT_MATCH_PAGE_SIZE = 3;
+
 function normalizeText(value: string | null | undefined) {
   return String(value ?? "").trim().toLowerCase();
 }
@@ -97,6 +99,49 @@ function matchesSelectedFilters(
   return true;
 }
 
+function getExactRoomPriority(originalRoom: Room, candidateRoom: SearchRoom) {
+  const sameBuilding = normalizeText(originalRoom.buildingId) === normalizeText(candidateRoom.buildingId);
+  const sameFloor = normalizeText(originalRoom.floor) === normalizeText(candidateRoom.floor);
+  const sameCampus = getRoomCampus(originalRoom) === candidateRoom.campus;
+
+  if (sameBuilding && sameFloor) {
+    return 0;
+  }
+
+  if (sameBuilding) {
+    return 1;
+  }
+
+  if (sameCampus) {
+    return 2;
+  }
+
+  return 3;
+}
+
+function compareExactRooms(originalRoom: Room, left: SearchRoom, right: SearchRoom) {
+  const priorityDifference =
+    getExactRoomPriority(originalRoom, left) - getExactRoomPriority(originalRoom, right);
+
+  if (priorityDifference !== 0) {
+    return priorityDifference;
+  }
+
+  const buildingDifference = left.buildingName.localeCompare(right.buildingName);
+
+  if (buildingDifference !== 0) {
+    return buildingDifference;
+  }
+
+  const floorDifference = left.floor.localeCompare(right.floor);
+
+  if (floorDifference !== 0) {
+    return floorDifference;
+  }
+
+  return left.name.localeCompare(right.name);
+}
+
 export default function AlternativeRoomsScreen() {
   const router = useRouter();
   const {
@@ -132,11 +177,8 @@ export default function AlternativeRoomsScreen() {
   const [screenLoading, setScreenLoading] = useState(true);
   const [screenError, setScreenError] = useState<string | null>(null);
   const [specializedAlertShown, setSpecializedAlertShown] = useState(false);
-
-  const originalCampus = useMemo(
-    () => (originalRoom ? getRoomCampus(originalRoom) : null),
-    [originalRoom]
-  );
+  const [visibleExactRoomCount, setVisibleExactRoomCount] = useState(EXACT_MATCH_PAGE_SIZE);
+  const [loadingMoreExactRooms, setLoadingMoreExactRooms] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -361,8 +403,13 @@ export default function AlternativeRoomsScreen() {
   ]);
 
   const exactAvailableRooms = useMemo(
-    () => exactCandidateRooms.filter((room) => candidateAvailability[room.id]),
-    [candidateAvailability, exactCandidateRooms]
+    () =>
+      exactCandidateRooms
+        .filter((room) => candidateAvailability[room.id])
+        .sort((left, right) =>
+          originalRoom ? compareExactRooms(originalRoom, left, right) : 0
+        ),
+    [candidateAvailability, exactCandidateRooms, originalRoom]
   );
 
   const relaxedAvailableRooms = useMemo(
@@ -370,27 +417,69 @@ export default function AlternativeRoomsScreen() {
     [candidateAvailability, relaxedCandidateRooms]
   );
 
-  const sameCampusExactRooms = useMemo(() => {
-    return exactAvailableRooms.filter((room) => room.campus === originalCampus);
-  }, [exactAvailableRooms, originalCampus]);
+  const visibleExactRooms = useMemo(
+    () => exactAvailableRooms.slice(0, visibleExactRoomCount),
+    [exactAvailableRooms, visibleExactRoomCount]
+  );
 
-  const otherCampusExactRooms = useMemo(() => {
-    return exactAvailableRooms.filter((room) => room.campus !== originalCampus);
-  }, [exactAvailableRooms, originalCampus]);
+  useEffect(() => {
+    setVisibleExactRoomCount(EXACT_MATCH_PAGE_SIZE);
+    setLoadingMoreExactRooms(false);
+  }, [resolvedRoomId, resolvedDateKey, resolvedStartTime, resolvedEndTime]);
 
   const hasExactMatches = exactAvailableRooms.length > 0;
-  const isCheckingAvailability =
+  const canLoadMoreExactRooms = visibleExactRoomCount < exactAvailableRooms.length;
+  const visibleExactRoomIds = useMemo(
+    () => visibleExactRooms.map((room) => room.id),
+    [visibleExactRooms]
+  );
+  const isLoadingMoreExactRooms =
+    loadingMoreExactRooms &&
     !screenLoading &&
-    neededRoomIds.some((candidateRoomId) => Boolean(loadingRoomIds[candidateRoomId]));
+    visibleExactRoomIds.some((candidateRoomId) => Boolean(loadingRoomIds[candidateRoomId]));
   const shouldShowRelaxedSection =
     !screenLoading &&
     !isSpecializedRoom(originalRoom ?? { roomType: "" });
+
+  useEffect(() => {
+    if (!loadingMoreExactRooms) {
+      return;
+    }
+
+    const hasRenderedRequestedRoomCount =
+      visibleExactRooms.length >= visibleExactRoomCount;
+    const hasNoMoreExactRoomsToReveal =
+      exactAvailableRooms.length < visibleExactRoomCount;
+    const hasVisibleExactRoomStillLoading = visibleExactRoomIds.some((candidateRoomId) =>
+      Boolean(loadingRoomIds[candidateRoomId])
+    );
+
+    if (
+      hasRenderedRequestedRoomCount ||
+      hasNoMoreExactRoomsToReveal ||
+      !hasVisibleExactRoomStillLoading
+    ) {
+      setLoadingMoreExactRooms(false);
+    }
+  }, [
+    exactAvailableRooms.length,
+    loadingMoreExactRooms,
+    loadingRoomIds,
+    visibleExactRoomCount,
+    visibleExactRoomIds,
+    visibleExactRooms.length,
+  ]);
 
   function toggleFilter(filterKey: keyof MatchFilters) {
     setMatchFilters((currentValue) => ({
       ...currentValue,
       [filterKey]: !currentValue[filterKey],
     }));
+  }
+
+  function loadMoreExactRooms() {
+    setLoadingMoreExactRooms(true);
+    setVisibleExactRoomCount((currentValue) => currentValue + EXACT_MATCH_PAGE_SIZE);
   }
 
   function openReservationFormForRoom(room: SearchRoom) {
@@ -424,26 +513,43 @@ export default function AlternativeRoomsScreen() {
     return (
       <View key={room.id} style={styles.roomCard}>
         <View style={styles.roomHeader}>
-          <View style={styles.roomHeaderText}>
-            <Text style={styles.roomName}>{room.name}</Text>
-            <Text style={styles.roomMeta}>{room.buildingName}</Text>
-            <Text style={styles.roomMeta}>Floor: {room.floor}</Text>
-            <Text style={styles.roomMeta}>Campus: {room.campusName}</Text>
-          </View>
-          <TouchableOpacity
-            style={styles.reserveButton}
-            onPress={() => openReservationFormForRoom(room)}
-          >
-            <Text style={styles.reserveButtonText}>Reserve This Room</Text>
-          </TouchableOpacity>
+          <Text style={styles.roomName}>{room.name}</Text>
         </View>
 
         <View style={styles.roomDetailGrid}>
-          <Text style={styles.roomDetail}>Type: {room.roomType}</Text>
-          <Text style={styles.roomDetail}>Capacity: Approx. {room.capacity} People</Text>
-          <Text style={styles.roomDetail}>Air-Conditioner: {room.acStatus}</Text>
-          <Text style={styles.roomDetail}>TV/Projector: {room.tvProjectorStatus}</Text>
+          <Text style={styles.roomDetail}>
+            <Text style={styles.roomDetailLabel}>Floor: </Text>
+            {room.floor}
+          </Text>
+          <Text style={styles.roomDetail}>
+            <Text style={styles.roomDetailLabel}>Campus: </Text>
+            {room.campusName}
+          </Text>
+          <Text style={styles.roomDetail}>
+            <Text style={styles.roomDetailLabel}>Type: </Text>
+            {room.roomType}
+          </Text>
+          <Text style={styles.roomDetail}>
+            <Text style={styles.roomDetailLabel}>Capacity: </Text>
+            {`Approx. ${room.capacity} People`}
+          </Text>
+          <Text style={styles.roomDetail}>
+            <Text style={styles.roomDetailLabel}>Air-Conditioner: </Text>
+            {room.acStatus}
+          </Text>
+          <Text style={styles.roomDetail}>
+            <Text style={styles.roomDetailLabel}>TV/Projector: </Text>
+            {room.tvProjectorStatus}
+          </Text>
         </View>
+
+        <TouchableOpacity
+          style={styles.reserveButton}
+          onPress={() => openReservationFormForRoom(room)}
+        >
+          <Text style={styles.reserveButtonText}>Reserve This Room</Text>
+        </TouchableOpacity>
+
       </View>
     );
   }
@@ -479,33 +585,37 @@ export default function AlternativeRoomsScreen() {
           </View>
         ) : (
           <>
-            {isCheckingAvailability ? (
-              <View style={styles.stateCard}>
-                <ActivityIndicator color={colors.primary} />
-                <Text style={styles.stateText}>Checking exact room matches...</Text>
-              </View>
-            ) : null}
-
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Same Campus</Text>
-              {sameCampusExactRooms.length === 0 ? (
+              <Text style={styles.sectionTitle}>Exact Matches</Text>
+              <Text style={styles.sectionDescription}>
+                Rooms on the same floor and in the same building are shown first.
+              </Text>
+              {visibleExactRooms.length === 0 ? (
                 <Text style={styles.emptySectionText}>
-                  No exact-match rooms are available in the same campus.
+                  No exact-match rooms are available for this timeslot.
                 </Text>
               ) : (
-                sameCampusExactRooms.map(renderRoomCard)
+                visibleExactRooms.map(renderRoomCard)
               )}
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Other Campus</Text>
-              {otherCampusExactRooms.length === 0 ? (
-                <Text style={styles.emptySectionText}>
-                  No exact-match rooms are available in the other campus.
-                </Text>
-              ) : (
-                otherCampusExactRooms.map(renderRoomCard)
-              )}
+              {canLoadMoreExactRooms ? (
+                <TouchableOpacity
+                  style={[
+                    styles.loadMoreButton,
+                    isLoadingMoreExactRooms && styles.loadMoreButtonDisabled,
+                  ]}
+                  onPress={loadMoreExactRooms}
+                  disabled={isLoadingMoreExactRooms}
+                >
+                  {isLoadingMoreExactRooms ? (
+                    <View style={styles.loadMoreButtonContent}>
+                      <ActivityIndicator color={colors.white} size="small" />
+                      <Text style={styles.loadMoreButtonText}>Loading More Rooms...</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.loadMoreButtonText}>Load More Rooms</Text>
+                  )}
+                </TouchableOpacity>
+              ) : null}
             </View>
 
             {shouldShowRelaxedSection ? (
@@ -688,12 +798,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: colors.surface,
-    gap: 14,
+    gap: 10,
   },
   roomHeader: {
-    gap: 12,
-  },
-  roomHeaderText: {
     gap: 4,
   },
   roomName: {
@@ -701,13 +808,8 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 17,
   },
-  roomMeta: {
-    color: colors.secondary,
-    fontFamily: fonts.regular,
-    fontSize: 13,
-  },
   roomDetailGrid: {
-    gap: 8,
+    gap: 6,
   },
   roomDetail: {
     color: colors.text,
@@ -715,14 +817,36 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 20,
   },
+  roomDetailLabel: {
+    fontFamily: fonts.bold,
+  },
   reserveButton: {
-    alignSelf: "flex-start",
     borderRadius: 10,
     backgroundColor: colors.primary,
-    paddingHorizontal: 14,
+    alignItems: "center",
     paddingVertical: 10,
   },
   reserveButtonText: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 13,
+    textAlign: "center",
+  },
+  loadMoreButton: {
+    borderRadius: 10,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    paddingVertical: 10,
+  },
+  loadMoreButtonDisabled: {
+    opacity: 0.85,
+  },
+  loadMoreButtonContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  loadMoreButtonText: {
     color: colors.white,
     fontFamily: fonts.bold,
     fontSize: 13,
