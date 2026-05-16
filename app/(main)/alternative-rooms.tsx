@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -24,9 +24,13 @@ import {
   getReservationsByRoom,
   getReservationsByUser,
 } from "@/services/reservations.service";
-import { getRoomById, getRoomsByBuilding } from "@/services/rooms.service";
+import {
+  getRoomById,
+  getRoomsByBuilding,
+  getRoomsByBuildingAndFloor,
+} from "@/services/rooms.service";
 import { formatTime12h, getSchedulesByRoomId } from "@/services/schedules.service";
-import type { ReservationRecord, Room, Schedule } from "@/types/reservation";
+import type { Building, ReservationRecord, Room, Schedule } from "@/types/reservation";
 
 type MatchFilters = {
   sameAcStatus: boolean;
@@ -43,6 +47,14 @@ const DEFAULT_MATCH_FILTERS: MatchFilters = {
 };
 
 const EXACT_MATCH_PAGE_SIZE = 3;
+
+type ExactFetchState = {
+  exhausted: boolean;
+  otherCampusBuildingIndex: number;
+  pendingRooms: SearchRoom[];
+  sameCampusBuildingIndex: number;
+  stage: 0 | 1 | 2 | 3 | 4;
+};
 
 function normalizeText(value: string | null | undefined) {
   return String(value ?? "").trim().toLowerCase();
@@ -165,8 +177,10 @@ export default function AlternativeRoomsScreen() {
   const resolvedDateKey = String(dateKey ?? "");
   const resolvedStartTime = String(startTime ?? "");
   const resolvedEndTime = String(endTime ?? "");
+  const [buildings, setBuildings] = useState<Building[]>([]);
   const [originalRoom, setOriginalRoom] = useState<Room | null>(null);
   const [rooms, setRooms] = useState<SearchRoom[]>([]);
+  const [exactRooms, setExactRooms] = useState<SearchRoom[]>([]);
   const [roomSchedules, setRoomSchedules] = useState<Record<string, Schedule[]>>({});
   const [roomReservations, setRoomReservations] = useState<Record<string, ReservationRecord[]>>(
     {}
@@ -179,6 +193,229 @@ export default function AlternativeRoomsScreen() {
   const [specializedAlertShown, setSpecializedAlertShown] = useState(false);
   const [visibleExactRoomCount, setVisibleExactRoomCount] = useState(EXACT_MATCH_PAGE_SIZE);
   const [loadingMoreExactRooms, setLoadingMoreExactRooms] = useState(false);
+  const [loadingRelaxedRooms, setLoadingRelaxedRooms] = useState(false);
+  const [relaxedRoomsLoaded, setRelaxedRoomsLoaded] = useState(false);
+  const [visibleRelaxedRoomCount, setVisibleRelaxedRoomCount] = useState(EXACT_MATCH_PAGE_SIZE);
+  const [loadingMoreRelaxedRooms, setLoadingMoreRelaxedRooms] = useState(false);
+  const [loadingExactCandidates, setLoadingExactCandidates] = useState(false);
+  const buildingsRef = useRef<Building[]>([]);
+  const exactRoomsRef = useRef<SearchRoom[]>([]);
+  const originalRoomRef = useRef<Room | null>(null);
+  const exactFetchStateRef = useRef<ExactFetchState>({
+    exhausted: false,
+    otherCampusBuildingIndex: 0,
+    pendingRooms: [],
+    sameCampusBuildingIndex: 0,
+    stage: 0,
+  });
+
+  useEffect(() => {
+    buildingsRef.current = buildings;
+  }, [buildings]);
+
+  useEffect(() => {
+    exactRoomsRef.current = exactRooms;
+  }, [exactRooms]);
+
+  useEffect(() => {
+    originalRoomRef.current = originalRoom;
+  }, [originalRoom]);
+
+  function resetExactFetchState() {
+    exactFetchStateRef.current = {
+      exhausted: false,
+      otherCampusBuildingIndex: 0,
+      pendingRooms: [],
+      sameCampusBuildingIndex: 0,
+      stage: 0,
+    };
+    exactRoomsRef.current = [];
+    setExactRooms([]);
+  }
+
+  function appendExactRooms(nextRooms: SearchRoom[]) {
+    if (nextRooms.length === 0) {
+      return;
+    }
+
+    const existingIds = new Set(exactRoomsRef.current.map((room) => room.id));
+    const uniqueRooms = nextRooms.filter((room) => !existingIds.has(room.id));
+
+    if (uniqueRooms.length === 0) {
+      return;
+    }
+
+    const updatedRooms = [...exactRoomsRef.current, ...uniqueRooms];
+    exactRoomsRef.current = updatedRooms;
+    setExactRooms(updatedRooms);
+  }
+
+  function getSortedBuildingGroups(room: Room, availableBuildings: Building[]) {
+    const roomCampus = getRoomCampus(room);
+    const sortedBuildings = [...availableBuildings].sort(
+      (left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)
+    );
+
+    return {
+      otherCampusBuildings: sortedBuildings.filter(
+        (building) =>
+          building.id !== room.buildingId &&
+          building.campus !== roomCampus
+      ),
+      sameCampusBuildings: sortedBuildings.filter(
+        (building) =>
+          building.id !== room.buildingId &&
+          building.campus === roomCampus
+      ),
+    };
+  }
+
+  async function fetchNextExactRoomBatch(room: Room, availableBuildings: Building[]) {
+    const fetchState = exactFetchStateRef.current;
+    const { otherCampusBuildings, sameCampusBuildings } = getSortedBuildingGroups(
+      room,
+      availableBuildings
+    );
+
+    while (!fetchState.exhausted) {
+      if (fetchState.stage === 0) {
+        fetchState.stage = 1;
+        return (await getRoomsByBuildingAndFloor(room.buildingId, room.floor))
+          .map(toSearchRoom)
+          .filter(
+            (candidateRoom) =>
+              candidateRoom.id !== room.id && isExactRoomMatch(room, candidateRoom)
+          );
+      }
+
+      if (fetchState.stage === 1) {
+        fetchState.stage = 2;
+        return (await getRoomsByBuilding(room.buildingId))
+          .map(toSearchRoom)
+          .filter(
+            (candidateRoom) =>
+              candidateRoom.id !== room.id &&
+              candidateRoom.floor !== room.floor &&
+              isExactRoomMatch(room, candidateRoom)
+          );
+      }
+
+      if (fetchState.stage === 2) {
+        if (fetchState.sameCampusBuildingIndex >= sameCampusBuildings.length) {
+          fetchState.stage = 3;
+          continue;
+        }
+
+        const nextBuilding = sameCampusBuildings[fetchState.sameCampusBuildingIndex];
+        fetchState.sameCampusBuildingIndex += 1;
+        return (await getRoomsByBuilding(nextBuilding.id))
+          .map(toSearchRoom)
+          .filter((candidateRoom) => isExactRoomMatch(room, candidateRoom));
+      }
+
+      if (fetchState.stage === 3) {
+        if (fetchState.otherCampusBuildingIndex >= otherCampusBuildings.length) {
+          fetchState.stage = 4;
+          fetchState.exhausted = true;
+          break;
+        }
+
+        const nextBuilding = otherCampusBuildings[fetchState.otherCampusBuildingIndex];
+        fetchState.otherCampusBuildingIndex += 1;
+        return (await getRoomsByBuilding(nextBuilding.id))
+          .map(toSearchRoom)
+          .filter((candidateRoom) => isExactRoomMatch(room, candidateRoom));
+      }
+
+      fetchState.exhausted = true;
+      break;
+    }
+
+    return [];
+  }
+
+  async function ensureExactRoomCount(targetCount: number) {
+    if (loadingExactCandidates) {
+      return;
+    }
+
+    const room = originalRoomRef.current;
+    const availableBuildings = buildingsRef.current;
+
+    if (!room || availableBuildings.length === 0) {
+      return;
+    }
+
+    setLoadingExactCandidates(true);
+
+    try {
+      while (
+        exactRoomsRef.current.length < targetCount &&
+        !exactFetchStateRef.current.exhausted
+      ) {
+        if (exactFetchStateRef.current.pendingRooms.length > 0) {
+          const remaining = targetCount - exactRoomsRef.current.length;
+          const nextRooms = exactFetchStateRef.current.pendingRooms.splice(0, remaining);
+          appendExactRooms(nextRooms);
+
+          if (exactRoomsRef.current.length >= targetCount) {
+            break;
+          }
+        }
+
+        const nextBatch = await fetchNextExactRoomBatch(room, availableBuildings);
+
+        if (nextBatch.length === 0) {
+          continue;
+        }
+
+        const knownIds = new Set([
+          ...exactRoomsRef.current.map((candidateRoom) => candidateRoom.id),
+          ...exactFetchStateRef.current.pendingRooms.map((candidateRoom) => candidateRoom.id),
+        ]);
+        const uniqueBatch = nextBatch.filter((candidateRoom) => !knownIds.has(candidateRoom.id));
+
+        if (uniqueBatch.length === 0) {
+          continue;
+        }
+
+        exactFetchStateRef.current.pendingRooms.push(...uniqueBatch);
+      }
+
+      if (
+        exactRoomsRef.current.length < targetCount &&
+        exactFetchStateRef.current.pendingRooms.length > 0
+      ) {
+        appendExactRooms(exactFetchStateRef.current.pendingRooms.splice(0));
+      }
+    } finally {
+      setLoadingExactCandidates(false);
+    }
+  }
+
+  async function loadRelaxedRoomPool() {
+    if (loadingRelaxedRooms || relaxedRoomsLoaded) {
+      return;
+    }
+
+    setLoadingRelaxedRooms(true);
+
+    try {
+      const loadedRooms = await Promise.all(
+        buildingsRef.current.map((building) => getRoomsByBuilding(building.id))
+      );
+      setRooms(loadedRooms.flat().map(toSearchRoom));
+      setRelaxedRoomsLoaded(true);
+    } catch (caughtError) {
+      setScreenError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Failed to load alternative rooms."
+      );
+    } finally {
+      setLoadingRelaxedRooms(false);
+    }
+  }
 
   useEffect(() => {
     let active = true;
@@ -207,16 +444,17 @@ export default function AlternativeRoomsScreen() {
           throw new Error("The selected room could not be found.");
         }
 
-        const roomGroups = await Promise.all(
-          buildings.map((building) => getRoomsByBuilding(building.id))
-        );
-
         if (!active) {
           return;
         }
 
+        resetExactFetchState();
+        buildingsRef.current = buildings;
+        originalRoomRef.current = roomResult;
+        setBuildings(buildings);
         setOriginalRoom(roomResult);
-        setRooms(roomGroups.flat().map(toSearchRoom));
+        setRooms([]);
+        setRelaxedRoomsLoaded(false);
         setUserReservations(
           currentUserReservations.filter(
             (reservation) =>
@@ -224,6 +462,7 @@ export default function AlternativeRoomsScreen() {
           )
         );
         setScreenError(null);
+        await ensureExactRoomCount(EXACT_MATCH_PAGE_SIZE);
       } catch (caughtError) {
         if (!active) {
           return;
@@ -268,14 +507,6 @@ export default function AlternativeRoomsScreen() {
     return rooms.filter((room) => room.id !== originalRoom.id);
   }, [originalRoom, rooms]);
 
-  const exactCandidateRooms = useMemo(() => {
-    if (!originalRoom || isSpecializedRoom(originalRoom)) {
-      return [];
-    }
-
-    return baseCandidateRooms.filter((room) => isExactRoomMatch(originalRoom, room));
-  }, [baseCandidateRooms, originalRoom]);
-
   const relaxedCandidateRooms = useMemo(() => {
     if (!originalRoom || isSpecializedRoom(originalRoom)) {
       return [];
@@ -289,8 +520,8 @@ export default function AlternativeRoomsScreen() {
   }, [baseCandidateRooms, matchFilters, originalRoom]);
 
   const neededRoomIds = useMemo(() => {
-    return [...new Set([...exactCandidateRooms, ...relaxedCandidateRooms].map((room) => room.id))];
-  }, [exactCandidateRooms, relaxedCandidateRooms]);
+    return [...new Set([...exactRooms, ...relaxedCandidateRooms].map((room) => room.id))];
+  }, [exactRooms, relaxedCandidateRooms]);
 
   useEffect(() => {
     if (neededRoomIds.length === 0) {
@@ -404,22 +635,31 @@ export default function AlternativeRoomsScreen() {
 
   const exactAvailableRooms = useMemo(
     () =>
-      exactCandidateRooms
+      exactRooms
         .filter((room) => candidateAvailability[room.id])
         .sort((left, right) =>
           originalRoom ? compareExactRooms(originalRoom, left, right) : 0
         ),
-    [candidateAvailability, exactCandidateRooms, originalRoom]
+    [candidateAvailability, exactRooms, originalRoom]
   );
 
   const relaxedAvailableRooms = useMemo(
-    () => relaxedCandidateRooms.filter((room) => candidateAvailability[room.id]),
-    [candidateAvailability, relaxedCandidateRooms]
+    () =>
+      relaxedCandidateRooms
+        .filter((room) => candidateAvailability[room.id])
+        .sort((left, right) =>
+          originalRoom ? compareExactRooms(originalRoom, left, right) : 0
+        ),
+    [candidateAvailability, relaxedCandidateRooms, originalRoom]
   );
 
   const visibleExactRooms = useMemo(
     () => exactAvailableRooms.slice(0, visibleExactRoomCount),
     [exactAvailableRooms, visibleExactRoomCount]
+  );
+  const visibleRelaxedRooms = useMemo(
+    () => relaxedAvailableRooms.slice(0, visibleRelaxedRoomCount),
+    [relaxedAvailableRooms, visibleRelaxedRoomCount]
   );
 
   useEffect(() => {
@@ -427,16 +667,54 @@ export default function AlternativeRoomsScreen() {
     setLoadingMoreExactRooms(false);
   }, [resolvedRoomId, resolvedDateKey, resolvedStartTime, resolvedEndTime]);
 
+  useEffect(() => {
+    setVisibleRelaxedRoomCount(EXACT_MATCH_PAGE_SIZE);
+    setLoadingMoreRelaxedRooms(false);
+  }, [
+    resolvedRoomId,
+    resolvedDateKey,
+    resolvedStartTime,
+    resolvedEndTime,
+    matchFilters,
+  ]);
+
+  useEffect(() => {
+    if (
+      screenLoading ||
+      loadingExactCandidates ||
+      exactFetchStateRef.current.exhausted ||
+      exactAvailableRooms.length >= visibleExactRoomCount
+    ) {
+      return;
+    }
+
+    void ensureExactRoomCount(exactRoomsRef.current.length + EXACT_MATCH_PAGE_SIZE);
+  }, [
+    exactAvailableRooms.length,
+    loadingExactCandidates,
+    screenLoading,
+    visibleExactRoomCount,
+  ]);
+
   const hasExactMatches = exactAvailableRooms.length > 0;
   const canLoadMoreExactRooms = visibleExactRoomCount < exactAvailableRooms.length;
+  const canLoadMoreRelaxedRooms = visibleRelaxedRoomCount < relaxedAvailableRooms.length;
   const visibleExactRoomIds = useMemo(
     () => visibleExactRooms.map((room) => room.id),
     [visibleExactRooms]
+  );
+  const visibleRelaxedRoomIds = useMemo(
+    () => visibleRelaxedRooms.map((room) => room.id),
+    [visibleRelaxedRooms]
   );
   const isLoadingMoreExactRooms =
     loadingMoreExactRooms &&
     !screenLoading &&
     visibleExactRoomIds.some((candidateRoomId) => Boolean(loadingRoomIds[candidateRoomId]));
+  const isLoadingMoreRelaxedRooms =
+    loadingMoreRelaxedRooms &&
+    !screenLoading &&
+    visibleRelaxedRoomIds.some((candidateRoomId) => Boolean(loadingRoomIds[candidateRoomId]));
   const shouldShowRelaxedSection =
     !screenLoading &&
     !isSpecializedRoom(originalRoom ?? { roomType: "" });
@@ -470,16 +748,56 @@ export default function AlternativeRoomsScreen() {
     visibleExactRooms.length,
   ]);
 
+  useEffect(() => {
+    if (!loadingMoreRelaxedRooms) {
+      return;
+    }
+
+    const hasRenderedRequestedRoomCount =
+      visibleRelaxedRooms.length >= visibleRelaxedRoomCount;
+    const hasNoMoreRelaxedRoomsToReveal =
+      relaxedAvailableRooms.length < visibleRelaxedRoomCount;
+    const hasVisibleRelaxedRoomStillLoading = visibleRelaxedRoomIds.some((candidateRoomId) =>
+      Boolean(loadingRoomIds[candidateRoomId])
+    );
+
+    if (
+      hasRenderedRequestedRoomCount ||
+      hasNoMoreRelaxedRoomsToReveal ||
+      !hasVisibleRelaxedRoomStillLoading
+    ) {
+      setLoadingMoreRelaxedRooms(false);
+    }
+  }, [
+    loadingMoreRelaxedRooms,
+    loadingRoomIds,
+    relaxedAvailableRooms.length,
+    visibleRelaxedRoomCount,
+    visibleRelaxedRoomIds,
+    visibleRelaxedRooms.length,
+  ]);
+
   function toggleFilter(filterKey: keyof MatchFilters) {
+    if (!relaxedRoomsLoaded) {
+      void loadRelaxedRoomPool();
+    }
+
     setMatchFilters((currentValue) => ({
       ...currentValue,
       [filterKey]: !currentValue[filterKey],
     }));
   }
 
-  function loadMoreExactRooms() {
+  async function loadMoreExactRooms() {
     setLoadingMoreExactRooms(true);
-    setVisibleExactRoomCount((currentValue) => currentValue + EXACT_MATCH_PAGE_SIZE);
+    const nextVisibleCount = visibleExactRoomCount + EXACT_MATCH_PAGE_SIZE;
+    setVisibleExactRoomCount(nextVisibleCount);
+    await ensureExactRoomCount(nextVisibleCount);
+  }
+
+  function loadMoreRelaxedRooms() {
+    setLoadingMoreRelaxedRooms(true);
+    setVisibleRelaxedRoomCount((currentValue) => currentValue + EXACT_MATCH_PAGE_SIZE);
   }
 
   function openReservationFormForRoom(room: SearchRoom) {
@@ -698,14 +1016,44 @@ export default function AlternativeRoomsScreen() {
                   </TouchableOpacity>
                 </View>
 
-                {relaxedAvailableRooms.length === 0 ? (
+                {!relaxedRoomsLoaded ? (
+                  loadingRelaxedRooms ? (
+                    <View style={styles.stateCard}>
+                      <ActivityIndicator color={colors.primary} />
+                      <Text style={styles.stateText}>Loading broader matches...</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.emptySectionText}>
+                      Change one or more filters to load broader room matches.
+                    </Text>
+                  )
+                ) : visibleRelaxedRooms.length === 0 ? (
                   <Text style={styles.emptySectionText}>
                     No rooms are available with the current match filters. Turn off one or more
                     filters to broaden the results.
                   </Text>
                 ) : (
-                  relaxedAvailableRooms.map(renderRoomCard)
+                  visibleRelaxedRooms.map(renderRoomCard)
                 )}
+                {canLoadMoreRelaxedRooms ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.loadMoreButton,
+                      isLoadingMoreRelaxedRooms && styles.loadMoreButtonDisabled,
+                    ]}
+                    onPress={loadMoreRelaxedRooms}
+                    disabled={isLoadingMoreRelaxedRooms}
+                  >
+                    {isLoadingMoreRelaxedRooms ? (
+                      <View style={styles.loadMoreButtonContent}>
+                        <ActivityIndicator color={colors.white} size="small" />
+                        <Text style={styles.loadMoreButtonText}>Loading More Rooms...</Text>
+                      </View>
+                    ) : (
+                      <Text style={styles.loadMoreButtonText}>Load More Rooms</Text>
+                    )}
+                  </TouchableOpacity>
+                ) : null}
               </View>
             ) : null}
           </>
