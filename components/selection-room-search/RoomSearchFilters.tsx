@@ -38,12 +38,14 @@ interface RoomSearchFiltersProps {
   isCalendarDateDisabled: (date: Date, dateKey: string) => boolean;
   isCalendarDateSelected: (dateKey: string) => boolean;
   isRecurring: boolean;
+  maxCapacityInput: string;
   onCalendarDateSelect: (dateKey: string) => void;
   onCalendarDone: () => void;
   onEndDateBlur: () => void;
   onEndDateChange: (value: string) => void;
   onEndDateCalendarPress: () => void;
   onEndTimePress: () => void;
+  onMaxCapacityChange: (value: string) => void;
   onNextMonth: () => void;
   onPrevMonth: () => void;
   onRemoveReservationDate: (dateKey: string) => void;
@@ -230,12 +232,14 @@ export default function RoomSearchFilters({
   isCalendarDateDisabled,
   isCalendarDateSelected,
   isRecurring,
+  maxCapacityInput,
   onCalendarDateSelect,
   onCalendarDone,
   onEndDateBlur,
   onEndDateChange,
   onEndDateCalendarPress,
   onEndTimePress,
+  onMaxCapacityChange,
   onNextMonth,
   onPrevMonth,
   onRemoveReservationDate,
@@ -275,7 +279,7 @@ export default function RoomSearchFilters({
         />
       </View>
 
-      <Text style={styles.filterSectionTitle}>Filter by Room Type:</Text>
+      <Text style={styles.inputLabel}>Filter by Room Type:</Text>
       <View style={styles.checkboxGroup}>
         {roomTypeOptions.map((roomType) => {
           const selected = selectedRoomTypes.includes(roomType);
@@ -292,6 +296,18 @@ export default function RoomSearchFilters({
             </TouchableOpacity>
           );
         })}
+      </View>
+
+      <View style={styles.capacityRow}>
+        <Text style={styles.capacityLabel}>Filter by Max. Capacity:</Text>
+        <TextInput
+          keyboardType="number-pad"
+          onChangeText={(value) => onMaxCapacityChange(value.replace(/\D/g, ""))}
+          placeholder="30"
+          placeholderTextColor={colors.mutedText}
+          style={[styles.filterInput, styles.capacityInput]}
+          value={maxCapacityInput}
+        />
       </View>
 
       <View style={styles.toggleCard}>
@@ -588,6 +604,19 @@ const styles = StyleSheet.create({
   inputBlock: {
     flex: 1,
   },
+  capacityRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginBottom: 16,
+  },
+  capacityLabel: {
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    lineHeight: 18,
+    flexShrink: 0,
+  },
   inputLabel: {
     color: colors.text,
     fontFamily: fonts.bold,
@@ -611,6 +640,15 @@ const styles = StyleSheet.create({
   },
   filterInputWithIcon: {
     paddingRight: 48,
+  },
+  capacityInput: {
+    borderRadius: 8,
+    flex: 1,
+    height: 30,
+    minHeight: 30,
+    paddingHorizontal: 12,
+    paddingVertical: 3,
+    textAlign: "left",
   },
   segmentedDateShell: {
     flexDirection: "row",

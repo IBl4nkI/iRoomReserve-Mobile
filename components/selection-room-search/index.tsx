@@ -77,6 +77,7 @@ interface SelectionRoomSearchProps {
 }
 
 const DEFAULT_ROOM_TYPE_OPTIONS = ["Classroom", "Glass Room", "Conference Room", "Specialized Room", "Gymnasium", "Open Area"];
+const DEFAULT_MAX_CAPACITY = "30";
 
 function isSpecializedRoomType(roomType?: string | null) {
   return String(roomType ?? "").trim().toLowerCase().includes("specialized");
@@ -102,6 +103,7 @@ export default function SelectionRoomSearch({
   const [isRecurringDraft, setIsRecurringDraft] = useState(false);
   const [selectedCampusDraft, setSelectedCampusDraft] = useState<ReservationCampus | null>(null);
   const [selectedRoomTypesDraft, setSelectedRoomTypesDraft] = useState<string[]>([]);
+  const [maxCapacityDraft, setMaxCapacityDraft] = useState(DEFAULT_MAX_CAPACITY);
   const [selectedDaysDraft, setSelectedDaysDraft] = useState<number[]>([]);
   const [reservationDatesDraft, setReservationDatesDraft] = useState<string[]>([]);
   const [reservationDatesInputDraft, setReservationDatesInputDraft] = useState("");
@@ -152,6 +154,7 @@ export default function SelectionRoomSearch({
   const hasActiveFilters =
     selectedCampusDraft !== null ||
     selectedRoomTypesDraft.length > 0 ||
+    maxCapacityDraft !== DEFAULT_MAX_CAPACITY ||
     isRecurringDraft ||
     selectedDaysDraft.length > 0 ||
     reservationDatesDraft.length > 0 ||
@@ -507,6 +510,9 @@ export default function SelectionRoomSearch({
     const effectiveCampusSelection = filtersOpen ? filterCampusId : activeCampusSelection;
     const effectiveBuildingSelection = filtersOpen ? filterBuildingId : activeBuildingSelection;
     const effectiveFloorSelection = filtersOpen ? filterFloorId : activeFloorSelection;
+    const parsedMaxCapacity = Number(maxCapacityDraft);
+    const hasMaxCapacityFilter =
+      maxCapacityDraft.trim().length > 0 && Number.isFinite(parsedMaxCapacity);
 
     return rooms.filter((room) => {
       const roomType = room.roomType.trim();
@@ -539,6 +545,10 @@ export default function SelectionRoomSearch({
         return false;
       }
 
+      if (hasMaxCapacityFilter && room.capacity < parsedMaxCapacity) {
+        return false;
+      }
+
       if (!normalizedQuery) {
         return true;
       }
@@ -553,6 +563,7 @@ export default function SelectionRoomSearch({
     filterCampusId,
     filterFloorId,
     filtersOpen,
+    maxCapacityDraft,
     normalizedQuery,
     rooms,
     selectedCampusDraft,
@@ -888,6 +899,7 @@ export default function SelectionRoomSearch({
   function resetFilters() {
     setSelectedCampusDraft(null);
     setSelectedRoomTypesDraft([]);
+    setMaxCapacityDraft(DEFAULT_MAX_CAPACITY);
     setIsRecurringDraft(false);
     setSelectedDaysDraft([]);
     setReservationDatesDraft([]);
@@ -1324,12 +1336,14 @@ export default function SelectionRoomSearch({
               : recurringEndDateDraft === dateKey
         }
         isRecurring={isRecurringDraft}
+        maxCapacityInput={maxCapacityDraft}
         onCalendarDateSelect={handleCalendarDateSelect}
         onCalendarDone={() => setOpenCalendarField(null)}
         onEndDateBlur={handleRecurringEndDateBlur}
         onEndDateChange={setRecurringEndDateInputDraft}
         onEndDateCalendarPress={() => openCalendar("recurringEndDate")}
         onEndTimePress={() => toggleTimePicker("end")}
+        onMaxCapacityChange={setMaxCapacityDraft}
         onNextMonth={() => setCalendarMonth((currentValue) => addMonths(currentValue, 1))}
         onPrevMonth={() => setCalendarMonth((currentValue) => addMonths(currentValue, -1))}
         onRemoveReservationDate={removeReservationDate}
