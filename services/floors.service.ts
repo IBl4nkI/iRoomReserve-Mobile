@@ -1,10 +1,10 @@
 import type { Building, FloorOption, Room } from "@/types/reservation";
 
 const DIGITAL_CAMPUS_FLOOR_OPTIONS: Array<{ label: string; value: string }> = [
-  { label: "1st Floor", value: "Ground Floor" },
-  { label: "2nd Floor", value: "1st Floor" },
-  { label: "3rd Floor", value: "2nd Floor" },
-  { label: "4th Floor", value: "3rd Floor" },
+  { label: "1st Floor", value: "1st Floor" },
+  { label: "2nd Floor", value: "2nd Floor" },
+  { label: "3rd Floor", value: "3rd Floor" },
+  { label: "4th Floor", value: "4th Floor" },
 ];
 
 const DIGITAL_CAMPUS_FLOOR_LABELS = new Map(
@@ -139,9 +139,27 @@ function isDigitalCampusRoom(room: FloorMappedRoom) {
   return buildingId.startsWith("dig") || buildingName.includes("digital");
 }
 
+function normalizeDigitalCampusFloorLabel(label?: string | null) {
+  const trimmed = label?.trim();
+
+  if (!trimmed) {
+    return null;
+  }
+
+  if (trimmed === "Ground Floor") {
+    return "1st Floor";
+  }
+
+  return trimmed;
+}
+
 export function getRoomFloorLabel(room: FloorMappedRoom) {
   if (isDigitalCampusRoom(room)) {
-    return DIGITAL_CAMPUS_FLOOR_LABELS.get(room.floor) ?? room.floor;
+    return (
+      DIGITAL_CAMPUS_FLOOR_LABELS.get(room.floor) ??
+      normalizeDigitalCampusFloorLabel(room.floor) ??
+      room.floor
+    );
   }
 
   return normalizeMainCampusFloorLabel(room.floor) ?? room.floor;
@@ -184,7 +202,7 @@ function dedupeFloorLabels(labels: string[]) {
 
 export function isRoomOnFloor(room: Room, floorLabel: string) {
   if (isDigitalCampusRoom(room)) {
-    return room.floor.trim() === floorLabel;
+    return normalizeDigitalCampusFloorLabel(room.floor) === floorLabel;
   }
 
   return getRoomFloorLabel(room) === floorLabel;
