@@ -29,6 +29,9 @@ import type { ReservationCampus, ReservationRecord, Schedule } from "@/types/res
 
 interface WeeklyScheduleGridProps {
   campus: ReservationCampus | null;
+  onSelectedUnavailableSlotsChange?: (
+    slots: Array<{ dateKey: string; slot: TimeSlotViewModel }>
+  ) => void;
   roomId: string;
   schedules: Schedule[];
   userReservations?: ReservationRecord[];
@@ -87,6 +90,7 @@ function CellWrapper({
 
 export default function WeeklyScheduleGrid({
   campus,
+  onSelectedUnavailableSlotsChange,
   roomId,
   schedules,
   userReservations,
@@ -177,6 +181,24 @@ export default function WeeklyScheduleGrid({
       ),
     };
   });
+
+  React.useEffect(() => {
+    if (!onSelectedUnavailableSlotsChange) {
+      return;
+    }
+
+    const selectedUnavailableSlots = columns.flatMap(({ dateKey, slots }) =>
+      slots
+        .filter(
+          (slot) =>
+            slot.state === "unavailable" &&
+            selectedSlotKeys.includes(`${dateKey}-${slot.startTime}-${slot.endTime}`)
+        )
+        .map((slot) => ({ dateKey, slot }))
+    );
+
+    onSelectedUnavailableSlotsChange(selectedUnavailableSlots);
+  }, [columns, onSelectedUnavailableSlotsChange, selectedSlotKeys]);
 
   return (
     <View>

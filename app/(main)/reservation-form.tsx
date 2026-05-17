@@ -504,6 +504,8 @@ export default function ReservationFormScreen() {
   const [attachmentError, setAttachmentError] = React.useState("");
   const [submittingReservation, setSubmittingReservation] = React.useState(false);
   const [userProfile, setUserProfile] = React.useState<UserProfileSummary | null>(null);
+  const lastUnavailableSelectedSlotKeyRef = React.useRef<string | null>(null);
+  const showingUnavailableSelectedSlotAlertRef = React.useRef(false);
 
   const endTimeOptions = React.useMemo(
     () =>
@@ -821,10 +823,106 @@ export default function ReservationFormScreen() {
     });
   }
 
+  function clearSelectedScheduleSlotsForDate(dateKey: string) {
+    setSelectedScheduleSlots((currentValue) =>
+      currentValue.filter((slot) => slot.dateKey !== dateKey)
+    );
+  }
+
+  function getUnavailableSelectedRange(
+    dateKey: string,
+    slot: Pick<TimeSlotViewModel, "startTime" | "endTime">
+  ) {
+    const slotStartMinutes = timeStringToMinutes(slot.startTime);
+    const slotEndMinutes = timeStringToMinutes(slot.endTime);
+
+    return (
+      collapseSelectedTimeslots(
+        selectedScheduleSlots.filter((selectedSlot) => selectedSlot.dateKey === dateKey)
+      ).find((selectedSlot) => {
+        const selectedStartMinutes = timeStringToMinutes(selectedSlot.startTime);
+        const selectedEndMinutes = timeStringToMinutes(selectedSlot.endTime);
+
+        return (
+          slotStartMinutes >= selectedStartMinutes &&
+          slotEndMinutes <= selectedEndMinutes
+        );
+      }) ?? {
+        dateKey,
+        endTime: slot.endTime,
+        startTime: slot.startTime,
+        state: "available" as const,
+      }
+    );
+  }
+
+  const handleSelectedUnavailableSlotsChange = React.useCallback(
+    (slots: Array<{ dateKey: string; slot: TimeSlotViewModel }>) => {
+      if (slots.length === 0) {
+        lastUnavailableSelectedSlotKeyRef.current = null;
+        showingUnavailableSelectedSlotAlertRef.current = false;
+        return;
+      }
+
+      const [firstUnavailableSlot] = slots;
+
+      if (!firstUnavailableSlot || showingUnavailableSelectedSlotAlertRef.current) {
+        return;
+      }
+
+      const slotKey = `${firstUnavailableSlot.dateKey}-${firstUnavailableSlot.slot.startTime}-${firstUnavailableSlot.slot.endTime}`;
+
+      if (lastUnavailableSelectedSlotKeyRef.current === slotKey) {
+        return;
+      }
+
+      const unavailableRange = getUnavailableSelectedRange(
+        firstUnavailableSlot.dateKey,
+        firstUnavailableSlot.slot
+      );
+      const unavailableLabel = `${formatTime12h(unavailableRange.startTime)} - ${formatTime12h(
+        unavailableRange.endTime
+      )}`;
+
+      lastUnavailableSelectedSlotKeyRef.current = slotKey;
+      showingUnavailableSelectedSlotAlertRef.current = true;
+
+      Alert.alert(
+        "Selected Timeslot Unavailable",
+        `Your original timeslot (${unavailableLabel}) suddenly became unavailable. Would you like to look at alternative rooms?`,
+        [
+          {
+            text: "No, I'll edit the selected timeslots",
+            style: "cancel",
+            onPress: () => {
+              showingUnavailableSelectedSlotAlertRef.current = false;
+              clearSelectedScheduleSlotsForDate(firstUnavailableSlot.dateKey);
+            },
+          },
+          {
+            text: "Yes",
+            onPress: () => {
+              showingUnavailableSelectedSlotAlertRef.current = false;
+              openAlternativeRooms(firstUnavailableSlot.dateKey, unavailableRange);
+            },
+          },
+        ]
+      );
+    },
+    [selectedScheduleSlots]
+  );
+
   function handleScheduleSlotPress(
     dateKey: string,
     slot: TimeSlotViewModel
   ) {
+    const nextSlot: SelectedTimeslotParam = {
+      dateKey,
+      endTime: slot.endTime,
+      startTime: slot.startTime,
+      state: slot.state === "pending" ? "pending" : "available",
+    };
+
     if (slot.state === "unavailable") {
       if (slot.unavailableReason === "user_conflict") {
         Alert.alert(
@@ -858,12 +956,25 @@ export default function ReservationFormScreen() {
       return;
     }
 
-    const nextSlot: SelectedTimeslotParam = {
-      dateKey,
-      endTime: slot.endTime,
-      startTime: slot.startTime,
-      state: slot.state,
-    };
+    if (slot.state === "pending") {
+      Alert.alert(
+        "Pending Reservation",
+        "There is already a pending reservation for this timeslot from a different user. Would you still like to reserve this timeslot?",
+        [
+          { style: "cancel", text: "No" },
+          {
+            text: "Yes",
+            onPress: () => {
+              setSelectedScheduleSlots((currentValue) =>
+                applySelectedTimeslotPress(currentValue, nextSlot)
+              );
+            },
+          },
+        ]
+      );
+      return;
+    }
+
     setSelectedScheduleSlots((currentValue) => {
       return applySelectedTimeslotPress(currentValue, nextSlot);
     });
@@ -1447,6 +1558,7 @@ export default function ReservationFormScreen() {
             </Text>
             <WeeklyScheduleGrid
               campus={selectedCampus}
+              onSelectedUnavailableSlotsChange={handleSelectedUnavailableSlotsChange}
               roomId={resolvedRoomId}
               schedules={schedules}
               weekOffset={scheduleWeekOffset}

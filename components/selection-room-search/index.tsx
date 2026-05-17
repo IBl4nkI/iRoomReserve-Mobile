@@ -734,6 +734,13 @@ export default function SelectionRoomSearch({
     dateKey: string,
     slot: TimeSlotViewModel
   ) {
+    const nextSlot: SelectedTimeslot = {
+      dateKey,
+      endTime: slot.endTime,
+      startTime: slot.startTime,
+      state: slot.state === "pending" ? "pending" : "available",
+    };
+
     if (slot.state === "unavailable") {
       if (slot.unavailableReason === "past_time") {
         Alert.alert(
@@ -776,12 +783,29 @@ export default function SelectionRoomSearch({
       return;
     }
 
-    const nextSlot: SelectedTimeslot = {
-      dateKey,
-      endTime: slot.endTime,
-      startTime: slot.startTime,
-      state: slot.state,
-    };
+    if (slot.state === "pending") {
+      Alert.alert(
+        "Pending Reservation",
+        "There is already a pending reservation for this timeslot from a different user. Would you still like to reserve this timeslot?",
+        [
+          { style: "cancel", text: "No" },
+          {
+            text: "Yes",
+            onPress: () => {
+              setSelectedSlotsByRoom((currentValue) => {
+                const roomSelections = currentValue[room.id] ?? [];
+
+                return {
+                  ...currentValue,
+                  [room.id]: applySelectedTimeslotPress(roomSelections, nextSlot),
+                };
+              });
+            },
+          },
+        ]
+      );
+      return;
+    }
 
     setSelectedSlotsByRoom((currentValue) => {
       const roomSelections = currentValue[room.id] ?? [];
