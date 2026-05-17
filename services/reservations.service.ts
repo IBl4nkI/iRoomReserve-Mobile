@@ -145,3 +145,16 @@ export async function completeReservation(
     method: "PATCH",
   });
 }
+
+export async function cancelReservation(
+  reservationId: string,
+  userId: string
+): Promise<void> {
+  await apiRequest(`/api/reservations/${reservationId}`, {
+    body: {
+      action: "cancel",
+      userId,
+    },
+    method: "PATCH",
+  });
+}

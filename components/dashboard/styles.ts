@@ -468,4 +468,99 @@ export const dashboardStyles = StyleSheet.create({
     fontFamily: fonts.regular,
     color: colors.secondary,
   },
+  filterTabsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 18,
+  },
+  filterTabButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: colors.filterChipInactiveBorder,
+    backgroundColor: colors.surface,
+  },
+  filterTabButtonActive: {
+    backgroundColor: colors.filterChipActive,
+    borderColor: colors.filterChipActiveBorder,
+  },
+  filterTabButtonText: {
+    fontSize: 12,
+    fontFamily: fonts.bold,
+    color: colors.text,
+  },
+  filterTabButtonTextActive: {
+    color: colors.white,
+  },
+  filterTabBadge: {
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    marginLeft: 8,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.filterChipInactive,
+  },
+  filterTabBadgeActive: {
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  filterTabBadgeText: {
+    fontSize: 11,
+    fontFamily: fonts.bold,
+    color: colors.secondary,
+  },
+  filterTabBadgeTextActive: {
+    color: colors.white,
+  },
+  reservationHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 12,
+  },
+  reservationChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  reservationActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 14,
+  },
+  reservationOutlineButton: {
+    minWidth: 120,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  reservationOutlineButtonDanger: {
+    borderColor: colors.dangerBorder,
+    backgroundColor: colors.dangerBackground,
+  },
+  reservationOutlineButtonPrimary: {
+    borderColor: '#93c5fd',
+    backgroundColor: '#eff6ff',
+  },
+  reservationOutlineButtonText: {
+    fontSize: 13,
+    fontFamily: fonts.bold,
+  },
+  reservationOutlineButtonTextDanger: {
+    color: colors.dangerText,
+  },
+  reservationOutlineButtonTextPrimary: {
+    color: '#1d4ed8',
+  },
 });

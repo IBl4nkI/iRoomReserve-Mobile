@@ -17,7 +17,7 @@ const defaultNavItems = [
     route: '/(main)/dashboard/reserve-now',
   },
   {
-    label: 'Reservation History',
+    label: 'My Reservations',
     route: '/(main)/dashboard/reservation-history',
   },
   {
