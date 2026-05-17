@@ -34,7 +34,7 @@ export default function FeedbackScreen() {
         </View>
       </View>
 
-      <TouchableOpacity style={[styles.actionButton, styles.actionButtonInset]} onPress={() => router.back()}>
+      <TouchableOpacity style={[styles.actionButton, styles.backButtonContainer]} onPress={() => router.back()}>
         <Text style={styles.actionButtonText}>Back to Dashboard</Text>
       </TouchableOpacity>
     </ScrollView>

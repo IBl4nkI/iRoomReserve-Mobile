@@ -326,14 +326,14 @@ export const dashboardStyles = StyleSheet.create({
     fontSize: 14,
   },
   inlineSecondaryButton: {
-    backgroundColor: colors.surface,
+    width: '100%',
+    backgroundColor: colors.surface, 
     borderRadius: 12,
     paddingVertical: 12,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.border,
-    marginTop: 12,
   },
   inlineSecondaryButtonText: {
     color: colors.primary,
@@ -438,8 +438,9 @@ export const dashboardStyles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: 10,
   },
-  actionButtonInset: {
+  backButtonContainer: {
     marginHorizontal: 16,
+    marginTop: 0,
   },
   actionButtonText: {
     color: colors.white,

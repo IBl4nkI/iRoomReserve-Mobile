@@ -413,8 +413,12 @@ export default function ReservationHistoryScreen() {
             </Text>
           </View>
         ) : (
-          filteredReservations.map((reservation) => (
-            <View key={reservation.id} style={styles.listItem}>
+          filteredReservations.map((reservation, index) => (
+            <View
+              key={reservation.id}
+              style={[
+                styles.listItem,
+                index === filteredReservations.length - 1 ? { marginBottom: 0 } : null,]}>
               <Text style={styles.mutedLabel}>
                 {formatReservationDates(
                   reservation.dates,
@@ -509,7 +513,7 @@ export default function ReservationHistoryScreen() {
         )}
       </View>
 
-      <TouchableOpacity style={[styles.actionButton, styles.actionButtonInset]} onPress={() => router.back()}>
+      <TouchableOpacity style={[styles.actionButton, styles.backButtonContainer]} onPress={() => router.back()}>
         <Text style={styles.actionButtonText}>Back to Dashboard</Text>
       </TouchableOpacity>
     </ScrollView>
