@@ -1295,10 +1295,10 @@ export default function ReservationFormScreen() {
             <Text style={styles.summaryValue}>{room?.roomType ?? ""}</Text>
           </View>
           <View style={styles.summaryRow}>
-            <Text style={styles.summaryLabel}>Capacity:</Text>
+            <Text style={styles.summaryLabel}> Max. Capacity:</Text>
             <Text style={styles.summaryValue}>
               {typeof room?.capacity === "number"
-                ? `Approx. ${room.capacity} People`
+                ? `${room.capacity} People`
                 : ""}
             </Text>
           </View>

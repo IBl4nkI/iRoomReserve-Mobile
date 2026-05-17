@@ -183,7 +183,7 @@ export default function RoomsStatusScreen() {
               <Text style={styles.reservationMeta}>{room.buildingName}</Text>
               <Text style={styles.reservationMeta}>Floor: {room.floor}</Text>
               <Text style={styles.reservationMeta}>Type: {room.roomType}</Text>
-              <Text style={styles.reservationMeta}>Capacity: Approx. {room.capacity} People</Text>
+              <Text style={styles.reservationMeta}>Max. Capacity: {room.capacity} People</Text>
               <Text style={styles.reservationMeta}>Air-Conditioner: {room.acStatus}</Text>
               <Text style={styles.reservationMeta}>TV/Projector: {room.tvProjectorStatus}</Text>
             </View>

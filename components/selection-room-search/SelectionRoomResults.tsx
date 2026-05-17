@@ -171,8 +171,8 @@ export default function SelectionRoomResults({
                         {room.tvProjectorStatus}
                       </Text>
                       <Text style={styles.detailText}>
-                        <Text style={styles.detailLabel}>Capacity: </Text>
-                        {`Approx. ${room.capacity} People`}
+                        <Text style={styles.detailLabel}>Max. Capacity: </Text>
+                        {`${room.capacity} People`}
                       </Text>
                     </View>
 

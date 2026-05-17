@@ -1058,7 +1058,7 @@ export default function AlternativeRoomsScreen() {
             {room.roomType}
           </Text>
           <Text style={styles.roomDetail}>
-            <Text style={styles.roomDetailLabel}>Capacity: </Text>
+            <Text style={styles.roomDetailLabel}>Max. Capacity: </Text>
             {`Approx. ${room.capacity} People`}
           </Text>
           <Text style={styles.roomDetail}>
@@ -1200,7 +1200,7 @@ export default function AlternativeRoomsScreen() {
                         <Text style={styles.checkboxMark}>✓</Text>
                       ) : null}
                     </View>
-                    <Text style={styles.filterLabel}>Same Capacity</Text>
+                    <Text style={styles.filterLabel}>Same Max. Capacity</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
