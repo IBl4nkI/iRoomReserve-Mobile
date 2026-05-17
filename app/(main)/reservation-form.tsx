@@ -12,6 +12,7 @@ import {
 import * as DocumentPicker from "expo-document-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
+import AvailabilityCalendar from "@/components/AvailabilityCalendar";
 import SelectionScreenLayout from "@/components/SelectionScreenLayout";
 import { useToast } from "@/components/ToastProvider";
 import WeeklyScheduleGrid from "@/components/WeeklyScheduleGrid";
@@ -696,6 +697,42 @@ export default function ReservationFormScreen() {
     setRecurringEndDateKey(nextDateKey);
     setRecurringEndDateInput(buildDateInputValue(nextDateKey));
     setCalendarMonth(new Date(`${nextDateKey}T00:00:00`));
+  }
+
+  function openCalendar(field: "reservation" | "recurringEnd") {
+    if (openCalendarField === field) {
+      setOpenCalendarField(null);
+      return;
+    }
+
+    const dateKey =
+      field === "reservation"
+        ? effectiveReservationDateKey
+        : effectiveRecurringEndDateKey || effectiveReservationDateKey;
+
+    setOpenCalendarField(field);
+    setCalendarMonth(dateKey ? new Date(`${dateKey}T00:00:00`) : new Date());
+  }
+
+  function handleCalendarDateSelect(dateKey: string) {
+    if (openCalendarField === "reservation") {
+      setReservationDateKey(dateKey);
+      setReservationDateInput(buildDateInputValue(dateKey));
+
+      if (isRecurring && recurringEndDateKey && recurringEndDateKey < dateKey) {
+        setRecurringEndDateKey(dateKey);
+        setRecurringEndDateInput(buildDateInputValue(dateKey));
+      }
+    } else if (openCalendarField === "recurringEnd") {
+      const nextDateKey =
+        effectiveReservationDateKey && dateKey < effectiveReservationDateKey
+          ? effectiveReservationDateKey
+          : dateKey;
+      setRecurringEndDateKey(nextDateKey);
+      setRecurringEndDateInput(buildDateInputValue(nextDateKey));
+    }
+
+    setOpenCalendarField(null);
   }
 
   function toggleSelectedDay(dayOfWeek: number) {
@@ -1541,11 +1578,7 @@ export default function ReservationFormScreen() {
                 <Text style={styles.inputLabel}>Start Date</Text>
                 <SegmentedDateInput
                   onBlur={handleReservationDateBlur}
-                  onCalendarPress={() =>
-                    setOpenCalendarField((currentValue) =>
-                      currentValue === "reservation" ? null : "reservation"
-                    )
-                  }
+                  onCalendarPress={() => openCalendar("reservation")}
                   onChange={setReservationDateInput}
                   value={reservationDateInput}
                 />
@@ -1555,11 +1588,7 @@ export default function ReservationFormScreen() {
                 <Text style={styles.inputLabel}>End Date</Text>
                 <SegmentedDateInput
                   onBlur={handleRecurringEndDateBlur}
-                  onCalendarPress={() =>
-                    setOpenCalendarField((currentValue) =>
-                      currentValue === "recurringEnd" ? null : "recurringEnd"
-                    )
-                  }
+                  onCalendarPress={() => openCalendar("recurringEnd")}
                   onChange={setRecurringEndDateInput}
                   value={recurringEndDateInput}
                 />
@@ -1567,98 +1596,29 @@ export default function ReservationFormScreen() {
             </View>
 
             {openCalendarField ? (
-              <View style={styles.calendarCard}>
-                <View style={styles.calendarHeaderRow}>
-                  <TouchableOpacity
-                    style={styles.calendarNavButton}
-                    onPress={() => setCalendarMonth((currentValue) => addMonths(currentValue, -1))}
-                  >
-                    <Text style={styles.calendarNavText}>{"<"}</Text>
-                  </TouchableOpacity>
-                  <Text style={styles.calendarTitle}>{getMonthLabel(calendarMonth)}</Text>
-                  <TouchableOpacity
-                    style={styles.calendarNavButton}
-                    onPress={() => setCalendarMonth((currentValue) => addMonths(currentValue, 1))}
-                  >
-                    <Text style={styles.calendarNavText}>{">"}</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.calendarWeekRow}>
-                  {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((label) => (
-                    <Text key={label} style={styles.calendarWeekLabel}>
-                      {label}
-                    </Text>
-                  ))}
-                </View>
-
-                {calendarWeeks.map((week, weekIndex) => (
-                  <View
-                    key={`${calendarMonth.toISOString()}-${weekIndex}`}
-                    style={styles.calendarWeekRow}
-                  >
-                    {week.map((entry) => {
-                      const dateKey = toDateKey(entry.date);
-                      const disabled = entry.date.getDay() === 0;
-                      const selected =
-                        openCalendarField === "reservation"
-                          ? reservationDateKey === dateKey
-                          : recurringEndDateKey === dateKey;
-
-                      return (
-                        <TouchableOpacity
-                          key={dateKey}
-                          disabled={disabled}
-                          style={[
-                            styles.calendarDateButton,
-                            selected && styles.calendarDateButtonSelected,
-                            disabled && styles.calendarDateButtonDisabled,
-                          ]}
-                          onPress={() => {
-                            if (openCalendarField === "reservation") {
-                              setReservationDateKey(dateKey);
-                              setReservationDateInput(buildDateInputValue(dateKey));
-
-                              if (
-                                isRecurring &&
-                                recurringEndDateKey &&
-                                recurringEndDateKey < dateKey
-                              ) {
-                                setRecurringEndDateKey(dateKey);
-                                setRecurringEndDateInput(buildDateInputValue(dateKey));
-                              }
-                            } else {
-                              const nextDateKey =
-                                reservationDateKey && dateKey < reservationDateKey
-                                  ? reservationDateKey
-                                  : dateKey;
-                              setRecurringEndDateKey(nextDateKey);
-                              setRecurringEndDateInput(buildDateInputValue(nextDateKey));
-                            }
-
-                            setOpenCalendarField(null);
-                          }}
-                        >
-                          <Text
-                            style={[
-                              styles.calendarDateText,
-                              !entry.inMonth && styles.calendarDateTextMuted,
-                              selected && styles.calendarDateTextSelected,
-                              disabled && styles.calendarDateTextDisabled,
-                            ]}
-                          >
-                            {entry.date.getDate()}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </View>
-                ))}
-
-                <Text style={styles.helperText}>
-                  The date and time are prefilled from your selected timeslot and can still be
-                  changed.
-                </Text>
+              <View>
+                <AvailabilityCalendar
+                  calendarMonthLabel={getMonthLabel(calendarMonth)}
+                  calendarWeeks={calendarWeeks}
+                  isCalendarDateDisabled={(date, dateKey) =>
+                    date.getDay() === 0 ||
+                    (openCalendarField === "recurringEnd" &&
+                      Boolean(effectiveReservationDateKey) &&
+                      dateKey < effectiveReservationDateKey)
+                  }
+                  isCalendarDateSelected={(dateKey) =>
+                    openCalendarField === "reservation"
+                      ? effectiveReservationDateKey === dateKey
+                      : effectiveRecurringEndDateKey === dateKey
+                  }
+                  onCalendarDateSelect={handleCalendarDateSelect}
+                  onNextMonth={() =>
+                    setCalendarMonth((currentValue) => addMonths(currentValue, 1))
+                  }
+                  onPrevMonth={() =>
+                    setCalendarMonth((currentValue) => addMonths(currentValue, -1))
+                  }
+                />
               </View>
             ) : null}
 
@@ -1726,12 +1686,6 @@ export default function ReservationFormScreen() {
 
         {!isRecurring && isEditingSelectedSchedule ? (
           <View style={styles.scheduleEditorBlock}>
-            <Text style={styles.scheduleHelperText}>
-              Tap <Text style={styles.scheduleHelperTextGreen}>green</Text> or{" "}
-              <Text style={styles.scheduleHelperTextYellow}>yellow</Text> timeslots to update
-              your reservation schedule. <Text style={styles.scheduleHelperTextRed}>Red</Text>{" "}
-              timeslots are unavailable.
-            </Text>
             <WeeklyScheduleGrid
               campus={selectedCampus}
               onSelectedUnavailableSlotsChange={handleSelectedUnavailableSlotsChange}
@@ -2069,78 +2023,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontFamily: fonts.regular,
     fontSize: 14,
-  },
-  calendarCard: {
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    padding: 12,
-    marginBottom: 16,
-  },
-  calendarHeaderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  calendarNavButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.subtleBackground,
-  },
-  calendarNavText: {
-    color: colors.primary,
-    fontFamily: fonts.bold,
-    fontSize: 16,
-  },
-  calendarTitle: {
-    color: colors.text,
-    fontFamily: fonts.bold,
-    fontSize: 15,
-  },
-  calendarWeekRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  calendarWeekLabel: {
-    width: "16%",
-    textAlign: "center",
-    color: colors.mutedText,
-    fontFamily: fonts.bold,
-    fontSize: 12,
-  },
-  calendarDateButton: {
-    width: "16%",
-    aspectRatio: 1,
-    borderRadius: 12,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  calendarDateButtonSelected: {
-    backgroundColor: colors.primary,
-  },
-  calendarDateButtonDisabled: {
-    backgroundColor: colors.subtleBackground,
-  },
-  calendarDateText: {
-    color: colors.text,
-    fontFamily: fonts.regular,
-    fontSize: 13,
-  },
-  calendarDateTextMuted: {
-    color: colors.mutedText,
-  },
-  calendarDateTextSelected: {
-    color: colors.white,
-    fontFamily: fonts.bold,
-  },
-  calendarDateTextDisabled: {
-    color: colors.border,
   },
   helperText: {
     marginTop: 8,
