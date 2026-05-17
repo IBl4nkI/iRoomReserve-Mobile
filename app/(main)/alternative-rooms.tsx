@@ -515,7 +515,7 @@ export default function AlternativeRoomsScreen() {
 
     Alert.alert(
       "No Alternative Rooms",
-      "This room has no alternative because it is unique."
+      "This room has no alternative because it is a specialized room."
     );
     setSpecializedAlertShown(true);
   }, [originalRoom, specializedAlertShown]);

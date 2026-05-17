@@ -6,6 +6,24 @@ interface ApiRequestOptions {
   params?: Record<string, string | number | boolean | null | undefined>;
 }
 
+export class ApiRequestError extends Error {
+  code?: string;
+  details?: unknown;
+  status: number;
+
+  constructor(
+    message: string,
+    options: { code?: string; details?: unknown; status: number }
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+    Object.setPrototypeOf(this, new.target.prototype);
+    this.code = options.code;
+    this.details = options.details;
+    this.status = options.status;
+  }
+}
+
 function getApiBaseUrl() {
   const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL?.trim().replace(/\/$/, "");
 
@@ -46,11 +64,15 @@ export async function apiRequest<T>(
   });
 
   const payload = (await response.json().catch(() => null)) as
-    | { error?: { message?: string } }
+    | { error?: { code?: string; details?: unknown; message?: string } }
     | null;
 
   if (!response.ok) {
-    throw new Error(payload?.error?.message ?? "The request failed.");
+    throw new ApiRequestError(payload?.error?.message ?? "The request failed.", {
+      code: payload?.error?.code,
+      details: payload?.error?.details,
+      status: response.status,
+    });
   }
 
   return payload as T;

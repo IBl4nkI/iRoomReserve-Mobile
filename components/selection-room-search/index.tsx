@@ -782,7 +782,7 @@ export default function SelectionRoomSearch({
 
       Alert.alert(
         "Room Unavailable",
-        "This room is unavailable. Would you like to see alternative rooms that are available for this timeslot?",
+        "This room is unavailable for the selected timeslot/s. Would you like to see alternative rooms?",
         [
           { style: "cancel", text: "No" },
           {

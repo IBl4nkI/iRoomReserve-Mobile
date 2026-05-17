@@ -19,19 +19,23 @@ import RoomTimePickerModal from "@/components/selection-room-search/RoomTimePick
 import { colors, fonts } from "@/constants/theme";
 import { getUserProfile } from "@/lib/auth";
 import {
+  buildTimeSlots,
   CAMPUS_LABELS,
   formatFullDate,
   getRoomCampus,
   minutesToTimeString,
+  slotsOverlap,
   timeStringToMinutes,
   type TimeSlotViewModel,
 } from "@/lib/reservation-search";
 import { auth } from "@/services/firebase";
-import { apiRequest } from "@/services/api";
+import { ApiRequestError, apiRequest } from "@/services/api";
 import { uploadReservationDocument } from "@/services/reservation-documents.service";
 import {
   createRecurringReservation,
   createReservation,
+  getReservationsByRoom,
+  getReservationsByUser,
 } from "@/services/reservations.service";
 import { getRoomById } from "@/services/rooms.service";
 import { formatTime12h, getSchedulesByRoomId } from "@/services/schedules.service";
@@ -332,6 +336,30 @@ function expandSelectedTimeslots(
 
     return expandedSlots;
   });
+}
+
+function getRecurringDateKeys(
+  reservationDateKey: string,
+  recurringEndDateKey: string,
+  selectedDays: number[]
+) {
+  if (!reservationDateKey || !recurringEndDateKey || selectedDays.length === 0) {
+    return [];
+  }
+
+  const dateKeys: string[] = [];
+  const currentDate = new Date(`${reservationDateKey}T00:00:00`);
+  const endDate = new Date(`${recurringEndDateKey}T00:00:00`);
+
+  while (currentDate <= endDate) {
+    if (selectedDays.includes(currentDate.getDay())) {
+      dateKeys.push(toDateKey(currentDate));
+    }
+
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  return dateKeys;
 }
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -829,6 +857,83 @@ export default function ReservationFormScreen() {
     );
   }
 
+  async function findFirstUnavailableRecurringReservationDate() {
+    const currentUser = auth.currentUser;
+
+    if (
+      !currentUser ||
+      !room ||
+      !effectiveReservationDateKey ||
+      !effectiveRecurringEndDateKey ||
+      selectedDays.length === 0
+    ) {
+      return null;
+    }
+
+    const recurringDateKeys = getRecurringDateKeys(
+      effectiveReservationDateKey,
+      effectiveRecurringEndDateKey,
+      selectedDays
+    );
+
+    if (recurringDateKeys.length === 0) {
+      return null;
+    }
+
+    const [roomReservations, userReservations] = await Promise.all([
+      getReservationsByRoom(room.id),
+      getReservationsByUser(currentUser.uid),
+    ]);
+
+    const requestSlot = {
+      endTime,
+      startTime,
+    };
+    const userActiveReservations = userReservations.filter(
+      (reservation) =>
+        reservation.status === "pending" || reservation.status === "approved"
+    );
+
+    for (const dateKey of recurringDateKeys) {
+      const conflictingUserReservation = userActiveReservations.find(
+        (reservation) =>
+          reservation.date === dateKey &&
+          slotsOverlap(requestSlot, {
+            endTime: reservation.endTime,
+            startTime: reservation.startTime,
+          })
+      );
+
+      if (conflictingUserReservation) {
+        return { dateKey, reason: "user_conflict" as const };
+      }
+
+      const unavailableSlots = buildTimeSlots(
+        room.id,
+        dateKey,
+        schedules,
+        roomReservations,
+        userActiveReservations
+      ).filter(
+        (slot) => slot.state === "unavailable" && slotsOverlap(requestSlot, slot)
+      );
+
+      const userConflictSlot = unavailableSlots.find(
+        (slot) => slot.unavailableReason === "user_conflict"
+      );
+
+      if (userConflictSlot) {
+        return { dateKey, reason: "user_conflict" as const };
+      }
+
+      if (unavailableSlots.length > 0) {
+        return { dateKey, reason: "room_unavailable" as const };
+      }
+    }
+
+    return null;
+  }
+
   function getUnavailableSelectedRange(
     dateKey: string,
     slot: Pick<TimeSlotViewModel, "startTime" | "endTime">
@@ -944,7 +1049,7 @@ export default function ReservationFormScreen() {
 
       Alert.alert(
         "Room Unavailable",
-        "This room is unavailable. Would you like to see alternative rooms that are available for this timeslot?",
+        "This room is unavailable for the selected timeslot/s. Would you like to see alternative rooms?",
         [
           { style: "cancel", text: "No" },
           {
@@ -1146,6 +1251,39 @@ export default function ReservationFormScreen() {
     setSubmittingReservation(true);
 
     try {
+      if (isRecurring) {
+        const firstUnavailableRecurringDate =
+          await findFirstUnavailableRecurringReservationDate();
+
+        if (firstUnavailableRecurringDate) {
+          if (firstUnavailableRecurringDate.reason === "user_conflict") {
+            Alert.alert(
+              "Existing Reservation",
+              "You already have a reservation request for one of the selected timeslots. Press OK to remove or change that reservation first.",
+              [{ text: "OK" }]
+            );
+            return;
+          }
+
+          Alert.alert(
+            "Room Unavailable",
+            "This room is unavailable for the selected timeslot/s. Would you like to see alternative rooms?",
+            [
+              { style: "cancel", text: "No" },
+              {
+                text: "Yes",
+                onPress: () =>
+                  openAlternativeRooms(firstUnavailableRecurringDate.dateKey, {
+                    endTime,
+                    startTime,
+                  }),
+              },
+            ]
+          );
+          return;
+        }
+      }
+
       const profile = userProfile ?? (await getUserProfile(currentUser.uid));
       const firstName = profile?.firstName?.trim() ?? "";
       const lastName = profile?.lastName?.trim() ?? "";
@@ -1258,6 +1396,44 @@ export default function ReservationFormScreen() {
       showToast("Reservation submitted successfully.");
       router.replace("/(main)/dashboard");
     } catch (error) {
+      if (error instanceof ApiRequestError) {
+        if (error.code === "user_timeslot_conflict") {
+          Alert.alert(
+            "Existing Reservation",
+            "You already have a reservation request for one of the selected timeslots. Press OK to remove or change that reservation first.",
+            [{ text: "OK" }]
+          );
+          return;
+        }
+
+        if (error.code === "room_timeslot_unavailable") {
+          const conflictDate =
+            typeof error.details === "object" &&
+            error.details !== null &&
+            "date" in error.details &&
+            typeof (error.details as { date?: unknown }).date === "string"
+              ? (error.details as { date: string }).date
+              : effectiveReservationDateKey;
+
+          Alert.alert(
+            "Room Unavailable",
+            "This room is unavailable for the selected timeslot/s. Would you like to see alternative rooms?",
+            [
+              { style: "cancel", text: "No" },
+              {
+                text: "Yes",
+                onPress: () =>
+                  openAlternativeRooms(conflictDate, {
+                    endTime,
+                    startTime,
+                  }),
+              },
+            ]
+          );
+          return;
+        }
+      }
+
       showToast(
         error instanceof Error ? error.message : "Failed to submit the reservation.",
         "error"
