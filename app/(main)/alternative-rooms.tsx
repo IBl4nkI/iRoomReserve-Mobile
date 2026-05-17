@@ -57,10 +57,8 @@ const EXACT_MATCH_PAGE_SIZE = 3;
 
 type ExactFetchState = {
   exhausted: boolean;
-  otherCampusBuildingIndex: number;
   pendingRooms: SearchRoom[];
-  sameCampusBuildingIndex: number;
-  stage: 0 | 1 | 2 | 3 | 4;
+  stage: 0 | 1;
 };
 
 function normalizeText(value: string | null | undefined) {
@@ -280,9 +278,7 @@ export default function AlternativeRoomsScreen() {
   const originalRoomRef = useRef<Room | null>(null);
   const exactFetchStateRef = useRef<ExactFetchState>({
     exhausted: false,
-    otherCampusBuildingIndex: 0,
     pendingRooms: [],
-    sameCampusBuildingIndex: 0,
     stage: 0,
   });
 
@@ -301,9 +297,7 @@ export default function AlternativeRoomsScreen() {
   function resetExactFetchState() {
     exactFetchStateRef.current = {
       exhausted: false,
-      otherCampusBuildingIndex: 0,
       pendingRooms: [],
-      sameCampusBuildingIndex: 0,
       stage: 0,
     };
     exactRoomsRef.current = [];
@@ -327,32 +321,8 @@ export default function AlternativeRoomsScreen() {
     setExactRooms(updatedRooms);
   }
 
-  function getSortedBuildingGroups(room: Room, availableBuildings: Building[]) {
-    const roomCampus = getRoomCampus(room);
-    const sortedBuildings = [...availableBuildings].sort(
-      (left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id)
-    );
-
-    return {
-      otherCampusBuildings: sortedBuildings.filter(
-        (building) =>
-          building.id !== room.buildingId &&
-          building.campus !== roomCampus
-      ),
-      sameCampusBuildings: sortedBuildings.filter(
-        (building) =>
-          building.id !== room.buildingId &&
-          building.campus === roomCampus
-      ),
-    };
-  }
-
   async function fetchNextExactRoomBatch(room: Room, availableBuildings: Building[]) {
     const fetchState = exactFetchStateRef.current;
-    const { otherCampusBuildings, sameCampusBuildings } = getSortedBuildingGroups(
-      room,
-      availableBuildings
-    );
 
     while (!fetchState.exhausted) {
       if (fetchState.stage === 0) {
@@ -364,52 +334,6 @@ export default function AlternativeRoomsScreen() {
               candidateRoom.id !== room.id &&
               !isSpecializedRoom(candidateRoom) &&
               isExactRoomMatch(room, candidateRoom)
-          );
-      }
-
-      if (fetchState.stage === 1) {
-        fetchState.stage = 2;
-        return (await getRoomsByBuilding(room.buildingId))
-          .map(toSearchRoom)
-          .filter(
-            (candidateRoom) =>
-              candidateRoom.id !== room.id &&
-              !isSpecializedRoom(candidateRoom) &&
-              candidateRoom.floor !== room.floor &&
-              isExactRoomMatch(room, candidateRoom)
-          );
-      }
-
-      if (fetchState.stage === 2) {
-        if (fetchState.sameCampusBuildingIndex >= sameCampusBuildings.length) {
-          fetchState.stage = 3;
-          continue;
-        }
-
-        const nextBuilding = sameCampusBuildings[fetchState.sameCampusBuildingIndex];
-        fetchState.sameCampusBuildingIndex += 1;
-        return (await getRoomsByBuilding(nextBuilding.id))
-          .map(toSearchRoom)
-          .filter(
-            (candidateRoom) =>
-              !isSpecializedRoom(candidateRoom) && isExactRoomMatch(room, candidateRoom)
-          );
-      }
-
-      if (fetchState.stage === 3) {
-        if (fetchState.otherCampusBuildingIndex >= otherCampusBuildings.length) {
-          fetchState.stage = 4;
-          fetchState.exhausted = true;
-          break;
-        }
-
-        const nextBuilding = otherCampusBuildings[fetchState.otherCampusBuildingIndex];
-        fetchState.otherCampusBuildingIndex += 1;
-        return (await getRoomsByBuilding(nextBuilding.id))
-          .map(toSearchRoom)
-          .filter(
-            (candidateRoom) =>
-              !isSpecializedRoom(candidateRoom) && isExactRoomMatch(room, candidateRoom)
           );
       }
 
@@ -672,12 +596,14 @@ export default function AlternativeRoomsScreen() {
       return [];
     }
 
+    const exactRoomIds = new Set(exactRooms.map((room) => room.id));
+
     return baseCandidateRooms.filter(
       (room) =>
-        !isExactRoomMatch(originalRoom, room) &&
+        !exactRoomIds.has(room.id) &&
         matchesSelectedFilters(originalRoom, room, matchFilters, relaxedSelection)
     );
-  }, [baseCandidateRooms, matchFilters, originalRoom, relaxedSelection]);
+  }, [baseCandidateRooms, exactRooms, matchFilters, originalRoom, relaxedSelection]);
 
   const neededRoomIds = useMemo(() => {
     return [...new Set([...exactRooms, ...relaxedCandidateRooms].map((room) => room.id))];
@@ -965,18 +891,41 @@ export default function AlternativeRoomsScreen() {
       }
 
       if (level === "campus") {
+        if (id === "digi") {
+          const nextFloorId = buildCampusFloorOptions(
+            buildings.filter((building) => building.campus === "digi"),
+            []
+          )[0]?.id ?? null;
+
+          return {
+            building: null,
+            campus: id,
+            floor: nextFloorId,
+          };
+        }
+
+        const nextBuildingId = buildings
+          .filter((building) => building.campus === id)
+          .sort((left, right) => left.name.localeCompare(right.name) || left.id.localeCompare(right.id))[0]?.id ?? null;
+        const nextBuilding = buildings.find((building) => building.id === nextBuildingId);
+        const nextFloorId =
+          nextBuilding ? buildBuildingFloorOptions(nextBuilding, [])[0]?.id ?? null : null;
+
         return {
-          building: null,
+          building: nextBuildingId,
           campus: id,
-          floor: null,
+          floor: nextFloorId,
         };
       }
 
       if (level === "building") {
+        const selectedBuilding = buildings.find((building) => building.id === id);
+
         return {
           ...currentValue,
           building: id,
-          floor: null,
+          floor:
+            selectedBuilding ? buildBuildingFloorOptions(selectedBuilding, [])[0]?.id ?? null : null,
         };
       }
 
@@ -1059,7 +1008,7 @@ export default function AlternativeRoomsScreen() {
           </Text>
           <Text style={styles.roomDetail}>
             <Text style={styles.roomDetailLabel}>Max. Capacity: </Text>
-            {`Approx. ${room.capacity} People`}
+            {`${room.capacity} People`}
           </Text>
           <Text style={styles.roomDetail}>
             <Text style={styles.roomDetailLabel}>Air-Conditioner: </Text>
@@ -1085,7 +1034,7 @@ export default function AlternativeRoomsScreen() {
   return (
     <SelectionScreenLayout
       title="Alternative Rooms"
-      subtitle="Available rooms for the same unavailable timeslot"
+      subtitle="Available rooms for the selected timeslot"
       onBackPress={() => router.back()}
     >
       <View style={styles.content}>
@@ -1154,11 +1103,6 @@ export default function AlternativeRoomsScreen() {
 
                 <View style={styles.selectionFilterBarShell}>
                   <FilterBar
-                    defaultSelections={{
-                      building: originalRoom?.buildingId,
-                      campus: originalRoom ? getRoomCampus(originalRoom) : undefined,
-                      floor: originalRoom ? getRoomFloorId(originalRoom) : undefined,
-                    }}
                     disableActivePress
                     levelOptionsOverride={relaxedFilterBarLevelOptions}
                     navigateOnSelect={false}
@@ -1276,6 +1220,10 @@ export default function AlternativeRoomsScreen() {
                       <Text style={styles.loadMoreButtonText}>Load More Rooms</Text>
                     )}
                   </TouchableOpacity>
+                ) : visibleRelaxedRooms.length > 0 ? (
+                  <Text style={styles.endOfResultsText}>
+                    No more rooms match selected filters. Change the floor, building, or filters to see more similar rooms.
+                  </Text>
                 ) : null}
               </View>
             ) : null}
@@ -1434,6 +1382,13 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontFamily: fonts.bold,
     fontSize: 13,
+  },
+  endOfResultsText: {
+    color: colors.secondary,
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    textAlign: "center",
+    paddingTop: 10,
   },
   filterList: {
     gap: 10,
