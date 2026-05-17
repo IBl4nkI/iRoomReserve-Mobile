@@ -150,7 +150,7 @@ function matchesSelectedFilters(
 
   if (
     filters.sameCapacity &&
-    originalRoom.capacity !== candidateRoom.capacity
+    candidateRoom.capacity < originalRoom.capacity
   ) {
     return false;
   }
@@ -1200,7 +1200,7 @@ export default function AlternativeRoomsScreen() {
                         <Text style={styles.checkboxMark}>✓</Text>
                       ) : null}
                     </View>
-                    <Text style={styles.filterLabel}>Same Max. Capacity</Text>
+                    <Text style={styles.filterLabel}>Same or Higher Max. Capacity</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
