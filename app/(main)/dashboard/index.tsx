@@ -6,6 +6,7 @@ import {
   PermissionsAndroid,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   Text,
   View,
@@ -353,6 +354,7 @@ export default function DashboardHomeScreen() {
   const [roomsById, setRoomsById] = React.useState<Record<string, Room>>({});
   const [userRole, setUserRole] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [reservationActionLoading, setReservationActionLoading] = React.useState(false);
   const isMountedRef = React.useRef(true);
@@ -436,6 +438,18 @@ export default function DashboardHomeScreen() {
       bleManagerRef.current?.destroy();
       bleManagerRef.current = null;
     };
+  }, [loadDashboard]);
+
+  const handleRefresh = React.useCallback(async () => {
+    setRefreshing(true);
+
+    try {
+      await loadDashboard(false);
+    } finally {
+      if (isMountedRef.current) {
+        setRefreshing(false);
+      }
+    }
   }, [loadDashboard]);
 
   const pendingReservations = reservations.filter(
@@ -703,6 +717,16 @@ export default function DashboardHomeScreen() {
   return (
     <ScrollView
       stickyHeaderIndices={[0]}
+      refreshControl={
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => {
+            void handleRefresh();
+          }}
+          tintColor={colors.primary}
+          colors={[colors.primary]}
+        />
+      }
       contentContainerStyle={[
         styles.container,
         {
