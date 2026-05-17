@@ -1395,6 +1395,7 @@ export default function SelectionRoomSearch({
         <SelectionRoomResults
           availabilityLoading={availabilityLoading}
           availableRooms={availableRooms}
+          endTime={endTimeDraft}
           expandedRoomId={expandedRoomId}
           resultsFooter={resultsFooter}
           resultsHeadingVisible={resultsHeadingVisible}
@@ -1405,6 +1406,7 @@ export default function SelectionRoomSearch({
           roomsLoading={roomsLoading}
           scheduleLoadingIds={scheduleLoadingIds}
           selectedSlotsByRoom={selectedSlotsByRoom}
+          startTime={startTimeDraft}
           onOpenReservationFormForRoom={openReservationFormForRoom}
           onSetSelectedSlotsForRoom={setSelectedSlotsForRoom}
           onToggleExpandedRoom={toggleExpandedRoom}

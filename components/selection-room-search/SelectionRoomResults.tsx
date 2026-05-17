@@ -6,12 +6,20 @@ import DayScheduleModal from "@/components/DayScheduleModal";
 import styles from "./styles";
 import { addMonths, getCalendarWeeks, getMonthLabel, getSelectedTimeslotKey, type SelectedTimeslot } from "./helpers";
 import { colors } from "@/constants/theme";
-import { isPastDate, type SearchRoom, type TimeSlotViewModel } from "@/lib/reservation-search";
+import {
+  buildTimeSlots,
+  isPastDate,
+  timeStringToMinutes,
+  type SearchRoom,
+  type TimeSlotViewModel,
+} from "@/lib/reservation-search";
+import { getReservationsByRoom } from "@/services/reservations.service";
 import type { ReservationCampus, ReservationRecord, Schedule } from "@/types/reservation";
 
 interface SelectionRoomResultsProps {
   availabilityLoading: boolean;
   availableRooms: SearchRoom[];
+  endTime: string;
   expandedRoomId: string | null;
   resultsFooter?: React.ReactNode;
   resultsHeadingVisible: boolean;
@@ -22,6 +30,7 @@ interface SelectionRoomResultsProps {
   roomsLoading: boolean;
   scheduleLoadingIds: Record<string, boolean>;
   selectedSlotsByRoom: Record<string, SelectedTimeslot[]>;
+  startTime: string;
   onOpenReservationFormForRoom: (room: SearchRoom) => void;
   onSetSelectedSlotsForRoom: (roomId: string, slots: SelectedTimeslot[]) => void;
   onToggleExpandedRoom: (roomId: string) => void;
@@ -35,6 +44,7 @@ interface SelectionRoomResultsProps {
 export default function SelectionRoomResults({
   availabilityLoading,
   availableRooms,
+  endTime,
   expandedRoomId,
   resultsFooter,
   resultsHeadingVisible,
@@ -45,6 +55,7 @@ export default function SelectionRoomResults({
   roomsLoading,
   scheduleLoadingIds,
   selectedSlotsByRoom,
+  startTime,
   onOpenReservationFormForRoom,
   onSetSelectedSlotsForRoom,
   onToggleExpandedRoom,
@@ -56,8 +67,61 @@ export default function SelectionRoomResults({
     roomId: string;
     slots: SelectedTimeslot[];
   } | null>(null);
+  const [roomReservationsByRoomId, setRoomReservationsByRoomId] = useState<
+    Record<string, ReservationRecord[]>
+  >({});
+  const [reservationLoadingIds, setReservationLoadingIds] = useState<Record<string, boolean>>({});
   const calendarWeeks = useMemo(() => getCalendarWeeks(calendarMonth), [calendarMonth]);
   const calendarMonthLabel = getMonthLabel(calendarMonth);
+
+  React.useEffect(() => {
+    if (!expandedRoomId || roomReservationsByRoomId[expandedRoomId] || reservationLoadingIds[expandedRoomId]) {
+      return;
+    }
+
+    let active = true;
+
+    setReservationLoadingIds((currentValue) => ({
+      ...currentValue,
+      [expandedRoomId]: true,
+    }));
+
+    getReservationsByRoom(expandedRoomId)
+      .then((nextReservations) => {
+        if (!active) {
+          return;
+        }
+
+        setRoomReservationsByRoomId((currentValue) => ({
+          ...currentValue,
+          [expandedRoomId]: nextReservations,
+        }));
+      })
+      .catch(() => {
+        if (!active) {
+          return;
+        }
+
+        setRoomReservationsByRoomId((currentValue) => ({
+          ...currentValue,
+          [expandedRoomId]: [],
+        }));
+      })
+      .finally(() => {
+        if (!active) {
+          return;
+        }
+
+        setReservationLoadingIds((currentValue) => ({
+          ...currentValue,
+          [expandedRoomId]: false,
+        }));
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [expandedRoomId, reservationLoadingIds, roomReservationsByRoomId]);
 
   function handleOpenDayScheduleModal(
     roomId: string,
@@ -127,6 +191,32 @@ export default function SelectionRoomResults({
             const hasSelectedSlots = selectedSlots.length > 0;
             const isModalOpenForRoom =
               modalDateKey !== null && modalSelectionSnapshot?.roomId === room.id;
+            const roomReservations = roomReservationsByRoomId[room.id] ?? [];
+            const dateVariantByKey = Object.fromEntries(
+              calendarWeeks.flat().map((entry) => {
+                const matchingSlots = buildTimeSlots(
+                  room.id,
+                  entry.dateKey,
+                  schedules,
+                  roomReservations,
+                  userReservations
+                ).filter(
+                  (slot) =>
+                    timeStringToMinutes(slot.startTime) >= timeStringToMinutes(startTime) &&
+                    timeStringToMinutes(slot.endTime) <= timeStringToMinutes(endTime)
+                );
+
+                if (matchingSlots.some((slot) => slot.state === "available")) {
+                  return [entry.dateKey, "success"];
+                }
+
+                if (matchingSlots.some((slot) => slot.state === "pending")) {
+                  return [entry.dateKey, "warning"];
+                }
+
+                return [entry.dateKey, "danger"];
+              })
+            ) as Record<string, "danger" | "success" | "warning">;
 
             return (
               <View key={room.id} style={styles.roomCard}>
@@ -147,7 +237,7 @@ export default function SelectionRoomResults({
                   </TouchableOpacity>
                 </View>
 
-                {scheduleLoadingIds[room.id] ? (
+                {scheduleLoadingIds[room.id] || reservationLoadingIds[room.id] ? (
                   <ActivityIndicator color={colors.primary} style={styles.roomLoader} />
                 ) : null}
 
@@ -181,6 +271,7 @@ export default function SelectionRoomResults({
                       <AvailabilityCalendar
                         calendarMonthLabel={calendarMonthLabel}
                         calendarWeeks={calendarWeeks}
+                        getCalendarDateVariant={(dateKey) => dateVariantByKey[dateKey]}
                         isCalendarDateDisabled={(date) =>
                           isPastDate(date) || date.getDay() === 0
                         }
