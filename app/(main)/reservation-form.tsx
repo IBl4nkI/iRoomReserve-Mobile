@@ -13,9 +13,9 @@ import * as DocumentPicker from "expo-document-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import AvailabilityCalendar from "@/components/AvailabilityCalendar";
+import DayScheduleModal from "@/components/DayScheduleModal";
 import SelectionScreenLayout from "@/components/SelectionScreenLayout";
 import { useToast } from "@/components/ToastProvider";
-import WeeklyScheduleGrid from "@/components/WeeklyScheduleGrid";
 import RoomTimePickerModal from "@/components/selection-room-search/RoomTimePickerModal";
 import { colors, fonts } from "@/constants/theme";
 import { getUserProfile } from "@/lib/auth";
@@ -24,6 +24,7 @@ import {
   CAMPUS_LABELS,
   formatFullDate,
   getRoomCampus,
+  isPastDate,
   minutesToTimeString,
   slotsOverlap,
   timeStringToMinutes,
@@ -40,7 +41,7 @@ import {
 } from "@/services/reservations.service";
 import { getRoomById } from "@/services/rooms.service";
 import { formatTime12h, getSchedulesByRoomId } from "@/services/schedules.service";
-import type { ReservationCampus, Room, Schedule } from "@/types/reservation";
+import type { ReservationCampus, ReservationRecord, Room, Schedule } from "@/types/reservation";
 import {
   addMonths,
   applySelectedTimeslotPress,
@@ -71,6 +72,8 @@ interface SelectedTimeslotParam {
   startTime: string;
   state: "available" | "pending";
 }
+
+type CalendarDateVariant = "danger" | "success" | "warning";
 
 type MaterialKey =
   | "fans"
@@ -293,27 +296,6 @@ function getEffectiveDateKey(inputValue: string, fallbackDateKey: string) {
   return parseEditableDateInput(inputValue) ?? fallbackDateKey;
 }
 
-function getWeekOffsetForDate(dateKey: string) {
-  const today = new Date();
-  const currentWeekStart = new Date(today);
-  const currentDay = currentWeekStart.getDay();
-  const currentWeekDifference = currentDay === 0 ? -6 : 1 - currentDay;
-  currentWeekStart.setDate(currentWeekStart.getDate() + currentWeekDifference);
-  currentWeekStart.setHours(0, 0, 0, 0);
-
-  const targetDate = new Date(`${dateKey}T00:00:00`);
-  const targetWeekStart = new Date(targetDate);
-  const targetDay = targetWeekStart.getDay();
-  const targetWeekDifference = targetDay === 0 ? -6 : 1 - targetDay;
-  targetWeekStart.setDate(targetWeekStart.getDate() + targetWeekDifference);
-  targetWeekStart.setHours(0, 0, 0, 0);
-
-  const millisecondsPerWeek = 7 * 24 * 60 * 60 * 1000;
-  return Math.round(
-    (targetWeekStart.getTime() - currentWeekStart.getTime()) / millisecondsPerWeek
-  );
-}
-
 function expandSelectedTimeslots(
   slots: SelectedTimeslotParam[]
 ): SelectedTimeslotParam[] {
@@ -409,10 +391,28 @@ export default function ReservationFormScreen() {
     SelectedTimeslotParam[]
   >(expandSelectedTimeslots(parsedTimeslots));
   const [isEditingSelectedSchedule, setIsEditingSelectedSchedule] = React.useState(false);
-  const [scheduleWeekOffset, setScheduleWeekOffset] = React.useState(0);
+  const [scheduleEditorCalendarMonth, setScheduleEditorCalendarMonth] = React.useState(
+    parsedTimeslots[0]?.dateKey ? new Date(`${parsedTimeslots[0].dateKey}T00:00:00`) : new Date()
+  );
+  const [scheduleEditorDateKey, setScheduleEditorDateKey] = React.useState<string | null>(null);
+  const [scheduleEditorSelectionSnapshot, setScheduleEditorSelectionSnapshot] = React.useState<
+    SelectedTimeslotParam[] | null
+  >(null);
+  const [scheduleEditorReservations, setScheduleEditorReservations] = React.useState<
+    ReservationRecord[]
+  >([]);
+  const [scheduleEditorUserReservations, setScheduleEditorUserReservations] = React.useState<
+    ReservationRecord[]
+  >([]);
 
   React.useEffect(() => {
     setSelectedScheduleSlots(expandSelectedTimeslots(parsedTimeslots));
+  }, [parsedTimeslots]);
+
+  React.useEffect(() => {
+    setScheduleEditorCalendarMonth(
+      parsedTimeslots[0]?.dateKey ? new Date(`${parsedTimeslots[0].dateKey}T00:00:00`) : new Date()
+    );
   }, [parsedTimeslots]);
 
   React.useEffect(() => {
@@ -470,6 +470,58 @@ export default function ReservationFormScreen() {
       active = false;
     };
   }, []);
+
+  React.useEffect(() => {
+    let active = true;
+    const currentUser = auth.currentUser;
+
+    if (!resolvedRoomId) {
+      setScheduleEditorReservations([]);
+      return () => {
+        active = false;
+      };
+    }
+
+    getReservationsByRoom(resolvedRoomId)
+      .then((nextReservations) => {
+        if (active) {
+          setScheduleEditorReservations(nextReservations);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setScheduleEditorReservations([]);
+        }
+      });
+
+    if (!currentUser) {
+      setScheduleEditorUserReservations([]);
+      return () => {
+        active = false;
+      };
+    }
+
+    getReservationsByUser(currentUser.uid)
+      .then((nextReservations) => {
+        if (active) {
+          setScheduleEditorUserReservations(
+            nextReservations.filter(
+              (reservation) =>
+                reservation.status === "pending" || reservation.status === "approved"
+            )
+          );
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setScheduleEditorUserReservations([]);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [resolvedRoomId]);
 
   const initialSlot = parsedTimeslots[0];
   const selectedCampus = room ? getRoomCampus(room) : null;
@@ -533,8 +585,6 @@ export default function ReservationFormScreen() {
   const [attachmentError, setAttachmentError] = React.useState("");
   const [submittingReservation, setSubmittingReservation] = React.useState(false);
   const [userProfile, setUserProfile] = React.useState<UserProfileSummary | null>(null);
-  const lastUnavailableSelectedSlotKeyRef = React.useRef<string | null>(null);
-  const showingUnavailableSelectedSlotAlertRef = React.useRef(false);
 
   const endTimeOptions = React.useMemo(
     () =>
@@ -585,10 +635,97 @@ export default function ReservationFormScreen() {
     [activeTimeOptions, activeTimeParts.hour, activeTimeParts.period, timeWheelHoursForPeriod, timeWheelPeriods]
   );
   const calendarWeeks = React.useMemo(() => getCalendarWeeks(calendarMonth), [calendarMonth]);
+  const scheduleEditorCalendarWeeks = React.useMemo(
+    () => getCalendarWeeks(scheduleEditorCalendarMonth),
+    [scheduleEditorCalendarMonth]
+  );
   const selectedScheduleSlotKeys = React.useMemo(
     () => selectedScheduleSlots.map((slot) => getSelectedTimeslotKey(slot)),
     [selectedScheduleSlots]
   );
+  const selectedScheduleTimeRanges = React.useMemo(() => {
+    const uniqueRanges = new Map<string, { endTime: string; startTime: string }>();
+
+    collapseSelectedTimeslots(selectedScheduleSlots).forEach((slot) => {
+      const rangeKey = `${slot.startTime}-${slot.endTime}`;
+
+      if (!uniqueRanges.has(rangeKey)) {
+        uniqueRanges.set(rangeKey, {
+          endTime: slot.endTime,
+          startTime: slot.startTime,
+        });
+      }
+    });
+
+    return Array.from(uniqueRanges.values());
+  }, [selectedScheduleSlots]);
+  const scheduleEditorDateVariantByKey = React.useMemo(() => {
+    if (!room) {
+      return {} as Record<string, CalendarDateVariant>;
+    }
+
+    const variantsByKey: Record<string, CalendarDateVariant> = {};
+    const visibleDateKeys = scheduleEditorCalendarWeeks
+      .flat()
+      .map((entry) => entry.dateKey)
+      .filter((dateKey, index, values) => values.indexOf(dateKey) === index);
+
+    visibleDateKeys.forEach((dateKey) => {
+      const visibleSlots = buildTimeSlots(
+        room.id,
+        dateKey,
+        schedules,
+        scheduleEditorReservations,
+        scheduleEditorUserReservations
+      );
+
+      let hasPendingRange = false;
+      let hasUnavailableRange = false;
+
+      for (const range of selectedScheduleTimeRanges) {
+        const matchingSlots = visibleSlots.filter((slot) => {
+          return (
+            timeStringToMinutes(slot.startTime) >= timeStringToMinutes(range.startTime) &&
+            timeStringToMinutes(slot.endTime) <= timeStringToMinutes(range.endTime)
+          );
+        });
+
+        if (matchingSlots.length === 0) {
+          continue;
+        }
+
+        if (matchingSlots.every((slot) => slot.state === "available")) {
+          variantsByKey[dateKey] = "success";
+          return;
+        }
+
+        if (matchingSlots.every((slot) => slot.state !== "unavailable")) {
+          hasPendingRange = true;
+          continue;
+        }
+
+        hasUnavailableRange = true;
+      }
+
+      if (hasPendingRange) {
+        variantsByKey[dateKey] = "warning";
+        return;
+      }
+
+      if (hasUnavailableRange) {
+        variantsByKey[dateKey] = "danger";
+      }
+    });
+
+    return variantsByKey;
+  }, [
+    room,
+    schedules,
+    scheduleEditorCalendarWeeks,
+    scheduleEditorReservations,
+    scheduleEditorUserReservations,
+    selectedScheduleTimeRanges,
+  ]);
   const effectiveReservationDateKey = React.useMemo(
     () => getEffectiveDateKey(reservationDateInput, reservationDateKey),
     [reservationDateInput, reservationDateKey]
@@ -888,10 +1025,22 @@ export default function ReservationFormScreen() {
     });
   }
 
-  function clearSelectedScheduleSlotsForDate(dateKey: string) {
-    setSelectedScheduleSlots((currentValue) =>
-      currentValue.filter((slot) => slot.dateKey !== dateKey)
-    );
+  function openScheduleDateModal(dateKey: string) {
+    setScheduleEditorSelectionSnapshot(selectedScheduleSlots);
+    setScheduleEditorDateKey(dateKey);
+  }
+
+  function closeScheduleDateModal() {
+    setScheduleEditorDateKey(null);
+    setScheduleEditorSelectionSnapshot(null);
+  }
+
+  function discardScheduleDateChanges() {
+    if (!scheduleEditorSelectionSnapshot) {
+      return;
+    }
+
+    setSelectedScheduleSlots(scheduleEditorSelectionSnapshot);
   }
 
   async function findFirstUnavailableRecurringReservationDate() {
@@ -971,89 +1120,6 @@ export default function ReservationFormScreen() {
     return null;
   }
 
-  function getUnavailableSelectedRange(
-    dateKey: string,
-    slot: Pick<TimeSlotViewModel, "startTime" | "endTime">
-  ) {
-    const slotStartMinutes = timeStringToMinutes(slot.startTime);
-    const slotEndMinutes = timeStringToMinutes(slot.endTime);
-
-    return (
-      collapseSelectedTimeslots(
-        selectedScheduleSlots.filter((selectedSlot) => selectedSlot.dateKey === dateKey)
-      ).find((selectedSlot) => {
-        const selectedStartMinutes = timeStringToMinutes(selectedSlot.startTime);
-        const selectedEndMinutes = timeStringToMinutes(selectedSlot.endTime);
-
-        return (
-          slotStartMinutes >= selectedStartMinutes &&
-          slotEndMinutes <= selectedEndMinutes
-        );
-      }) ?? {
-        dateKey,
-        endTime: slot.endTime,
-        startTime: slot.startTime,
-        state: "available" as const,
-      }
-    );
-  }
-
-  const handleSelectedUnavailableSlotsChange = React.useCallback(
-    (slots: Array<{ dateKey: string; slot: TimeSlotViewModel }>) => {
-      if (slots.length === 0) {
-        lastUnavailableSelectedSlotKeyRef.current = null;
-        showingUnavailableSelectedSlotAlertRef.current = false;
-        return;
-      }
-
-      const [firstUnavailableSlot] = slots;
-
-      if (!firstUnavailableSlot || showingUnavailableSelectedSlotAlertRef.current) {
-        return;
-      }
-
-      const slotKey = `${firstUnavailableSlot.dateKey}-${firstUnavailableSlot.slot.startTime}-${firstUnavailableSlot.slot.endTime}`;
-
-      if (lastUnavailableSelectedSlotKeyRef.current === slotKey) {
-        return;
-      }
-
-      const unavailableRange = getUnavailableSelectedRange(
-        firstUnavailableSlot.dateKey,
-        firstUnavailableSlot.slot
-      );
-      const unavailableLabel = `${formatTime12h(unavailableRange.startTime)} - ${formatTime12h(
-        unavailableRange.endTime
-      )}`;
-
-      lastUnavailableSelectedSlotKeyRef.current = slotKey;
-      showingUnavailableSelectedSlotAlertRef.current = true;
-
-      Alert.alert(
-        "Selected Timeslot Unavailable",
-        `Your original timeslot (${unavailableLabel}) suddenly became unavailable. Would you like to look at alternative rooms?`,
-        [
-          {
-            text: "No, I'll edit the selected timeslots",
-            style: "cancel",
-            onPress: () => {
-              showingUnavailableSelectedSlotAlertRef.current = false;
-              clearSelectedScheduleSlotsForDate(firstUnavailableSlot.dateKey);
-            },
-          },
-          {
-            text: "Yes",
-            onPress: () => {
-              showingUnavailableSelectedSlotAlertRef.current = false;
-              openAlternativeRooms(firstUnavailableSlot.dateKey, unavailableRange);
-            },
-          },
-        ]
-      );
-    },
-    [selectedScheduleSlots]
-  );
-
   function handleScheduleSlotPress(
     dateKey: string,
     slot: TimeSlotViewModel
@@ -1132,10 +1198,18 @@ export default function ReservationFormScreen() {
       )[0];
 
     if (firstSelectedSlot) {
-      setScheduleWeekOffset(Math.max(0, getWeekOffsetForDate(firstSelectedSlot.dateKey)));
+      setScheduleEditorCalendarMonth(new Date(`${firstSelectedSlot.dateKey}T00:00:00`));
     }
 
-    setIsEditingSelectedSchedule((currentValue) => !currentValue);
+    setIsEditingSelectedSchedule((currentValue) => {
+      const nextValue = !currentValue;
+
+      if (!nextValue) {
+        closeScheduleDateModal();
+      }
+
+      return nextValue;
+    });
   }
 
   async function validateAdviserEmail() {
@@ -1686,16 +1760,60 @@ export default function ReservationFormScreen() {
 
         {!isRecurring && isEditingSelectedSchedule ? (
           <View style={styles.scheduleEditorBlock}>
-            <WeeklyScheduleGrid
+            <Text style={styles.scheduleHelperText}>
+              Pick a date first, then update that day&apos;s timeslots. Dates with selected
+              timeslots are marked by their current availability.
+            </Text>
+            <View style={styles.calendarLegendRow}>
+              <View style={styles.calendarLegendItem}>
+                <View
+                  style={[styles.calendarLegendSwatch, styles.calendarLegendSwatchSuccess]}
+                />
+                <Text style={styles.calendarLegendText}>Available</Text>
+              </View>
+              <View style={styles.calendarLegendItem}>
+                <View
+                  style={[styles.calendarLegendSwatch, styles.calendarLegendSwatchWarning]}
+                />
+                <Text style={styles.calendarLegendText}>Pending</Text>
+              </View>
+              <View style={styles.calendarLegendItem}>
+                <View
+                  style={[styles.calendarLegendSwatch, styles.calendarLegendSwatchDanger]}
+                />
+                <Text style={styles.calendarLegendText}>Unavailable</Text>
+              </View>
+            </View>
+            <AvailabilityCalendar
+              calendarMonthLabel={getMonthLabel(scheduleEditorCalendarMonth)}
+              calendarWeeks={scheduleEditorCalendarWeeks}
+              getCalendarDateVariant={(dateKey) => scheduleEditorDateVariantByKey[dateKey]}
+              isCalendarDateDisabled={(date) => isPastDate(date) || date.getDay() === 0}
+              isCalendarDateSelected={(dateKey) =>
+                selectedScheduleSlots.some((slot) => slot.dateKey === dateKey)
+              }
+              onCalendarDateSelect={openScheduleDateModal}
+              onNextMonth={() =>
+                setScheduleEditorCalendarMonth((currentValue) => addMonths(currentValue, 1))
+              }
+              onPrevMonth={() =>
+                setScheduleEditorCalendarMonth((currentValue) => addMonths(currentValue, -1))
+              }
+              selectedDateVariant="success"
+            />
+            <DayScheduleModal
               campus={selectedCampus}
-              onSelectedUnavailableSlotsChange={handleSelectedUnavailableSlotsChange}
-              roomId={resolvedRoomId}
-              schedules={schedules}
-              weekOffset={scheduleWeekOffset}
-              onWeekChange={setScheduleWeekOffset}
+              dateKey={scheduleEditorDateKey ?? ""}
+              onClose={closeScheduleDateModal}
+              onDiscardChanges={discardScheduleDateChanges}
+              onSave={closeScheduleDateModal}
               onSlotPress={handleScheduleSlotPress}
+              roomId={resolvedRoomId}
+              saveButtonLabel="Save Selected Timeslots"
+              schedules={schedules}
               selectedSlotKeys={selectedScheduleSlotKeys}
-              weekNavTopMargin={0}
+              userReservations={scheduleEditorUserReservations}
+              visible={Boolean(scheduleEditorDateKey)}
             />
           </View>
         ) : null}
@@ -2067,6 +2185,41 @@ const styles = StyleSheet.create({
   },
   scheduleEditorBlock: {
     marginTop: 14,
+  },
+  calendarLegendRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 18,
+    marginBottom: 12,
+    justifyContent: "center",
+  },
+  calendarLegendItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  calendarLegendSwatch: {
+    width: 12,
+    height: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  calendarLegendSwatchSuccess: {
+    backgroundColor: colors.successBackground,
+    borderColor: colors.successBorder,
+  },
+  calendarLegendSwatchWarning: {
+    backgroundColor: "#fff7ed",
+    borderColor: "#fdba74",
+  },
+  calendarLegendSwatchDanger: {
+    backgroundColor: colors.dangerBackground,
+    borderColor: colors.dangerBorder,
+  },
+  calendarLegendText: {
+    color: colors.secondary,
+    fontFamily: fonts.bold,
+    fontSize: 12,
   },
   scheduleHelperText: {
     color: colors.secondary,
