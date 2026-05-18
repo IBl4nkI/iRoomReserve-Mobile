@@ -162,8 +162,10 @@ export default function SelectionRoomSearch({
       recurringEndDateDraft.length > 0 ||
       startTimeDraft !== getDefaultStartTime() ||
       endTimeDraft !== getDefaultEndTime(null);
+  // Keep the filter drawer from forcing the results panel open on its own.
+  // This avoids showing the loading state just because the user opened Filters.
   const resultsVisible =
-    forceResultsVisible || filtersOpen || normalizedQuery.length > 0 || hasActiveFilters;
+    forceResultsVisible || normalizedQuery.length > 0 || hasActiveFilters;
   const resultsHeadingVisible = resultsVisible;
   const startTimeOptions = useMemo(
     () =>
@@ -639,38 +641,42 @@ export default function SelectionRoomSearch({
       return nextValue;
     });
 
-    Promise.all(
-      roomIdsToFetch.map(async (roomId) => ({
-        roomId,
-        schedules: await getSchedulesByRoomId(roomId),
-      }))
-    )
-      .then((results) => {
-        if (!active) {
-          return;
-        }
+    roomIdsToFetch.forEach((roomId) => {
+      getSchedulesByRoomId(roomId)
+        .then((schedules) => {
+          if (!active) {
+            return;
+          }
 
-        setRoomSchedules((currentValue) => {
-          const nextValue = { ...currentValue };
-          results.forEach(({ roomId, schedules }) => {
-            nextValue[roomId] = schedules;
-          });
-          return nextValue;
-        });
-      })
-      .finally(() => {
-        if (!active) {
-          return;
-        }
+          setRoomSchedules((currentValue) => ({
+            ...currentValue,
+            [roomId]: schedules,
+          }));
+        })
+        .catch(() => {
+          if (!active) {
+            return;
+          }
 
-        setScheduleLoadingIds((currentValue) => {
-          const nextValue = { ...currentValue };
-          roomIdsToFetch.forEach((roomId) => {
+          // Store an empty schedule list so one failed request does not
+          // keep this room in a permanent loading state.
+          setRoomSchedules((currentValue) => ({
+            ...currentValue,
+            [roomId]: [],
+          }));
+        })
+        .finally(() => {
+          if (!active) {
+            return;
+          }
+
+          setScheduleLoadingIds((currentValue) => {
+            const nextValue = { ...currentValue };
             delete nextValue[roomId];
+            return nextValue;
           });
-          return nextValue;
         });
-      });
+    });
 
     return () => {
       active = false;

@@ -237,7 +237,7 @@ export default function SelectionRoomResults({
                   </TouchableOpacity>
                 </View>
 
-                {scheduleLoadingIds[room.id] || reservationLoadingIds[room.id] ? (
+                {scheduleLoadingIds[room.id] ? (
                   <ActivityIndicator color={colors.primary} style={styles.roomLoader} />
                 ) : null}
 
