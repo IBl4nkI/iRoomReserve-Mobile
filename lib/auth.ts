@@ -15,6 +15,8 @@ import { auth, db } from "./firebase";
 const ALLOWED_DOMAIN = "sdca.edu.ph";
 const SUPERADMIN_EMAIL = "johncyrus.agoncillo@sdca.edu.ph";
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+const GOOGLE_ANDROID_CLIENT_ID =
+  process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
 const GOOGLE_IOS_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? GOOGLE_WEB_CLIENT_ID;
 
@@ -43,10 +45,19 @@ function ensureGoogleConfigured() {
     return;
   }
 
+  if (!GOOGLE_WEB_CLIENT_ID) {
+    throw { code: "auth/google-misconfigured" };
+  }
+
+  if (Platform.OS === "android" && !GOOGLE_ANDROID_CLIENT_ID) {
+    throw { code: "auth/google-misconfigured" };
+  }
+
   const GoogleSignin = getGoogleSignin();
 
   GoogleSignin.configure({
     webClientId: GOOGLE_WEB_CLIENT_ID,
+    offlineAccess: true,
     iosClientId: GOOGLE_IOS_CLIENT_ID,
   });
 
@@ -282,7 +293,7 @@ export function getAuthErrorMessage(code: string): string {
     "auth/weak-password": "Password must be at least 6 characters.",
     "auth/invalid-email": "Please enter a valid email address.",
     "auth/invalid-credential":
-      "Google Sign-In was accepted by Google but rejected by Firebase. This usually means the Android OAuth client or SHA-1 fingerprint does not match this build.",
+      "Google Sign-In failed. Please try again.",
     "auth/email-not-verified": "Please verify your email before logging in.",
     "auth/account-pending": "Your account is pending approval.",
     "auth/account-rejected": "Your account has been rejected.",
@@ -291,6 +302,8 @@ export function getAuthErrorMessage(code: string): string {
       "Google Sign-In is only available in the native development build.",
     "auth/google-requires-dev-build":
       "Google Sign-In is unavailable in Expo Go. Use the installed development build instead.",
+    "auth/google-misconfigured":
+      "Google Sign-In is unavailable right now. Please try again later.",
     "auth/popup-closed-by-user": "Google Sign-In was cancelled.",
     "auth/missing-id-token":
       "Google Sign-In did not return an ID token. Please try again.",
@@ -298,7 +311,8 @@ export function getAuthErrorMessage(code: string): string {
       "Google Play Services is required on this device.",
     "SIGN_IN_CANCELLED": "Google Sign-In was cancelled.",
     "IN_PROGRESS": "Google Sign-In is already in progress.",
-    "DEVELOPER_ERROR": "Google Sign-In is not fully configured for this build yet.",
+    "DEVELOPER_ERROR": "Google Sign-In is unavailable right now. Please try again later.",
+    "10": "Google Sign-In is unavailable right now. Please try again later.",
   };
 
   if (safeMessages[code]) {

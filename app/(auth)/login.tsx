@@ -38,12 +38,23 @@ export default function LoginScreen() {
   const [showResendButton, setShowResendButton] = useState(false);
   const router = useRouter();
   const { showToast } = useToast();
-  const params = useLocalSearchParams<{ pending?: string }>();
+  const params = useLocalSearchParams<{ pending?: string; message?: string }>();
   const isPending = params.pending === "true";
+  const routedMessage =
+    typeof params.message === "string" && params.message.length > 0
+      ? decodeURIComponent(params.message)
+      : "";
+
+  React.useEffect(() => {
+    if (routedMessage) {
+      setErrorMessage(routedMessage);
+    }
+  }, [routedMessage]);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
     setErrorMessage("");
+    setShowResendButton(false);
 
     try {
       const result = await signInWithGoogle();
@@ -52,14 +63,18 @@ export default function LoginScreen() {
         router.replace("/(auth)/role-selection");
       } else if (userProfile.status === "pending") {
         await logout();
-        router.replace("/(auth)/login?pending=true");
+        const message = encodeURIComponent(
+          "Your account is pending approval."
+        );
+        router.replace(`/(auth)/login?pending=true&message=${message}`);
       } else {
         showToast("Login successful!");
         router.replace(getPostLoginRoute(userProfile.role));
       }
     } catch (err: unknown) {
       const firebaseError = err as { code?: string };
-      setErrorMessage(getAuthErrorMessage(firebaseError.code || ""));
+      const code = firebaseError.code || "";
+      setErrorMessage(getAuthErrorMessage(code));
     } finally {
       setLoading(false);
     }
@@ -72,12 +87,16 @@ export default function LoginScreen() {
     }
     setLoading(true);
     setErrorMessage("");
+    setShowResendButton(false);
     try {
       const credential = await loginWithEmail(email, password);
       const userProfile = await getUserProfile(credential.user.uid);
       if (userProfile?.status === "pending") {
         await logout();
-        router.replace("/(auth)/login?pending=true");
+        const message = encodeURIComponent(
+          "Your account is pending approval."
+        );
+        router.replace(`/(auth)/login?pending=true&message=${message}`);
       } else {
         showToast("Login successful!");
         router.replace(getPostLoginRoute(userProfile?.role));
@@ -87,7 +106,6 @@ export default function LoginScreen() {
       const code = firebaseError.code || "";
       setErrorMessage(getAuthErrorMessage(code));
       setShowResendButton(code === "auth/email-not-verified");
-      setErrorMessage(getAuthErrorMessage(firebaseError.code || ""));
     } finally {
       setLoading(false);
     }

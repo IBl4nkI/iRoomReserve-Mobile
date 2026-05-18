@@ -20,7 +20,7 @@ const ROLE_OPTIONS = [
     description: "Browse and reserve rooms for study or group work.",
   },
   {
-    label: "Faculty",
+    label: "Faculty Professor",
     value: "Faculty",
     description: "Reserve rooms for classes or faculty meetings.",
   },
@@ -124,7 +124,10 @@ export default function RoleSelectionScreen() {
             text: "OK",
             onPress: async () => {
               await logout();
-              router.replace("/(auth)/login?pending=true");
+              const message = encodeURIComponent(
+                "Your account is pending approval."
+              );
+              router.replace(`/(auth)/login?pending=true&message=${message}`);
             },
           },
         ]
