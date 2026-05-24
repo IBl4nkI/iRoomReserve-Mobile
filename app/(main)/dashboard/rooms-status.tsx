@@ -176,9 +176,13 @@ export default function RoomsStatusScreen() {
         ) : (
           rooms.map((room) => (
             <View key={room.id} style={styles.listItem}>
-              <View style={styles.row}>
-                <Text style={[styles.reservationTitle, { marginTop: 0 }]}>{room.name}</Text>
-                <StatusChip status={room.status} />
+              <View style={styles.reservationHeaderRow}>
+                <View style={styles.reservationHeaderContent}>
+                  <Text style={styles.reservationRoomName}>{room.name}</Text>
+                </View>
+                <View style={styles.reservationHeaderBadge}>
+                  <StatusChip status={room.status} />
+                </View>
               </View>
               <Text style={styles.reservationMeta}>{room.buildingName}</Text>
               <Text style={styles.reservationMeta}>Floor: {room.floor}</Text>

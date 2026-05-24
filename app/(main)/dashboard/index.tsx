@@ -314,16 +314,20 @@ function ReservationCard({
 }) {
   return (
     <View style={styles.listItem}>
-      <View style={styles.row}>
-        <Text
-          style={[
-            compactTitle ? styles.reservationTitle : styles.sectionTitle,
-            compactTitle ? { marginTop: 0 } : null,
-          ]}
-        >
-          {reservation.roomName}
-        </Text>
-        <StatusChip status={getDisplayStatus(reservation)} />
+      <View style={styles.reservationHeaderRow}>
+        <View style={styles.reservationHeaderContent}>
+          <Text
+            style={[
+              compactTitle ? styles.reservationRoomName : styles.sectionTitleWrap,
+              compactTitle ? { marginTop: 0 } : null,
+            ]}
+          >
+            {reservation.roomName}
+          </Text>
+        </View>
+        <View style={styles.reservationHeaderBadge}>
+          <StatusChip status={getDisplayStatus(reservation)} />
+        </View>
       </View>
       <Text style={styles.reservationMeta}>{locationLabel ?? reservation.buildingName}</Text>
       <Text style={styles.reservationMeta}>
@@ -832,11 +836,15 @@ export default function DashboardHomeScreen() {
 
                       return (
                         <>
-                          <View style={styles.row}>
-                            <Text style={[styles.reservationTitle, { marginTop: 0 }]}>
-                              {reservation.roomName}
-                            </Text>
-                            <StatusChip status="Pending" />
+                          <View style={styles.reservationHeaderRow}>
+                            <View style={styles.reservationHeaderContent}>
+                              <Text style={styles.reservationRoomName}>
+                                {reservation.roomName}
+                              </Text>
+                            </View>
+                            <View style={styles.reservationHeaderBadge}>
+                              <StatusChip status="Pending" />
+                            </View>
                           </View>
                           <Text style={styles.reservationMeta}>{locationLabel}</Text>
                           <Text style={styles.reservationMeta}>

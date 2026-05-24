@@ -190,6 +190,13 @@ export const dashboardStyles = StyleSheet.create({
     color: colors.text,
     textAlign: 'left',
   },
+  sectionTitleWrap: {
+    fontSize: 18,
+    fontFamily: fonts.bold,
+    color: colors.text,
+    marginBottom: 10,
+    flexShrink: 1,
+  },
   screenTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -523,6 +530,21 @@ export const dashboardStyles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     gap: 12,
+  },
+  reservationHeaderContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+  reservationRoomName: {
+    fontSize: 17,
+    fontFamily: fonts.bold,
+    color: colors.text,
+    flexShrink: 1,
+    flexWrap: 'wrap',
+  },
+  reservationHeaderBadge: {
+    flexShrink: 0,
+    alignSelf: 'flex-start',
   },
   reservationChipRow: {
     flexDirection: 'row',

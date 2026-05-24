@@ -427,10 +427,15 @@ export default function ReservationHistoryScreen() {
                 )}
               </Text>
               <View style={styles.reservationHeaderRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.menuTitle}>{reservation.roomName}</Text>
+                <View style={styles.reservationHeaderContent}>
+                  <Text style={styles.reservationRoomName}>{reservation.roomName}</Text>
                 </View>
-                <View style={getDisplayStatusStyle(reservation.status)}>
+                <View
+                  style={[
+                    styles.reservationHeaderBadge,
+                    ...getDisplayStatusStyle(reservation.status),
+                  ]}
+                >
                   <Text style={getDisplayStatusTextStyle(reservation.status)}>
                     {getDisplayStatusLabel(reservation.status)}
                   </Text>
