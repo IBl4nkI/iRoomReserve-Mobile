@@ -41,6 +41,7 @@ export interface ReservationRecord {
   approvalDocumentName?: string;
   approvalDocumentPath?: string;
   approvalDocumentSize?: number;
+  approvalDocumentUrl?: string;
   equipment?: Record<string, number>;
   approvalFlow: ReservationApprovalStep[];
   currentStep: number;

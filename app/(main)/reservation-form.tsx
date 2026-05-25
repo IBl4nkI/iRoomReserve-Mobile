@@ -1420,6 +1420,7 @@ export default function ReservationFormScreen() {
             approvalDocumentName: uploadedDocument.name,
             approvalDocumentPath: uploadedDocument.path,
             approvalDocumentSize: uploadedDocument.size,
+            approvalDocumentUrl: uploadedDocument.url,
           }
         : {};
 

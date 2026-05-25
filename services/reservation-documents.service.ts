@@ -16,6 +16,7 @@ export interface UploadedReservationDocument {
   name: string;
   path: string;
   size: number;
+  url: string;
 }
 
 function getApiBaseUrl() {

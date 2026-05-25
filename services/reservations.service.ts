@@ -6,6 +6,7 @@ interface ReservationAttachmentPayload {
   approvalDocumentName?: string;
   approvalDocumentPath?: string;
   approvalDocumentSize?: number;
+  approvalDocumentUrl?: string;
 }
 
 interface ReservationCreateBaseInput extends ReservationAttachmentPayload {
