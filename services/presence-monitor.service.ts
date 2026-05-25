@@ -65,6 +65,8 @@ let hasWarnedAboutNotificationsApiMismatch = false;
 let notificationsModulePromise: Promise<typeof import("expo-notifications") | null> | null =
   null;
 let latestWarningState: PresenceWarningState | null = null;
+let activePresenceCheckPromise: Promise<void> | null = null;
+let foregroundMonitorInterval: ReturnType<typeof setInterval> | null = null;
 
 async function loadNotificationsModule() {
   if (!notificationsModulePromise) {
@@ -252,10 +254,35 @@ function initializePresenceMonitorRuntime() {
       void syncCurrentWarningState().catch((error) => {
         console.warn("[presence-monitor] unable to refresh warning state", error);
       });
+      ensureForegroundMonitorRunning();
+      return;
+    }
+
+    if (nextState !== "active" && previousState === "active") {
+      stopForegroundMonitor();
     }
   });
 
   hasInitializedRuntime = true;
+}
+
+function stopForegroundMonitor() {
+  if (foregroundMonitorInterval) {
+    clearInterval(foregroundMonitorInterval);
+    foregroundMonitorInterval = null;
+  }
+}
+
+function ensureForegroundMonitorRunning() {
+  if (currentAppState !== "active" || foregroundMonitorInterval) {
+    return;
+  }
+
+  foregroundMonitorInterval = setInterval(() => {
+    void syncCurrentWarningState().catch((error) => {
+      console.warn("[presence-monitor] foreground presence check failed", error);
+    });
+  }, HEARTBEAT_INTERVAL_MS);
 }
 
 async function scheduleBackgroundWarningNotification(message: string) {
@@ -460,6 +487,26 @@ async function processPresenceCheck(session: PresenceMonitorSession) {
   });
 }
 
+async function processPresenceCheckSafely(session: PresenceMonitorSession) {
+  if (activePresenceCheckPromise) {
+    return activePresenceCheckPromise;
+  }
+
+  const nextPresenceCheckPromise = (async () => {
+    await processPresenceCheck(session);
+  })();
+
+  activePresenceCheckPromise = nextPresenceCheckPromise;
+
+  try {
+    await nextPresenceCheckPromise;
+  } finally {
+    if (activePresenceCheckPromise === nextPresenceCheckPromise) {
+      activePresenceCheckPromise = null;
+    }
+  }
+}
+
 async function syncCurrentWarningState() {
   const session = await loadActiveSession();
   if (!session) {
@@ -467,7 +514,7 @@ async function syncCurrentWarningState() {
     return;
   }
 
-  await processPresenceCheck(session);
+  await processPresenceCheckSafely(session);
 }
 
 async function runPresenceMonitorLoop() {
@@ -483,7 +530,7 @@ async function runPresenceMonitorLoop() {
     }
 
     try {
-      await processPresenceCheck(session);
+      await processPresenceCheckSafely(session);
     } catch (error) {
       console.warn("[presence-monitor] presence check failed", error);
     }
@@ -527,6 +574,7 @@ export async function activatePresenceMonitoring(input: {
     userId: input.userId,
   });
 
+  ensureForegroundMonitorRunning();
   await syncCurrentWarningState();
   await ensureBackgroundMonitorRunning();
 }
@@ -545,6 +593,7 @@ export async function syncPresenceMonitoringSession(
   if (!input) {
     emitWarning(null);
     await clearActiveSession();
+    stopForegroundMonitor();
     if (ReactNativeBackgroundActions.isRunning()) {
       await ReactNativeBackgroundActions.stop();
     }
@@ -571,6 +620,7 @@ export async function syncPresenceMonitoringSession(
   ).catch((error) => {
     console.warn("[presence-monitor] unable to re-register server monitor", error);
   });
+  ensureForegroundMonitorRunning();
   await syncCurrentWarningState();
   await ensureBackgroundMonitorRunning();
 }
@@ -580,6 +630,7 @@ export async function deactivatePresenceMonitoring() {
 
   emitWarning(null);
   await clearActiveSession();
+  stopForegroundMonitor();
   if (ReactNativeBackgroundActions.isRunning()) {
     await ReactNativeBackgroundActions.stop();
   }
@@ -591,6 +642,11 @@ export async function deactivatePresenceMonitoring() {
       }
     );
   }
+}
+
+export async function retryPresenceMonitoringCheck() {
+  initializePresenceMonitorRuntime();
+  await syncCurrentWarningState();
 }
 
 export function subscribeToPresenceWarnings(

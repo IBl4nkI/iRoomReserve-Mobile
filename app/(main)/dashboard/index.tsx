@@ -1,4 +1,4 @@
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import React from "react";
 import {
   ActivityIndicator,
@@ -411,6 +411,20 @@ export default function DashboardHomeScreen() {
     bleManagerRef.current = new BleManager();
   }
 
+  const markReservationCompletedLocally = React.useCallback((reservationId: string) => {
+    setReservations((currentValue) =>
+      currentValue.map((reservation) =>
+        reservation.id === reservationId
+          ? {
+              ...reservation,
+              checkInMethod: null,
+              status: "completed",
+            }
+          : reservation
+      )
+    );
+  }, []);
+
   const loadDashboard = React.useCallback(async (showSpinner = true) => {
     const currentUser = auth.currentUser;
     if (!currentUser) {
@@ -475,6 +489,7 @@ export default function DashboardHomeScreen() {
   }, []);
 
   React.useEffect(() => {
+    isMountedRef.current = true;
     void loadDashboard();
 
     return () => {
@@ -484,6 +499,17 @@ export default function DashboardHomeScreen() {
       bleManagerRef.current = null;
     };
   }, [loadDashboard]);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      isMountedRef.current = true;
+      void loadDashboard(false);
+
+      return () => {
+        isMountedRef.current = false;
+      };
+    }, [loadDashboard])
+  );
 
   const handleRefresh = React.useCallback(async () => {
     setRefreshing(true);
@@ -591,7 +617,7 @@ export default function DashboardHomeScreen() {
     shouldMonitorOngoingReservation,
   ]);
 
-  const handleReservationAction = async () => {
+  const handleReservationAction = React.useCallback(async () => {
     const currentUser = auth.currentUser;
     if (!currentUser || !ongoingReservation || reservationActionLoading) {
       return;
@@ -770,6 +796,7 @@ export default function DashboardHomeScreen() {
 
       if (isReservationStarted) {
         await completeReservation(ongoingReservation.id, currentUser.uid);
+        markReservationCompletedLocally(ongoingReservation.id);
         await deactivatePresenceMonitoring();
         if (connectedBeaconDeviceRef.current) {
           await connectedBeaconDeviceRef.current.cancelConnection().catch(() => undefined);
@@ -853,7 +880,16 @@ export default function DashboardHomeScreen() {
     } finally {
       setReservationActionLoading(false);
     }
-  };
+  }, [
+    canStartOngoingReservation,
+    isReservationStarted,
+    loadDashboard,
+    markReservationCompletedLocally,
+    ongoingReservation,
+    ongoingRoomBeaconId,
+    reservationActionLoading,
+    showToast,
+  ]);
 
   return (
     <ScrollView

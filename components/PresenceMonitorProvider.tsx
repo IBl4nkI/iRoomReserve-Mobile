@@ -1,8 +1,16 @@
 import React from "react";
-import { Modal, StyleSheet, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Modal,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 import { colors, fonts } from "@/constants/theme";
 import {
+  retryPresenceMonitoringCheck,
   subscribeToPresenceWarnings,
   type PresenceWarningState,
 } from "@/services/presence-monitor.service";
@@ -11,10 +19,22 @@ export function PresenceMonitorProvider({
   children,
 }: React.PropsWithChildren) {
   const [warning, setWarning] = React.useState<PresenceWarningState | null>(null);
+  const [retrying, setRetrying] = React.useState(false);
 
   React.useEffect(() => {
     return subscribeToPresenceWarnings(setWarning);
   }, []);
+
+  async function handleRetryConnection() {
+    try {
+      setRetrying(true);
+      await retryPresenceMonitoringCheck();
+    } catch (error) {
+      console.warn("[presence-monitor] manual retry failed", error);
+    } finally {
+      setRetrying(false);
+    }
+  }
 
   return (
     <>
@@ -32,9 +52,22 @@ export function PresenceMonitorProvider({
             <Text style={styles.title}>Action needed to keep this room active</Text>
             <Text style={styles.message}>{warning?.message}</Text>
             <Text style={styles.helper}>
-              This warning will stay on screen until Bluetooth is on and the room
-              beacon is back in range.
+              This warning will stay on screen until Bluetooth is on,
+              the room beacon is back in range,
+              and Wi-Fi is connected to "St. Dominic College of Asia".
             </Text>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              disabled={retrying}
+              onPress={handleRetryConnection}
+              style={[styles.retryButton, retrying && styles.retryButtonDisabled]}
+            >
+              {retrying ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <Text style={styles.retryButtonText}>Retry Connection</Text>
+              )}
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -72,6 +105,24 @@ const styles = StyleSheet.create({
     fontFamily: fonts.regular,
     fontSize: 14,
     lineHeight: 20,
+  },
+  retryButton: {
+    alignItems: "center",
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    marginTop: 18,
+    minHeight: 48,
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  retryButtonDisabled: {
+    opacity: 0.75,
+  },
+  retryButtonText: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 14,
   },
   message: {
     color: colors.text,
