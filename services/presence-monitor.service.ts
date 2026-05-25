@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ReactNativeBackgroundActions from "react-native-background-actions";
 import { AppState, type AppStateStatus } from "react-native";
-import { BleManager, State } from "react-native-ble-plx";
+import { BleManager, State, type Device } from "react-native-ble-plx";
 
 import { colors } from "@/constants/theme";
 import {
@@ -59,58 +59,29 @@ const bleManager = new BleManager({
 
 let currentAppState: AppStateStatus = AppState.currentState;
 let hasInitializedRuntime = false;
-let notificationsConfigured = false;
-let hasWarnedAboutNotificationsModule = false;
-let hasWarnedAboutNotificationsApiMismatch = false;
-let notificationsModulePromise: Promise<typeof import("expo-notifications") | null> | null =
-  null;
+let hasWarnedAboutNotificationsDisabled = false;
+let hasWarnedAboutBackgroundActionsRuntime = false;
 let latestWarningState: PresenceWarningState | null = null;
 let activePresenceCheckPromise: Promise<void> | null = null;
 let foregroundMonitorInterval: ReturnType<typeof setInterval> | null = null;
 
-async function loadNotificationsModule() {
-  if (!notificationsModulePromise) {
-    notificationsModulePromise = import("expo-notifications")
-      .then((module) => module)
-      .catch((error) => {
-        if (!hasWarnedAboutNotificationsModule) {
-          hasWarnedAboutNotificationsModule = true;
-          console.warn(
-            "[presence-monitor] expo-notifications is unavailable in the current native build",
-            error
-          );
-        }
+function hasBackgroundActionsRuntime() {
+  const runtime = ReactNativeBackgroundActions as {
+    isRunning?: unknown;
+    start?: unknown;
+    stop?: unknown;
+  } | null;
 
-        return null;
-      });
-  }
+  const hasRequiredRuntime =
+    runtime !== null &&
+    typeof runtime?.isRunning === "function" &&
+    typeof runtime?.start === "function" &&
+    typeof runtime?.stop === "function";
 
-  return notificationsModulePromise;
-}
-
-function hasNotificationsRuntime(
-  Notifications: typeof import("expo-notifications") | null
-): Notifications is typeof import("expo-notifications") {
-  if (!Notifications) {
-    return false;
-  }
-
-  const requiredMethods = [
-    "setNotificationHandler",
-    "setNotificationChannelAsync",
-    "getPermissionsAsync",
-    "requestPermissionsAsync",
-    "scheduleNotificationAsync",
-  ] as const;
-
-  const hasRequiredRuntime = requiredMethods.every(
-    (methodName) => typeof Notifications[methodName] === "function"
-  );
-
-  if (!hasRequiredRuntime && !hasWarnedAboutNotificationsApiMismatch) {
-    hasWarnedAboutNotificationsApiMismatch = true;
+  if (!hasRequiredRuntime && !hasWarnedAboutBackgroundActionsRuntime) {
+    hasWarnedAboutBackgroundActionsRuntime = true;
     console.warn(
-      "[presence-monitor] expo-notifications native runtime is incomplete; background warning notifications will be disabled"
+      "[presence-monitor] react-native-background-actions native runtime is unavailable; background monitoring will be disabled"
     );
   }
 
@@ -135,6 +106,28 @@ function isWithinBeaconRange(rssi: number | null | undefined) {
   }
 
   return rssi >= BLE_RSSI_THRESHOLD;
+}
+
+function getExpectedBeaconNameState(
+  device: Pick<Device, "localName" | "name">,
+  expectedBeaconId: string
+) {
+  const normalizedExpectedBeaconId = expectedBeaconId.trim().toLowerCase();
+  if (!normalizedExpectedBeaconId) {
+    return "mismatch" as const;
+  }
+
+  const visibleNames = [device.localName, device.name]
+    .map((value) => value?.trim().toLowerCase())
+    .filter((value): value is string => Boolean(value));
+
+  if (visibleNames.length === 0) {
+    return "missing" as const;
+  }
+
+  return visibleNames.includes(normalizedExpectedBeaconId)
+    ? ("match" as const)
+    : ("mismatch" as const);
 }
 
 function encodeAsciiToBase64(value: string) {
@@ -204,41 +197,14 @@ async function clearActiveSession() {
 }
 
 async function ensureNotificationsConfigured() {
-  if (notificationsConfigured) {
-    return true;
+  if (!hasWarnedAboutNotificationsDisabled) {
+    hasWarnedAboutNotificationsDisabled = true;
+    console.warn(
+      "[presence-monitor] background warning notifications are disabled in this build"
+    );
   }
 
-  const Notifications = await loadNotificationsModule();
-  if (!hasNotificationsRuntime(Notifications)) {
-    return false;
-  }
-
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldPlaySound: true,
-      shouldSetBadge: false,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
-  });
-
-  await Notifications.setNotificationChannelAsync(
-    PRESENCE_NOTIFICATION_CHANNEL_ID,
-    {
-      importance: Notifications.AndroidImportance.HIGH,
-      lightColor: colors.primary,
-      name: "Presence monitoring",
-      vibrationPattern: [0, 250, 250, 250],
-    }
-  );
-
-  const permissions = await Notifications.getPermissionsAsync();
-  if (!permissions.granted && permissions.canAskAgain) {
-    await Notifications.requestPermissionsAsync();
-  }
-
-  notificationsConfigured = true;
-  return true;
+  return false;
 }
 
 function initializePresenceMonitorRuntime() {
@@ -290,20 +256,6 @@ async function scheduleBackgroundWarningNotification(message: string) {
   if (!isNotificationsConfigured) {
     return;
   }
-
-  const Notifications = await loadNotificationsModule();
-  if (!hasNotificationsRuntime(Notifications)) {
-    return;
-  }
-
-  await Notifications.scheduleNotificationAsync({
-    content: {
-      body: message,
-      sound: "default",
-      title: "Reservation signal lost",
-    },
-    trigger: null,
-  });
 }
 
 async function scanForBeaconPresence(expectedBeaconId: string) {
@@ -336,7 +288,7 @@ async function scanForBeaconPresence(expectedBeaconId: string) {
       );
     }, PRESENCE_SCAN_TIMEOUT_MS);
 
-    bleManager.startDeviceScan([BLE_SERVICE_UUID], null, async (error, device) => {
+    bleManager.startDeviceScan(null, null, async (error, device) => {
       if (settled) {
         return;
       }
@@ -356,6 +308,10 @@ async function scanForBeaconPresence(expectedBeaconId: string) {
           strongestRssi === null
             ? device.rssi
             : Math.max(strongestRssi, device.rssi);
+      }
+
+      if (getExpectedBeaconNameState(device, expectedBeaconId) === "mismatch") {
+        return;
       }
 
       if (!isWithinBeaconRange(device.rssi)) {
@@ -520,6 +476,10 @@ async function syncCurrentWarningState() {
 async function runPresenceMonitorLoop() {
   initializePresenceMonitorRuntime();
 
+  if (!hasBackgroundActionsRuntime()) {
+    return;
+  }
+
   while (ReactNativeBackgroundActions.isRunning()) {
     const iterationStartedAt = Date.now();
     const session = await loadActiveSession();
@@ -541,6 +501,10 @@ async function runPresenceMonitorLoop() {
 }
 
 async function ensureBackgroundMonitorRunning() {
+  if (!hasBackgroundActionsRuntime()) {
+    return;
+  }
+
   if (ReactNativeBackgroundActions.isRunning()) {
     return;
   }
@@ -594,7 +558,7 @@ export async function syncPresenceMonitoringSession(
     emitWarning(null);
     await clearActiveSession();
     stopForegroundMonitor();
-    if (ReactNativeBackgroundActions.isRunning()) {
+    if (hasBackgroundActionsRuntime() && ReactNativeBackgroundActions.isRunning()) {
       await ReactNativeBackgroundActions.stop();
     }
     return;
@@ -631,7 +595,7 @@ export async function deactivatePresenceMonitoring() {
   emitWarning(null);
   await clearActiveSession();
   stopForegroundMonitor();
-  if (ReactNativeBackgroundActions.isRunning()) {
+  if (hasBackgroundActionsRuntime() && ReactNativeBackgroundActions.isRunning()) {
     await ReactNativeBackgroundActions.stop();
   }
 

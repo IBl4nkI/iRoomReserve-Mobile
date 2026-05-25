@@ -103,6 +103,28 @@ function isWithinBeaconRange(rssi: number | null | undefined) {
   return rssi >= BLE_RSSI_THRESHOLD;
 }
 
+function getExpectedBeaconNameState(
+  device: Pick<Device, "localName" | "name">,
+  expectedBeaconId: string
+) {
+  const normalizedExpectedBeaconId = expectedBeaconId.trim().toLowerCase();
+  if (!normalizedExpectedBeaconId) {
+    return "mismatch" as const;
+  }
+
+  const visibleNames = [device.localName, device.name]
+    .map((value) => value?.trim().toLowerCase())
+    .filter((value): value is string => Boolean(value));
+
+  if (visibleNames.length === 0) {
+    return "missing" as const;
+  }
+
+  return visibleNames.includes(normalizedExpectedBeaconId)
+    ? ("match" as const)
+    : ("mismatch" as const);
+}
+
 function EmptyStateCard({
   title,
   message,
@@ -495,8 +517,8 @@ export default function DashboardHomeScreen() {
     return () => {
       isMountedRef.current = false;
       bleManagerRef.current?.stopDeviceScan();
-      bleManagerRef.current?.destroy();
-      bleManagerRef.current = null;
+      connectedBeaconDeviceRef.current?.cancelConnection().catch(() => undefined);
+      connectedBeaconDeviceRef.current = null;
     };
   }, [loadDashboard]);
 
@@ -710,7 +732,7 @@ export default function DashboardHomeScreen() {
           );
         }, BLE_SCAN_TIMEOUT_MS);
 
-        bleManager.startDeviceScan([BLE_SERVICE_UUID], null, async (error, device) => {
+        bleManager.startDeviceScan(null, null, async (error, device) => {
           if (settled) {
             return;
           }
@@ -734,6 +756,26 @@ export default function DashboardHomeScreen() {
             localName: device.localName,
             rssi: device.rssi,
           });
+
+          const beaconNameState = getExpectedBeaconNameState(device, expectedBeaconId);
+
+          if (beaconNameState === "mismatch") {
+            logBleDebug("Device rejected for name mismatch", {
+              expectedBeaconId,
+              id: device.id,
+              localName: device.localName,
+              name: device.name,
+            });
+            return;
+          }
+
+          if (beaconNameState === "missing") {
+            logBleDebug("Device name unavailable, falling back to characteristic verification", {
+              expectedBeaconId,
+              id: device.id,
+              rssi: device.rssi,
+            });
+          }
 
           if (!isWithinBeaconRange(device.rssi)) {
             beaconDetectedButTooFar = true;
