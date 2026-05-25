@@ -44,9 +44,6 @@ const BLE_SERVICE_UUID =
   process.env.EXPO_PUBLIC_ESP32_BLE_SERVICE_UUID?.trim() ?? "";
 const BLE_BEACON_CHAR_UUID =
   process.env.EXPO_PUBLIC_ESP32_BLE_BEACON_CHARACTERISTIC_UUID?.trim() ?? "";
-const BLE_RSSI_THRESHOLD = Number(
-  process.env.EXPO_PUBLIC_ESP32_BLE_RSSI_THRESHOLD?.trim() ?? "-70"
-);
 const BLE_SCAN_TIMEOUT_MS = 15000;
 const BASE64_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -93,14 +90,6 @@ function logBleDebug(message: string, extra?: Record<string, unknown>) {
   }
 
   console.log("[BLE DEBUG]", message, extra ?? {});
-}
-
-function isWithinBeaconRange(rssi: number | null | undefined) {
-  if (typeof rssi !== "number") {
-    return false;
-  }
-
-  return rssi >= BLE_RSSI_THRESHOLD;
 }
 
 function getExpectedBeaconNameState(
@@ -695,7 +684,6 @@ export default function DashboardHomeScreen() {
 
       const expectedBase64 = encodeAsciiToBase64(expectedBeaconId);
       const attemptedDeviceIds = new Set<string>();
-      let beaconDetectedButTooFar = false;
       let scannedDeviceCount = 0;
       let attemptedConnectionCount = 0;
       let lastSeenDeviceSummary = "";
@@ -724,9 +712,7 @@ export default function DashboardHomeScreen() {
           finish(() =>
             reject(
               new Error(
-                beaconDetectedButTooFar
-                  ? `The room beacon for ${expectedBeaconId} was detected, but you are too far away. Debug: scanned ${scannedDeviceCount} device(s), attempted ${attemptedConnectionCount} connection(s), last device "${lastSeenDeviceSummary}".`
-                  : `Couldn't find the room beacon for ${expectedBeaconId}. Debug: scanned ${scannedDeviceCount} device(s), attempted ${attemptedConnectionCount} connection(s), last device "${lastSeenDeviceSummary}", last beacon read "${lastReadBeaconId || "none"}".`
+                `Couldn't find the room beacon for ${expectedBeaconId}. Debug: scanned ${scannedDeviceCount} device(s), attempted ${attemptedConnectionCount} connection(s), last device "${lastSeenDeviceSummary}", last beacon read "${lastReadBeaconId || "none"}".`
               )
             )
           );
@@ -777,16 +763,6 @@ export default function DashboardHomeScreen() {
             });
           }
 
-          if (!isWithinBeaconRange(device.rssi)) {
-            beaconDetectedButTooFar = true;
-            logBleDebug("Device rejected for weak RSSI", {
-              id: device.id,
-              rssi: device.rssi,
-              threshold: BLE_RSSI_THRESHOLD,
-            });
-            return;
-          }
-
           attemptedDeviceIds.add(device.id);
           attemptedConnectionCount += 1;
 
@@ -810,7 +786,11 @@ export default function DashboardHomeScreen() {
             });
 
             if (beaconCharacteristic.value === expectedBase64) {
-              logBleDebug("Matched expected beacon", { id: device.id, expectedBeaconId });
+              logBleDebug("Matched expected beacon", {
+                id: device.id,
+                expectedBeaconId,
+                rssi: device.rssi,
+              });
               clearTimeout(timeout);
               finish(() => resolve(discoveredDevice));
               return;

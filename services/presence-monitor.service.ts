@@ -16,9 +16,6 @@ const BLE_SERVICE_UUID =
   process.env.EXPO_PUBLIC_ESP32_BLE_SERVICE_UUID?.trim() ?? "";
 const BLE_BEACON_CHAR_UUID =
   process.env.EXPO_PUBLIC_ESP32_BLE_BEACON_CHARACTERISTIC_UUID?.trim() ?? "";
-const BLE_RSSI_THRESHOLD = Number(
-  process.env.EXPO_PUBLIC_ESP32_BLE_RSSI_THRESHOLD?.trim() ?? "-70"
-);
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const PRESENCE_SCAN_TIMEOUT_MS = 10_000;
 const PRESENCE_NOTIFICATION_CHANNEL_ID = "presence-monitoring";
@@ -36,7 +33,10 @@ const BACKGROUND_TASK_OPTIONS = {
 const BASE64_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-type PresenceWarningReason = "bluetooth_off" | "out_of_range";
+type PresenceWarningReason =
+  | "bluetooth_off"
+  | "out_of_range"
+  | "beacon_not_detected";
 
 interface PresenceMonitorSession {
   beaconId: string;
@@ -100,14 +100,6 @@ function sleep(durationMs: number) {
   return new Promise((resolve) => setTimeout(resolve, durationMs));
 }
 
-function isWithinBeaconRange(rssi: number | null | undefined) {
-  if (typeof rssi !== "number" || Number.isNaN(rssi)) {
-    return false;
-  }
-
-  return rssi >= BLE_RSSI_THRESHOLD;
-}
-
 function getExpectedBeaconNameState(
   device: Pick<Device, "localName" | "name">,
   expectedBeaconId: string
@@ -163,7 +155,9 @@ function buildWarningState(
     message:
       reason === "bluetooth_off"
         ? "Turn on Bluetooth to keep this reservation active."
-        : "Move closer to the room to keep this reservation active.",
+        : reason === "beacon_not_detected"
+          ? "We couldn't detect this room's beacon. Retry the connection or make sure the room beacon is powered on."
+          : "Move closer to the room to keep this reservation active.",
     reason,
     reservationId,
   };
@@ -263,10 +257,14 @@ async function scanForBeaconPresence(expectedBeaconId: string) {
 
   const expectedBase64 = encodeAsciiToBase64(expectedBeaconId);
   const attemptedDeviceIds = new Set<string>();
-  let detectedButTooFar = false;
+  let sawCandidateDevice = false;
   let strongestRssi: number | null = null;
 
-  return await new Promise<{ inRange: boolean; rssi: number | null }>((resolve, reject) => {
+  return await new Promise<{
+    inRange: boolean;
+    rssi: number | null;
+    reason: "out_of_range" | "beacon_not_detected";
+  }>((resolve, reject) => {
     let settled = false;
 
     const finish = (callback: () => void) => {
@@ -283,6 +281,7 @@ async function scanForBeaconPresence(expectedBeaconId: string) {
       finish(() =>
         resolve({
           inRange: false,
+          reason: sawCandidateDevice ? "out_of_range" : "beacon_not_detected",
           rssi: strongestRssi,
         })
       );
@@ -314,10 +313,7 @@ async function scanForBeaconPresence(expectedBeaconId: string) {
         return;
       }
 
-      if (!isWithinBeaconRange(device.rssi)) {
-        detectedButTooFar = true;
-        return;
-      }
+      sawCandidateDevice = true;
 
       if (attemptedDeviceIds.has(device.id)) {
         return;
@@ -342,6 +338,7 @@ async function scanForBeaconPresence(expectedBeaconId: string) {
           finish(() =>
             resolve({
               inRange: true,
+              reason: "out_of_range",
               rssi:
                 typeof device.rssi === "number" && !Number.isNaN(device.rssi)
                   ? device.rssi
@@ -354,7 +351,7 @@ async function scanForBeaconPresence(expectedBeaconId: string) {
 
         await discoveredDevice.cancelConnection().catch(() => undefined);
       } catch {
-        if (detectedButTooFar) {
+        if (!sawCandidateDevice) {
           return;
         }
       }
@@ -384,7 +381,7 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
       appState,
       bluetoothOn,
       inRange: false,
-      reason: "out_of_range" as const,
+      reason: presence.reason,
       rssi: presence.rssi,
     };
   }
