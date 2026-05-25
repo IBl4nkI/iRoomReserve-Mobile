@@ -1,5 +1,4 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import * as Notifications from "expo-notifications";
 import ReactNativeBackgroundActions from "react-native-background-actions";
 import { AppState, type AppStateStatus } from "react-native";
 import { BleManager, State } from "react-native-ble-plx";
@@ -61,6 +60,30 @@ const bleManager = new BleManager({
 let currentAppState: AppStateStatus = AppState.currentState;
 let hasInitializedRuntime = false;
 let notificationsConfigured = false;
+let hasWarnedAboutNotificationsModule = false;
+let notificationsModulePromise: Promise<typeof import("expo-notifications") | null> | null =
+  null;
+let latestWarningState: PresenceWarningState | null = null;
+
+async function loadNotificationsModule() {
+  if (!notificationsModulePromise) {
+    notificationsModulePromise = import("expo-notifications")
+      .then((module) => module)
+      .catch((error) => {
+        if (!hasWarnedAboutNotificationsModule) {
+          hasWarnedAboutNotificationsModule = true;
+          console.warn(
+            "[presence-monitor] expo-notifications is unavailable in the current native build",
+            error
+          );
+        }
+
+        return null;
+      });
+  }
+
+  return notificationsModulePromise;
+}
 
 function ensureBleConfiguration() {
   if (!BLE_SERVICE_UUID || !BLE_BEACON_CHAR_UUID) {
@@ -122,6 +145,7 @@ function buildWarningState(
 }
 
 function emitWarning(warning: PresenceWarningState | null) {
+  latestWarningState = warning;
   warningListeners.forEach((listener) => listener(warning));
 }
 
@@ -149,7 +173,12 @@ async function clearActiveSession() {
 
 async function ensureNotificationsConfigured() {
   if (notificationsConfigured) {
-    return;
+    return true;
+  }
+
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) {
+    return false;
   }
 
   Notifications.setNotificationHandler({
@@ -177,6 +206,7 @@ async function ensureNotificationsConfigured() {
   }
 
   notificationsConfigured = true;
+  return true;
 }
 
 function initializePresenceMonitorRuntime() {
@@ -185,14 +215,30 @@ function initializePresenceMonitorRuntime() {
   }
 
   AppState.addEventListener("change", (nextState) => {
+    const previousState = currentAppState;
     currentAppState = nextState;
+
+    if (nextState === "active" && previousState !== "active") {
+      void syncCurrentWarningState().catch((error) => {
+        console.warn("[presence-monitor] unable to refresh warning state", error);
+      });
+    }
   });
 
   hasInitializedRuntime = true;
 }
 
 async function scheduleBackgroundWarningNotification(message: string) {
-  await ensureNotificationsConfigured();
+  const isNotificationsConfigured = await ensureNotificationsConfigured();
+  if (!isNotificationsConfigured) {
+    return;
+  }
+
+  const Notifications = await loadNotificationsModule();
+  if (!Notifications) {
+    return;
+  }
+
   await Notifications.scheduleNotificationAsync({
     content: {
       body: message,
@@ -339,6 +385,61 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
   };
 }
 
+async function processPresenceCheck(session: PresenceMonitorSession) {
+  const result = await performPresenceCheck(session);
+  const checkedAt = new Date().toISOString();
+
+  if (result.reason) {
+    const warning = buildWarningState(result.reason, session.reservationId);
+
+    if (result.appState === "foreground") {
+      emitWarning(warning);
+      if (session.lastBackgroundWarningReason !== null) {
+        await saveActiveSession({
+          ...session,
+          lastBackgroundWarningReason: null,
+        });
+      }
+    } else if (session.lastBackgroundWarningReason !== result.reason) {
+      await scheduleBackgroundWarningNotification(warning.message);
+      await saveActiveSession({
+        ...session,
+        lastBackgroundWarningReason: result.reason,
+      });
+    }
+  } else {
+    emitWarning(null);
+    if (session.lastBackgroundWarningReason !== null) {
+      await saveActiveSession({
+        ...session,
+        lastBackgroundWarningReason: null,
+      });
+    }
+  }
+
+  await sendReservationPresenceHeartbeat(session.reservationId, {
+    appState: result.appState,
+    beaconId: session.beaconId,
+    bluetoothOn: result.bluetoothOn,
+    checkedAt,
+    inRange: result.inRange,
+    rssi: result.rssi,
+    userId: session.userId,
+  }).catch((error) => {
+    console.warn("[presence-monitor] unable to send heartbeat", error);
+  });
+}
+
+async function syncCurrentWarningState() {
+  const session = await loadActiveSession();
+  if (!session) {
+    emitWarning(null);
+    return;
+  }
+
+  await processPresenceCheck(session);
+}
+
 async function runPresenceMonitorLoop() {
   initializePresenceMonitorRuntime();
 
@@ -352,46 +453,7 @@ async function runPresenceMonitorLoop() {
     }
 
     try {
-      const result = await performPresenceCheck(session);
-      const checkedAt = new Date().toISOString();
-
-      await sendReservationPresenceHeartbeat(session.reservationId, {
-        appState: result.appState,
-        beaconId: session.beaconId,
-        bluetoothOn: result.bluetoothOn,
-        checkedAt,
-        inRange: result.inRange,
-        rssi: result.rssi,
-        userId: session.userId,
-      });
-
-      if (result.reason) {
-        const warning = buildWarningState(result.reason, session.reservationId);
-
-        if (result.appState === "foreground") {
-          emitWarning(warning);
-          if (session.lastBackgroundWarningReason !== null) {
-            await saveActiveSession({
-              ...session,
-              lastBackgroundWarningReason: null,
-            });
-          }
-        } else if (session.lastBackgroundWarningReason !== result.reason) {
-          await scheduleBackgroundWarningNotification(warning.message);
-          await saveActiveSession({
-            ...session,
-            lastBackgroundWarningReason: result.reason,
-          });
-        }
-      } else {
-        emitWarning(null);
-        if (session.lastBackgroundWarningReason !== null) {
-          await saveActiveSession({
-            ...session,
-            lastBackgroundWarningReason: null,
-          });
-        }
-      }
+      await processPresenceCheck(session);
     } catch (error) {
       console.warn("[presence-monitor] presence check failed", error);
     }
@@ -435,7 +497,7 @@ export async function activatePresenceMonitoring(input: {
     userId: input.userId,
   });
 
-  emitWarning(null);
+  await syncCurrentWarningState();
   await ensureBackgroundMonitorRunning();
 }
 
@@ -479,6 +541,7 @@ export async function syncPresenceMonitoringSession(
   ).catch((error) => {
     console.warn("[presence-monitor] unable to re-register server monitor", error);
   });
+  await syncCurrentWarningState();
   await ensureBackgroundMonitorRunning();
 }
 
@@ -505,6 +568,7 @@ export function subscribeToPresenceWarnings(
 ) {
   initializePresenceMonitorRuntime();
   warningListeners.add(listener);
+  listener(latestWarningState);
 
   return () => {
     warningListeners.delete(listener);

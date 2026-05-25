@@ -9,7 +9,6 @@ import {
   getDayShortLabel,
   formatFullDate,
   isPastDate,
-  isRoomAvailableForRequest,
   isTimeRangeValid,
   minutesToTimeString,
   timeStringToMinutes,
@@ -620,68 +619,58 @@ export default function SelectionRoomSearch({
   }, [endTimeDraft, selectedCampusDraft, startTimeDraft, startTimeOptions]);
 
   useEffect(() => {
-    if (!resultsVisible) {
+    if (!resultsVisible || !expandedRoomId || roomSchedules[expandedRoomId] !== undefined) {
       return;
     }
 
-    const roomIdsToFetch = filteredRooms
-      .map((room) => room.id)
-      .filter((roomId) => roomSchedules[roomId] === undefined);
-
-    if (roomIdsToFetch.length === 0) {
+    if (scheduleLoadingIds[expandedRoomId]) {
       return;
     }
 
     let active = true;
-    setScheduleLoadingIds((currentValue) => {
-      const nextValue = { ...currentValue };
-      roomIdsToFetch.forEach((roomId) => {
-        nextValue[roomId] = true;
+    setScheduleLoadingIds((currentValue) => ({
+      ...currentValue,
+      [expandedRoomId]: true,
+    }));
+
+    getSchedulesByRoomId(expandedRoomId)
+      .then((schedules) => {
+        if (!active) {
+          return;
+        }
+
+        setRoomSchedules((currentValue) => ({
+          ...currentValue,
+          [expandedRoomId]: schedules,
+        }));
+      })
+      .catch(() => {
+        if (!active) {
+          return;
+        }
+
+        // Store an empty schedule list so one failed request does not
+        // keep this room in a permanent loading state.
+        setRoomSchedules((currentValue) => ({
+          ...currentValue,
+          [expandedRoomId]: [],
+        }));
+      })
+      .finally(() => {
+        if (!active) {
+          return;
+        }
+
+        setScheduleLoadingIds((currentValue) => ({
+          ...currentValue,
+          [expandedRoomId]: false,
+        }));
       });
-      return nextValue;
-    });
-
-    roomIdsToFetch.forEach((roomId) => {
-      getSchedulesByRoomId(roomId)
-        .then((schedules) => {
-          if (!active) {
-            return;
-          }
-
-          setRoomSchedules((currentValue) => ({
-            ...currentValue,
-            [roomId]: schedules,
-          }));
-        })
-        .catch(() => {
-          if (!active) {
-            return;
-          }
-
-          // Store an empty schedule list so one failed request does not
-          // keep this room in a permanent loading state.
-          setRoomSchedules((currentValue) => ({
-            ...currentValue,
-            [roomId]: [],
-          }));
-        })
-        .finally(() => {
-          if (!active) {
-            return;
-          }
-
-          setScheduleLoadingIds((currentValue) => {
-            const nextValue = { ...currentValue };
-            delete nextValue[roomId];
-            return nextValue;
-          });
-        });
-    });
 
     return () => {
       active = false;
     };
-  }, [filteredRooms, resultsVisible, roomSchedules]);
+  }, [expandedRoomId, resultsVisible, roomSchedules, scheduleLoadingIds]);
 
   const hasExplicitTimeFilter =
     startTimeDraft !== getDefaultStartTime() || endTimeDraft !== getDefaultEndTime(null);
@@ -697,35 +686,17 @@ export default function SelectionRoomSearch({
         return false;
       }
 
-      return isRoomAvailableForRequest(
-        room,
-        roomSchedules[room.id] ?? [],
-        reservationDateKeys,
-        startTimeDraft,
-        endTimeDraft,
-        userReservations
-      );
+      return true;
     });
   }, [
     endTimeDraft,
     filteredRooms,
     hasExplicitTimeFilter,
-    reservationDateKeys,
-    roomSchedules,
     selectedCampusDraft,
     startTimeDraft,
-    userReservations,
   ]);
 
-  const availabilityRequiresSchedules = reservationDateKeys.length > 0;
-  const availabilityLoading = useMemo(
-    () =>
-      availabilityRequiresSchedules &&
-      filteredRooms.some(
-        (room) => roomSchedules[room.id] === undefined || Boolean(scheduleLoadingIds[room.id])
-      ),
-    [availabilityRequiresSchedules, filteredRooms, roomSchedules, scheduleLoadingIds]
-  );
+  const availabilityLoading = false;
 
   function openAlternativeRooms(
     room: SearchRoom,
