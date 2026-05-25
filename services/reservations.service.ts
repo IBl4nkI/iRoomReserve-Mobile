@@ -48,6 +48,19 @@ export type RecurringReservationCreateInput =
       campus: "digi";
     });
 
+export type ReservationPresenceAppState = "background" | "foreground";
+export type ReservationPresenceStatus =
+  | "healthy"
+  | "stopped"
+  | "timed_out"
+  | "warning";
+
+export interface ReservationPresenceHeartbeatResponse {
+  healthy: boolean;
+  status: ReservationPresenceStatus;
+  timedOut: boolean;
+}
+
 export async function createReservation(
   reservation: SingleReservationCreateInput
 ): Promise<string> {
@@ -153,6 +166,58 @@ export async function cancelReservation(
   await apiRequest(`/api/reservations/${reservationId}`, {
     body: {
       action: "cancel",
+      userId,
+    },
+    method: "PATCH",
+  });
+}
+
+export async function startReservationPresenceMonitor(
+  reservationId: string,
+  userId: string,
+  beaconId: string
+): Promise<void> {
+  await apiRequest(`/api/reservations/${reservationId}`, {
+    body: {
+      action: "start-monitor",
+      beaconId,
+      userId,
+    },
+    method: "PATCH",
+  });
+}
+
+export async function sendReservationPresenceHeartbeat(
+  reservationId: string,
+  input: {
+    appState: ReservationPresenceAppState;
+    beaconId?: string;
+    bluetoothOn: boolean;
+    checkedAt?: string;
+    inRange: boolean;
+    rssi?: number | null;
+    userId: string;
+  }
+): Promise<ReservationPresenceHeartbeatResponse> {
+  return apiRequest<ReservationPresenceHeartbeatResponse>(
+    `/api/reservations/${reservationId}`,
+    {
+      body: {
+        action: "presence-heartbeat",
+        ...input,
+      },
+      method: "PATCH",
+    }
+  );
+}
+
+export async function stopReservationPresenceMonitor(
+  reservationId: string,
+  userId: string
+): Promise<void> {
+  await apiRequest(`/api/reservations/${reservationId}`, {
+    body: {
+      action: "stop-monitor",
       userId,
     },
     method: "PATCH",

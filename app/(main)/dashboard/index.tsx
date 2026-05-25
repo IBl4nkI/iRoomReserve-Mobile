@@ -21,6 +21,11 @@ import { dashboardStyles as styles } from "@/components/dashboard/styles";
 import { colors } from "@/constants/theme";
 import { getUserProfile } from "@/lib/auth";
 import { auth } from "@/lib/firebase";
+import {
+  activatePresenceMonitoring,
+  deactivatePresenceMonitoring,
+  syncPresenceMonitoringSession,
+} from "@/services/presence-monitor.service";
 import { getRoomsByIds } from "@/services/rooms.service";
 import {
   checkInReservation,
@@ -536,12 +541,56 @@ export default function DashboardHomeScreen() {
   const canManageOngoingReservation =
     !isUtilityStaff &&
     (isReservationStarted || canStartOngoingReservation);
+  const shouldMonitorOngoingReservation =
+    !isUtilityStaff &&
+    Boolean(ongoingReservation?.checkedInAt) &&
+    ongoingReservation?.checkInMethod === "bluetooth" &&
+    Boolean(ongoingRoomBeaconId);
   const getRoomLocationLabel = (reservation: ReservationRecord) => {
     const room = roomsById[reservation.roomId];
     return room?.floor
       ? `${reservation.buildingName} - ${room.floor}`
       : reservation.buildingName;
   };
+
+  React.useEffect(() => {
+    const currentUser = auth.currentUser;
+
+    if (loading || !currentUser) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const syncMonitor = async () => {
+      if (shouldMonitorOngoingReservation && ongoingReservation && ongoingRoomBeaconId) {
+        await syncPresenceMonitoringSession({
+          beaconId: ongoingRoomBeaconId,
+          reservationId: ongoingReservation.id,
+          userId: currentUser.uid,
+        });
+        return;
+      }
+
+      await syncPresenceMonitoringSession(null);
+    };
+
+    void syncMonitor().catch((error) => {
+      if (!cancelled) {
+        console.warn("[presence-monitor] unable to sync dashboard session", error);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    loading,
+    ongoingReservation,
+    ongoingRoomBeaconId,
+    shouldMonitorOngoingReservation,
+  ]);
+
   const handleReservationAction = async () => {
     const currentUser = auth.currentUser;
     if (!currentUser || !ongoingReservation || reservationActionLoading) {
@@ -721,6 +770,7 @@ export default function DashboardHomeScreen() {
 
       if (isReservationStarted) {
         await completeReservation(ongoingReservation.id, currentUser.uid);
+        await deactivatePresenceMonitoring();
         if (connectedBeaconDeviceRef.current) {
           await connectedBeaconDeviceRef.current.cancelConnection().catch(() => undefined);
           connectedBeaconDeviceRef.current = null;
@@ -758,6 +808,14 @@ export default function DashboardHomeScreen() {
                       currentUser.uid,
                       "bluetooth"
                     );
+
+                    await matchedDevice.cancelConnection().catch(() => undefined);
+                    connectedBeaconDeviceRef.current = null;
+                    await activatePresenceMonitoring({
+                      beaconId: ongoingRoomBeaconId,
+                      reservationId: ongoingReservation.id,
+                      userId: currentUser.uid,
+                    });
 
                     showToast("Reservation started with Bluetooth check-in.");
                     await loadDashboard(false);

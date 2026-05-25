@@ -25,7 +25,9 @@
       "permissions": [
         "android.permission.BLUETOOTH_SCAN",
         "android.permission.BLUETOOTH_CONNECT",
-        "android.permission.ACCESS_FINE_LOCATION"
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.FOREGROUND_SERVICE"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -40,13 +42,14 @@
     },
     "plugins": [
       "expo-dev-client",
+      "expo-notifications",
       "expo-web-browser",
       "expo-router",
       "expo-font",
       [
         "react-native-ble-plx",
         {
-          "isBackgroundEnabled": false,
+          "isBackgroundEnabled": true,
           "modes": [
             "central"
           ],
