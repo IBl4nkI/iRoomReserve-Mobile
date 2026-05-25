@@ -61,6 +61,7 @@ let currentAppState: AppStateStatus = AppState.currentState;
 let hasInitializedRuntime = false;
 let notificationsConfigured = false;
 let hasWarnedAboutNotificationsModule = false;
+let hasWarnedAboutNotificationsApiMismatch = false;
 let notificationsModulePromise: Promise<typeof import("expo-notifications") | null> | null =
   null;
 let latestWarningState: PresenceWarningState | null = null;
@@ -83,6 +84,35 @@ async function loadNotificationsModule() {
   }
 
   return notificationsModulePromise;
+}
+
+function hasNotificationsRuntime(
+  Notifications: typeof import("expo-notifications") | null
+): Notifications is typeof import("expo-notifications") {
+  if (!Notifications) {
+    return false;
+  }
+
+  const requiredMethods = [
+    "setNotificationHandler",
+    "setNotificationChannelAsync",
+    "getPermissionsAsync",
+    "requestPermissionsAsync",
+    "scheduleNotificationAsync",
+  ] as const;
+
+  const hasRequiredRuntime = requiredMethods.every(
+    (methodName) => typeof Notifications[methodName] === "function"
+  );
+
+  if (!hasRequiredRuntime && !hasWarnedAboutNotificationsApiMismatch) {
+    hasWarnedAboutNotificationsApiMismatch = true;
+    console.warn(
+      "[presence-monitor] expo-notifications native runtime is incomplete; background warning notifications will be disabled"
+    );
+  }
+
+  return hasRequiredRuntime;
 }
 
 function ensureBleConfiguration() {
@@ -177,7 +207,7 @@ async function ensureNotificationsConfigured() {
   }
 
   const Notifications = await loadNotificationsModule();
-  if (!Notifications) {
+  if (!hasNotificationsRuntime(Notifications)) {
     return false;
   }
 
@@ -235,7 +265,7 @@ async function scheduleBackgroundWarningNotification(message: string) {
   }
 
   const Notifications = await loadNotificationsModule();
-  if (!Notifications) {
+  if (!hasNotificationsRuntime(Notifications)) {
     return;
   }
 
