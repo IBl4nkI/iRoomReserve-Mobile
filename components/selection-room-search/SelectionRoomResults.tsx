@@ -75,7 +75,11 @@ export default function SelectionRoomResults({
   const calendarMonthLabel = getMonthLabel(calendarMonth);
 
   React.useEffect(() => {
-    if (!expandedRoomId || roomReservationsByRoomId[expandedRoomId] || reservationLoadingIds[expandedRoomId]) {
+    if (
+      !expandedRoomId ||
+      roomReservationsByRoomId[expandedRoomId] !== undefined ||
+      reservationLoadingIds[expandedRoomId]
+    ) {
       return;
     }
 
@@ -121,7 +125,7 @@ export default function SelectionRoomResults({
     return () => {
       active = false;
     };
-  }, [expandedRoomId, reservationLoadingIds, roomReservationsByRoomId]);
+  }, [expandedRoomId]);
 
   function handleOpenDayScheduleModal(
     roomId: string,
@@ -184,6 +188,10 @@ export default function SelectionRoomResults({
           {availableRooms.map((room) => {
             const expanded = expandedRoomId === room.id;
             const schedules = roomSchedules[room.id] ?? [];
+            const isScheduleLoading =
+              expanded &&
+              roomSchedules[room.id] === undefined &&
+              Boolean(scheduleLoadingIds[room.id]);
             const selectedSlots = selectedSlotsByRoom[room.id] ?? [];
             const selectedSlotKeys = selectedSlots.map((slot) =>
               getSelectedTimeslotKey(slot)
@@ -237,7 +245,7 @@ export default function SelectionRoomResults({
                   </TouchableOpacity>
                 </View>
 
-                {scheduleLoadingIds[room.id] ? (
+                {isScheduleLoading ? (
                   <ActivityIndicator color={colors.primary} style={styles.roomLoader} />
                 ) : null}
 

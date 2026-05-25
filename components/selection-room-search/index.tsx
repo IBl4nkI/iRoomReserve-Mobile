@@ -670,7 +670,7 @@ export default function SelectionRoomSearch({
     return () => {
       active = false;
     };
-  }, [expandedRoomId, resultsVisible, roomSchedules, scheduleLoadingIds]);
+  }, [expandedRoomId, resultsVisible]);
 
   const hasExplicitTimeFilter =
     startTimeDraft !== getDefaultStartTime() || endTimeDraft !== getDefaultEndTime(null);
