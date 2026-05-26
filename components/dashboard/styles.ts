@@ -265,6 +265,10 @@ export const dashboardStyles = StyleSheet.create({
     backgroundColor: '#fff7ed',
     borderColor: '#fdba74',
   },
+  chipExpired: {
+    backgroundColor: '#f3f4f6',
+    borderColor: '#d1d5db',
+  },
   chipRejected: {
     backgroundColor: colors.dangerBackground,
     borderColor: colors.dangerBorder,
@@ -285,6 +289,9 @@ export const dashboardStyles = StyleSheet.create({
   },
   chipTextPending: {
     color: '#c2410c',
+  },
+  chipTextExpired: {
+    color: '#4b5563',
   },
   chipTextRejected: {
     color: colors.dangerText,
@@ -403,8 +410,23 @@ export const dashboardStyles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.border,
-    padding: 16,
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 6,
     marginBottom: 12,
+  },
+  reservationContent: {
+    width: '100%',
+  },
+  reservationContentWithTrailingAction: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 12,
+    width: '100%',
+  },
+  reservationContentBody: {
+    flex: 1,
+    minWidth: 0,
   },
   dashboardGroupItem: {
     marginBottom: 12,
@@ -422,7 +444,7 @@ export const dashboardStyles = StyleSheet.create({
     color: colors.mutedText,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
-    marginBottom: 8,
+    marginBottom: 0,
   },
   placeholderCard: {
     backgroundColor: colors.surface,
@@ -479,14 +501,15 @@ export const dashboardStyles = StyleSheet.create({
   filterTabsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 6,
     marginBottom: 18,
   },
   filterTabButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
     borderRadius: 999,
     borderWidth: 1,
     borderColor: colors.filterChipInactiveBorder,
@@ -497,18 +520,19 @@ export const dashboardStyles = StyleSheet.create({
     borderColor: colors.filterChipActiveBorder,
   },
   filterTabButtonText: {
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: fonts.bold,
     color: colors.text,
+    flexShrink: 1,
   },
   filterTabButtonTextActive: {
     color: colors.white,
   },
   filterTabBadge: {
-    minWidth: 22,
-    height: 22,
-    paddingHorizontal: 6,
-    marginLeft: 8,
+    minWidth: 20,
+    height: 20,
+    paddingHorizontal: 5,
+    marginLeft: 6,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
@@ -518,7 +542,7 @@ export const dashboardStyles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.18)',
   },
   filterTabBadgeText: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: fonts.bold,
     color: colors.secondary,
   },
@@ -535,12 +559,16 @@ export const dashboardStyles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  reservationRoomNameWrap: {
+    paddingRight: 88,
+  },
   reservationRoomName: {
     fontSize: 17,
     fontFamily: fonts.bold,
     color: colors.text,
     flexShrink: 1,
-    flexWrap: 'wrap',
+    marginTop: -6,
+    marginBottom: 6,
   },
   reservationHeaderBadge: {
     flexShrink: 0,

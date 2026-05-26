@@ -24,7 +24,15 @@ import {
 import { formatTime12h } from '@/services/schedules.service';
 import type { ReservationRecord, ReservationStatus } from '@/types/reservation';
 
-type ReservationFilter = 'pending' | 'approved' | 'completed' | 'rejected' | 'all';
+type ReservationFilter =
+  | 'pending'
+  | 'approved'
+  | 'expired'
+  | 'completed'
+  | 'rejected'
+  | 'all';
+
+type ReservationDisplayStatus = ReservationStatus | 'expired';
 
 type FirestoreTimestampLike = {
   _nanoseconds?: number;
@@ -98,10 +106,47 @@ function formatReservationDates(
   return dateList.map((date) => formatReservationDate(date)).join(' / ');
 }
 
-function getDisplayStatusLabel(status: ReservationStatus) {
+function getTodayDateKey() {
+  const today = new Date();
+  return [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, '0'),
+    String(today.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+function getReservationDates(reservation: ReservationRecord) {
+  return reservation.dates?.length
+    ? reservation.dates
+    : reservation.date
+      ? [reservation.date]
+      : [];
+}
+
+function isExpiredReservation(reservation: ReservationRecord) {
+  if (reservation.status !== 'pending' && reservation.status !== 'approved') {
+    return false;
+  }
+
+  const reservationDates = getReservationDates(reservation);
+  if (reservationDates.length === 0) {
+    return false;
+  }
+
+  const todayDateKey = getTodayDateKey();
+  return reservationDates.every((date) => date < todayDateKey);
+}
+
+function getDisplayStatus(reservation: ReservationRecord): ReservationDisplayStatus {
+  return isExpiredReservation(reservation) ? 'expired' : reservation.status;
+}
+
+function getDisplayStatusLabel(status: ReservationDisplayStatus) {
   switch (status) {
     case 'approved':
       return 'Approved';
+    case 'expired':
+      return 'Expired';
     case 'completed':
       return 'Completed';
     case 'pending':
@@ -115,11 +160,13 @@ function getDisplayStatusLabel(status: ReservationStatus) {
   }
 }
 
-function getDisplayStatusStyle(status: ReservationStatus) {
+function getDisplayStatusStyle(status: ReservationDisplayStatus) {
   switch (status) {
     case 'approved':
     case 'completed':
       return [styles.chip, styles.chipApproved];
+    case 'expired':
+      return [styles.chip, styles.chipExpired];
     case 'pending':
       return [styles.chip, styles.chipPending];
     case 'cancelled':
@@ -130,11 +177,13 @@ function getDisplayStatusStyle(status: ReservationStatus) {
   }
 }
 
-function getDisplayStatusTextStyle(status: ReservationStatus) {
+function getDisplayStatusTextStyle(status: ReservationDisplayStatus) {
   switch (status) {
     case 'approved':
     case 'completed':
       return [styles.chipText, styles.chipTextApproved];
+    case 'expired':
+      return [styles.chipText, styles.chipTextExpired];
     case 'pending':
       return [styles.chipText, styles.chipTextPending];
     case 'cancelled':
@@ -233,10 +282,7 @@ export default function ReservationHistoryScreen() {
         'Cancel Reservation',
         'Are you sure you want to cancel this reservation?',
         [
-          {
-            style: 'cancel',
-            text: 'Keep',
-          },
+          { style: 'cancel', text: 'Keep' },
           {
             style: 'destructive',
             text: 'Cancel Reservation',
@@ -294,6 +340,12 @@ export default function ReservationHistoryScreen() {
       return reservations;
     }
 
+    if (activeFilter === 'expired') {
+      return reservations.filter(
+        (reservation) => getDisplayStatus(reservation) === 'expired'
+      );
+    }
+
     if (activeFilter === 'rejected') {
       return reservations.filter(
         (reservation) =>
@@ -301,17 +353,25 @@ export default function ReservationHistoryScreen() {
       );
     }
 
-    return reservations.filter((reservation) => reservation.status === activeFilter);
+    return reservations.filter(
+      (reservation) => getDisplayStatus(reservation) === activeFilter
+    );
   }, [activeFilter, reservations]);
 
   const counts = React.useMemo(
     () => ({
       all: reservations.length,
-      approved: reservations.filter((reservation) => reservation.status === 'approved')
-        .length,
+      approved: reservations.filter(
+        (reservation) => getDisplayStatus(reservation) === 'approved'
+      ).length,
       completed: reservations.filter((reservation) => reservation.status === 'completed')
         .length,
-      pending: reservations.filter((reservation) => reservation.status === 'pending').length,
+      expired: reservations.filter(
+        (reservation) => getDisplayStatus(reservation) === 'expired'
+      ).length,
+      pending: reservations.filter(
+        (reservation) => getDisplayStatus(reservation) === 'pending'
+      ).length,
       rejected: reservations.filter(
         (reservation) =>
           reservation.status === 'rejected' || reservation.status === 'cancelled'
@@ -323,6 +383,7 @@ export default function ReservationHistoryScreen() {
   const filters: { key: ReservationFilter; label: string; count: number }[] = [
     { key: 'pending', label: 'Pending', count: counts.pending },
     { key: 'approved', label: 'Approved', count: counts.approved },
+    { key: 'expired', label: 'Expired', count: counts.expired },
     { key: 'completed', label: 'Completed', count: counts.completed },
     { key: 'rejected', label: 'Rejected/Cancelled', count: counts.rejected },
     { key: 'all', label: 'All', count: counts.all },
@@ -374,6 +435,7 @@ export default function ReservationHistoryScreen() {
                     styles.filterTabButtonText,
                     isActive ? styles.filterTabButtonTextActive : null,
                   ]}
+                  numberOfLines={1}
                 >
                   {filter.label}
                 </Text>
@@ -408,117 +470,142 @@ export default function ReservationHistoryScreen() {
         ) : filteredReservations.length === 0 ? (
           <View style={styles.card}>
             <Text style={styles.emptyText}>
-              No {activeFilter === 'all' ? '' : `${filters.find((filter) => filter.key === activeFilter)?.label?.toLowerCase()} `}
+              No{' '}
+              {activeFilter === 'all'
+                ? ''
+                : `${filters
+                    .find((filter) => filter.key === activeFilter)
+                    ?.label?.toLowerCase()} `}
               reservations found.
             </Text>
           </View>
         ) : (
-          filteredReservations.map((reservation, index) => (
-            <View
-              key={reservation.id}
-              style={[
-                styles.listItem,
-                index === filteredReservations.length - 1 ? { marginBottom: 0 } : null,]}>
-              <Text style={styles.mutedLabel}>
-                {formatReservationDates(
-                  reservation.dates,
-                  reservation.date,
-                  reservation.isRecurringRequest
-                )}
-              </Text>
-              <View style={styles.reservationHeaderRow}>
-                <View style={styles.reservationHeaderContent}>
-                  <Text style={styles.reservationRoomName}>{reservation.roomName}</Text>
-                </View>
-                <View
-                  style={[
-                    styles.reservationHeaderBadge,
-                    ...getDisplayStatusStyle(reservation.status),
-                  ]}
-                >
-                  <Text style={getDisplayStatusTextStyle(reservation.status)}>
-                    {getDisplayStatusLabel(reservation.status)}
+          filteredReservations.map((reservation, index) => {
+            const displayStatus = getDisplayStatus(reservation);
+            const isExpired = displayStatus === 'expired';
+
+            return (
+              <View
+                key={reservation.id}
+                style={[
+                  styles.listItem,
+                  index === filteredReservations.length - 1 ? { marginBottom: 0 } : null,
+                ]}
+              >
+                <View style={styles.reservationContent}>
+                  <View style={styles.reservationHeaderRow}>
+                    <View style={styles.reservationHeaderContent}>
+                      <Text style={styles.mutedLabel}>
+                        {formatReservationDates(
+                          reservation.dates,
+                          reservation.date,
+                          reservation.isRecurringRequest
+                        )}
+                      </Text>
+                    </View>
+                    <View
+                      style={[
+                        styles.reservationHeaderBadge,
+                        ...getDisplayStatusStyle(displayStatus),
+                      ]}
+                    >
+                      <Text style={getDisplayStatusTextStyle(displayStatus)}>
+                        {getDisplayStatusLabel(displayStatus)}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.reservationRoomNameWrap}>
+                    <Text style={styles.reservationRoomName}>{reservation.roomName}</Text>
+                  </View>
+                  <Text style={styles.reservationMeta}>{reservation.buildingName}</Text>
+                  <Text style={styles.reservationMeta}>
+                    {formatTime12h(reservation.startTime)} - {formatTime12h(reservation.endTime)}
                   </Text>
+                  <Text style={styles.reservationMeta}>Purpose: {reservation.purpose}</Text>
+                  {displayStatus === 'pending' ? (
+                    <Text style={[styles.reservationMeta, { color: colors.primary }]}>
+                      Waiting for approval
+                    </Text>
+                  ) : null}
+                  {reservation.reason ? (
+                    <Text style={styles.reservationMeta}>
+                      Reason for Rejection: {reservation.reason}
+                    </Text>
+                  ) : null}
+                  {reservation.checkedInAt ? (
+                    <Text style={styles.reservationMeta}>
+                      Time Started: {formatTimestamp(reservation.checkedInAt)}
+                    </Text>
+                  ) : null}
+                  {reservation.completedAt ? (
+                    <Text style={styles.reservationMeta}>
+                      Time Finished: {formatTimestamp(reservation.completedAt)}
+                    </Text>
+                  ) : null}
+                </View>
+                <View style={styles.reservationActionsRow}>
+                  {!isExpired &&
+                  (reservation.status === 'pending' ||
+                    reservation.status === 'approved') ? (
+                    <Pressable
+                      style={[
+                        styles.reservationOutlineButton,
+                        styles.reservationOutlineButtonDanger,
+                      ]}
+                      onPress={() => handleCancel(reservation.id)}
+                      disabled={actionLoadingId === reservation.id}
+                    >
+                      <Text
+                        style={[
+                          styles.reservationOutlineButtonText,
+                          styles.reservationOutlineButtonTextDanger,
+                        ]}
+                      >
+                        {actionLoadingId === reservation.id ? 'Processing...' : 'Cancel'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {!isExpired && reservation.status === 'approved' ? (
+                    <Pressable
+                      style={[
+                        styles.reservationOutlineButton,
+                        styles.reservationOutlineButtonPrimary,
+                      ]}
+                      onPress={() => {
+                        void handleComplete(reservation.id);
+                      }}
+                      disabled={actionLoadingId === reservation.id}
+                    >
+                      <Text
+                        style={[
+                          styles.reservationOutlineButtonText,
+                          styles.reservationOutlineButtonTextPrimary,
+                        ]}
+                      >
+                        {actionLoadingId === reservation.id
+                          ? 'Processing...'
+                          : 'Mark Complete'}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {reservation.status === 'completed' ? (
+                    <Pressable
+                      style={[styles.inlineSecondaryButton, { marginTop: -4, marginBottom: 8 }]}
+                      onPress={() => {}}>
+                      <Text style={styles.inlineSecondaryButtonText}>Leave a Review</Text>
+                    </Pressable>
+                  ) : null}
                 </View>
               </View>
-              <Text style={styles.reservationMeta}>{reservation.buildingName}</Text>
-              <Text style={styles.reservationMeta}>
-                {formatTime12h(reservation.startTime)} - {formatTime12h(reservation.endTime)}
-              </Text>
-              <Text style={styles.reservationMeta}>Purpose: {reservation.purpose}</Text>
-              {reservation.status === 'pending' ? (
-                <Text style={[styles.reservationMeta, { color: colors.primary }]}>
-                  Waiting for approval
-                </Text>
-              ) : null}
-              {reservation.reason ? (
-                <Text style={styles.reservationMeta}>Reason for Rejection: {reservation.reason}</Text>
-              ) : null}
-              {reservation.checkedInAt ? (
-                <Text style={styles.reservationMeta}>
-                  Time Started: {formatTimestamp(reservation.checkedInAt)}
-                </Text>
-              ) : null}
-              {reservation.completedAt ? (
-                <Text style={styles.reservationMeta}>
-                  Time Finished: {formatTimestamp(reservation.completedAt)}
-                </Text>
-              ) : null}
-              <View style={styles.reservationActionsRow}>
-                {(reservation.status === 'pending' || reservation.status === 'approved') ? (
-                  <Pressable
-                    style={[
-                      styles.reservationOutlineButton,
-                      styles.reservationOutlineButtonDanger,
-                    ]}
-                    onPress={() => handleCancel(reservation.id)}
-                    disabled={actionLoadingId === reservation.id}
-                  >
-                    <Text
-                      style={[
-                        styles.reservationOutlineButtonText,
-                        styles.reservationOutlineButtonTextDanger,
-                      ]}
-                    >
-                      {actionLoadingId === reservation.id ? 'Processing...' : 'Cancel'}
-                    </Text>
-                  </Pressable>
-                ) : null}
-                {reservation.status === 'approved' ? (
-                  <Pressable
-                    style={[
-                      styles.reservationOutlineButton,
-                      styles.reservationOutlineButtonPrimary,
-                    ]}
-                    onPress={() => {
-                      void handleComplete(reservation.id);
-                    }}
-                    disabled={actionLoadingId === reservation.id}
-                  >
-                    <Text
-                      style={[
-                        styles.reservationOutlineButtonText,
-                        styles.reservationOutlineButtonTextPrimary,
-                      ]}
-                    >
-                      {actionLoadingId === reservation.id
-                        ? 'Processing...'
-                        : 'Mark Complete'}
-                    </Text>
-                  </Pressable>
-                ) : null}
-                {reservation.status === 'completed' ? (
-                  <Pressable style={styles.inlineSecondaryButton} onPress={() => {}}>
-                    <Text style={styles.inlineSecondaryButtonText}>Leave a Review</Text>
-                  </Pressable>
-                ) : null}
-              </View>
-            </View>
-          ))
+            );
+          })
         )}
       </View>
 
-      <TouchableOpacity style={[styles.actionButton, styles.backButtonContainer]} onPress={() => router.back()}>
+      <TouchableOpacity
+        style={[styles.actionButton, styles.backButtonContainer]}
+        onPress={() => router.back()}
+      >
         <Text style={styles.actionButtonText}>Back to Dashboard</Text>
       </TouchableOpacity>
     </ScrollView>

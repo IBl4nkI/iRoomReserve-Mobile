@@ -173,6 +173,19 @@ export async function cancelReservation(
   });
 }
 
+export async function deleteReservation(
+  reservationId: string,
+  userId: string
+): Promise<void> {
+  await apiRequest(`/api/reservations/${reservationId}`, {
+    body: {
+      action: "delete",
+      userId,
+    },
+    method: "PATCH",
+  });
+}
+
 export async function startReservationPresenceMonitor(
   reservationId: string,
   userId: string,
