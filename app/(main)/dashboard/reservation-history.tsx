@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import DashboardTopNav from '@/components/dashboard/DashboardTopNav';
 import { dashboardStyles as styles } from '@/components/dashboard/styles';
-import { colors } from '@/constants/theme';
+import { colors, fonts } from '@/constants/theme';
 import { auth } from '@/lib/firebase';
 import {
   cancelReservation,
@@ -69,6 +69,19 @@ function formatTimestamp(timestamp: FirestoreTimestampLike) {
     minute: '2-digit',
     month: 'long',
     year: 'numeric',
+  });
+}
+
+function formatTimestampTimeOnly(timestamp: FirestoreTimestampLike) {
+  const date = getTimestampDate(timestamp);
+
+  if (!date) {
+    return 'Not available';
+  }
+
+  return date.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
   });
 }
 
@@ -517,11 +530,18 @@ export default function ReservationHistoryScreen() {
                   <View style={styles.reservationRoomNameWrap}>
                     <Text style={styles.reservationRoomName}>{reservation.roomName}</Text>
                   </View>
-                  <Text style={styles.reservationMeta}>{reservation.buildingName}</Text>
                   <Text style={styles.reservationMeta}>
+                    <Text style={{ fontFamily: fonts.regular }}></Text>{''}
+                    {reservation.buildingName}
+                  </Text>
+                  <Text style={styles.reservationMeta}>
+                    <Text style={{ fontFamily: fonts.regular }}>Reserved Time:</Text>{' '}
                     {formatTime12h(reservation.startTime)} - {formatTime12h(reservation.endTime)}
                   </Text>
-                  <Text style={styles.reservationMeta}>Purpose: {reservation.purpose}</Text>
+                  <Text style={styles.reservationMeta}>
+                    <Text style={{ fontFamily: fonts.regular }}>Purpose:</Text>{' '}
+                    {reservation.purpose}
+                  </Text>
                   {displayStatus === 'pending' ? (
                     <Text style={[styles.reservationMeta, { color: colors.primary }]}>
                       Waiting for approval
@@ -529,17 +549,15 @@ export default function ReservationHistoryScreen() {
                   ) : null}
                   {reservation.reason ? (
                     <Text style={styles.reservationMeta}>
-                      Reason for Rejection: {reservation.reason}
+                      <Text style={{ fontFamily: fonts.bold }}>Reason for Rejection:</Text>{' '}
+                      {reservation.reason}
                     </Text>
                   ) : null}
-                  {reservation.checkedInAt ? (
+                  {reservation.checkedInAt || reservation.completedAt ? (
                     <Text style={styles.reservationMeta}>
-                      Time Started: {formatTimestamp(reservation.checkedInAt)}
-                    </Text>
-                  ) : null}
-                  {reservation.completedAt ? (
-                    <Text style={styles.reservationMeta}>
-                      Time Finished: {formatTimestamp(reservation.completedAt)}
+                      <Text style={{ fontFamily: fonts.regular }}>Time Used:</Text>{' '}
+                      {formatTimestampTimeOnly(reservation.checkedInAt)} -{' '}
+                      {formatTimestampTimeOnly(reservation.completedAt)}
                     </Text>
                   ) : null}
                 </View>
@@ -591,7 +609,12 @@ export default function ReservationHistoryScreen() {
                   {reservation.status === 'completed' ? (
                     <Pressable
                       style={[styles.inlineSecondaryButton, { marginTop: -4, marginBottom: 8 }]}
-                      onPress={() => {}}>
+                      onPress={() =>
+                        router.push({
+                          pathname: '/(main)/dashboard/feedback',
+                          params: { reservationId: reservation.id },
+                        })
+                      }>
                       <Text style={styles.inlineSecondaryButtonText}>Leave a Review</Text>
                     </Pressable>
                   ) : null}
