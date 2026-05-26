@@ -129,27 +129,22 @@ function EmptyStateCard({
   );
 }
 
-function BellIcon() {
+function MailIcon() {
   return (
     <Svg width={18} height={18} viewBox="0 0 24 24" fill="none">
       <Path
-        d="M9.5 20C9.95833 21.1667 10.7917 21.75 12 21.75C13.2083 21.75 14.0417 21.1667 14.5 20"
-        stroke="#343434"
-        strokeWidth={1.8}
-        strokeLinecap="round"
-      />
-      <Path
-        d="M5.5 17.5H18.5C17.6667 16.6667 17.25 15.5208 17.25 14.0625V10.875C17.25 7.81842 14.9926 5.25 12 5.25C9.00736 5.25 6.75 7.81842 6.75 10.875V14.0625C6.75 15.5208 6.33333 16.6667 5.5 17.5Z"
+        d="M4.5 6.75C4.5 5.7835 5.2835 5 6.25 5H17.75C18.7165 5 19.5 5.7835 19.5 6.75V17.25C19.5 18.2165 18.7165 19 17.75 19H6.25C5.2835 19 4.5 18.2165 4.5 17.25V6.75Z"
         stroke="#343434"
         strokeWidth={1.8}
         strokeLinecap="round"
         strokeLinejoin="round"
       />
       <Path
-        d="M10.125 4.625C10.125 3.58947 10.9645 2.75 12 2.75C13.0355 2.75 13.875 3.58947 13.875 4.625"
+        d="M5.25 7L11.0168 11.3251C11.6099 11.7699 12.3901 11.7699 12.9832 11.3251L18.75 7"
         stroke="#343434"
         strokeWidth={1.8}
         strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </Svg>
   );
@@ -942,7 +937,7 @@ export default function DashboardHomeScreen() {
             style={styles.inboxShortcutButton}
             onPress={() => router.push("/(main)/dashboard/inbox")}
           >
-            <BellIcon />
+            <MailIcon />
             {hasUnreadInbox ? <View style={styles.inboxShortcutDot} /> : null}
           </Pressable>
         </View>
