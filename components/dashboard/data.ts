@@ -11,15 +11,6 @@ export interface ReservationItem {
   status: ReservationStatus;
 }
 
-export interface InboxItem {
-  id: string;
-  title: string;
-  description: string;
-  timestamp: string;
-  status: 'Approved' | 'Rejected' | 'Pending';
-  unread: boolean;
-}
-
 export const ongoingReservation: ReservationItem = {
   id: 'res-ongoing',
   room: 'Room 402',
@@ -78,7 +69,4 @@ export const upcomingReservations: ReservationItem[] = [
 ];
 
 export const reservationHistory: ReservationItem[] = [
-];
-
-export const inboxItems: InboxItem[] = [
 ];

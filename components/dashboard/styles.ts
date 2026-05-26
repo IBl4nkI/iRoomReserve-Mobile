@@ -614,4 +614,130 @@ export const dashboardStyles = StyleSheet.create({
   reservationOutlineButtonTextPrimary: {
     color: '#1d4ed8',
   },
+  inboxList: {
+    backgroundColor: colors.surface,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+  },
+  inboxListFullWidth: {
+    marginHorizontal: -16,
+  },
+  inboxNotificationRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
+  inboxNotificationRowUnread: {
+    backgroundColor: '#fffafa',
+  },
+  inboxNotificationRowLast: {
+    borderBottomWidth: 0,
+  },
+  inboxNotificationIconWrap: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
+    backgroundColor: '#c9f1da',
+  },
+  inboxNotificationIconWrapRejected: {
+    backgroundColor: '#fee2e2',
+  },
+  inboxNotificationIconWrapPending: {
+    backgroundColor: '#ffedd5',
+  },
+  inboxNotificationContent: {
+    flex: 1,
+    minWidth: 0,
+  },
+  inboxNotificationHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  inboxNotificationHeadingBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  inboxNotificationMetaBlock: {
+    alignItems: 'flex-end',
+    flexShrink: 0,
+    maxWidth: 130,
+  },
+  inboxNotificationTitle: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: fonts.bold,
+    color: colors.text,
+    lineHeight: 21,
+  },
+  inboxNotificationBody: {
+    fontSize: 14,
+    lineHeight: 21,
+    fontFamily: fonts.regular,
+    color: colors.secondary,
+    marginTop: 4,
+  },
+  inboxNotificationTimestamp: {
+    fontSize: 12,
+    lineHeight: 18,
+    fontFamily: fonts.bold,
+    color: colors.mutedText,
+  },
+  inboxNotificationArrowRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 0,
+  },
+  inboxNotificationArrowSpacer: {
+    flex: 1,
+  },
+  inboxNotificationExpanded: {
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    gap: 4,
+  },
+  inboxNotificationDetailText: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: fonts.regular,
+    color: colors.secondary,
+  },
+  inboxNotificationActionButton: {
+    alignSelf: 'flex-start',
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#d9a3a3',
+    backgroundColor: '#fff1f1',
+  },
+  inboxNotificationActionButtonDisabled: {
+    opacity: 0.6,
+  },
+  inboxNotificationActionButtonText: {
+    fontSize: 12,
+    fontFamily: fonts.bold,
+    color: colors.primary,
+  },
+  inboxPanelEmpty: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 18,
+    paddingVertical: 22,
+  },
 });

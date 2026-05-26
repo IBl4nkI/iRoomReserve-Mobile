@@ -26,6 +26,7 @@ import {
   deactivatePresenceMonitoring,
   syncPresenceMonitoringSession,
 } from "@/services/presence-monitor.service";
+import { onUnreadNotifications } from "@/services/notifications.service";
 import { getRoomsByIds } from "@/services/rooms.service";
 import {
   checkInReservation,
@@ -407,6 +408,7 @@ export default function DashboardHomeScreen() {
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [unreadInboxCount, setUnreadInboxCount] = React.useState(0);
   const [reservationActionLoading, setReservationActionLoading] = React.useState(false);
   const isMountedRef = React.useRef(true);
   const bleManagerRef = React.useRef<BleManager | null>(null);
@@ -563,7 +565,7 @@ export default function DashboardHomeScreen() {
         !ongoingReservations.some((ongoingItem) => ongoingItem.id === reservation.id)
     )
     .sort(sortUpcomingReservations);
-  const hasUnreadInbox = isUtilityStaff ? false : pendingReservations.length > 0;
+  const hasUnreadInbox = unreadInboxCount > 0;
   const isReservationStarted = !isUtilityStaff && Boolean(ongoingReservation?.checkedInAt);
   const canStartOngoingReservation = canStartReservation(
     ongoingReservation,
@@ -584,6 +586,23 @@ export default function DashboardHomeScreen() {
       ? `${reservation.buildingName} - ${room.floor}`
       : reservation.buildingName;
   };
+
+  React.useEffect(() => {
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) {
+      setUnreadInboxCount(0);
+      return;
+    }
+
+    const unsubscribe = onUnreadNotifications(currentUser.uid, (notifications) => {
+      if (isMountedRef.current) {
+        setUnreadInboxCount(notifications.length);
+      }
+    });
+
+    return unsubscribe;
+  }, []);
 
   React.useEffect(() => {
     const currentUser = auth.currentUser;
