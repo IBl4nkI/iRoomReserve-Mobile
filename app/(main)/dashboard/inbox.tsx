@@ -13,6 +13,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
   onAllNotifications,
+  shouldHideUtilityStaffInboxNotification,
   type AppNotification,
 } from '@/services/notifications.service';
 import {
@@ -169,6 +170,7 @@ function formatSentDateFromNotification(notification: AppNotification) {
 function getRowStatus(notification: AppNotification): InboxRowStatus {
   switch (notification.type) {
     case "reservation_rejected":
+    case "reservation_cancelled":
       return "Rejected";
     case "new_reservation":
       return "Pending";
@@ -262,12 +264,18 @@ export default function InboxScreen() {
             normalizedRole === "Utility Staff" && campus
               ? await getReservationsByCampus(campus)
               : await getReservationsByUser(currentUser.uid);
+          const visibleNotifications =
+            normalizedRole === "Utility Staff"
+              ? notifications.filter(
+                  (notification) => !shouldHideUtilityStaffInboxNotification(notification)
+                )
+              : notifications;
 
           if (!active) {
             return;
           }
 
-          setItems(buildInboxRows(notifications, reservations));
+          setItems(buildInboxRows(visibleNotifications, reservations));
           setError(null);
         } catch (caughtError) {
           if (!active) {
@@ -361,7 +369,7 @@ export default function InboxScreen() {
             try {
               setBulkActionLoading(true);
               setExpandedItemId(null);
-              await deleteAllReadNotifications(currentUser.uid);
+              await deleteAllReadNotifications();
             } finally {
               setBulkActionLoading(false);
             }

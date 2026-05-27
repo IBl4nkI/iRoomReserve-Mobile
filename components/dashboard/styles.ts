@@ -503,7 +503,7 @@ export const dashboardStyles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 11,
     textDecorationLine: 'underline',
-    marginRight: 8,
+    marginRight: 0,
   },
   filterTabsRow: {
     flexDirection: 'row',

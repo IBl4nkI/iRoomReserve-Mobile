@@ -12,6 +12,7 @@ import {
   where,
 } from "firebase/firestore";
 
+import { apiRequest } from "@/services/api";
 import { db } from "@/services/firebase";
 
 export type AppNotificationType =
@@ -32,6 +33,19 @@ export interface AppNotification {
   reservationId: string;
   read: boolean;
   createdAt?: Timestamp;
+}
+
+export function shouldHideUtilityStaffInboxNotification(
+  notification: AppNotification
+) {
+  const title = notification.title?.trim();
+
+  return (
+    notification.type === "feedback" ||
+    title === "New Room Feedback" ||
+    title === "Room Checked In" ||
+    title === "Reservation Completed"
+  );
 }
 
 function mapNotificationSnapshot(snapshot: QuerySnapshot) {
@@ -110,21 +124,6 @@ export async function markAllNotificationsRead(uid: string) {
   await batch.commit();
 }
 
-export async function deleteAllReadNotifications(uid: string) {
-  const notificationsQuery = query(
-    collection(db, "notifications"),
-    where("recipientUid", "==", uid),
-    where("read", "==", true)
-  );
-  const snapshot = await getDocs(notificationsQuery);
-
-  if (snapshot.empty) {
-    return;
-  }
-
-  const batch = writeBatch(db);
-  snapshot.docs.forEach((notificationDoc) => {
-    batch.delete(notificationDoc.ref);
-  });
-  await batch.commit();
+export async function deleteAllReadNotifications() {
+  await apiRequest("/api/notifications/read", { method: "DELETE" });
 }

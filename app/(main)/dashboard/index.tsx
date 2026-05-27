@@ -26,7 +26,10 @@ import {
   deactivatePresenceMonitoring,
   syncPresenceMonitoringSession,
 } from "@/services/presence-monitor.service";
-import { onUnreadNotifications } from "@/services/notifications.service";
+import {
+  onUnreadNotifications,
+  shouldHideUtilityStaffInboxNotification,
+} from "@/services/notifications.service";
 import { getRoomsByIds } from "@/services/rooms.service";
 import {
   formatCompactFloorLabel,
@@ -866,12 +869,18 @@ export default function DashboardHomeScreen() {
 
     const unsubscribe = onUnreadNotifications(currentUser.uid, (notifications) => {
       if (isMountedRef.current) {
-        setUnreadInboxCount(notifications.length);
+        setUnreadInboxCount(
+          isUtilityStaff
+            ? notifications.filter(
+                (notification) => !shouldHideUtilityStaffInboxNotification(notification)
+              ).length
+            : notifications.length
+        );
       }
     });
 
     return unsubscribe;
-  }, []);
+  }, [isUtilityStaff]);
 
   React.useEffect(() => {
     const currentUser = auth.currentUser;
