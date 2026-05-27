@@ -29,6 +29,11 @@ import {
 import { onUnreadNotifications } from "@/services/notifications.service";
 import { getRoomsByIds } from "@/services/rooms.service";
 import {
+  formatCompactFloorLabel,
+  getRoomFloorId,
+  getRoomFloorLabel,
+} from "@/services/floors.service";
+import {
   checkInReservation,
   completeReservation,
   getReservationsByCampus,
@@ -37,6 +42,7 @@ import {
 import { formatTime12h } from "@/services/schedules.service";
 import type {
   ReservationApprovalStep,
+  ReservationCampus,
   ReservationRecord,
   Room,
 } from "@/types/reservation";
@@ -49,6 +55,17 @@ const BLE_SCAN_TIMEOUT_MS = 15000;
 const BASE64_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 const BLE_DEBUG = true;
+const MAIN_CAMPUS_BUILDING_OPTIONS = [
+  { id: "gd1", label: "GD1" },
+  { id: "gd2", label: "GD2" },
+  { id: "gd3", label: "GD3" },
+];
+
+type ReservationFilterValue = string | null;
+type ReservationFilterOption = {
+  id: string;
+  label: string;
+};
 
 function ensureBleConfiguration() {
   if (!BLE_SERVICE_UUID || !BLE_BEACON_CHAR_UUID) {
@@ -349,6 +366,129 @@ function getDisplayStatus(reservation: ReservationRecord) {
   return "Active" as const;
 }
 
+function getReservationFloorOption(
+  reservation: ReservationRecord,
+  roomsById: Record<string, Room>
+): ReservationFilterOption | null {
+  const room = roomsById[reservation.roomId];
+
+  if (!room?.floor) {
+    return null;
+  }
+
+  const label = getRoomFloorLabel(room);
+
+  return {
+    id: getRoomFloorId(room),
+    label: formatCompactFloorLabel(label) || label,
+  };
+}
+
+function getSectionFloorOptions(
+  reservations: ReservationRecord[],
+  roomsById: Record<string, Room>,
+  buildingFilter: ReservationFilterValue
+) {
+  const optionsById = new Map<string, ReservationFilterOption>();
+
+  reservations.forEach((reservation) => {
+    if (
+      buildingFilter &&
+      reservation.buildingId.toLowerCase() !== buildingFilter
+    ) {
+      return;
+    }
+
+    const option = getReservationFloorOption(reservation, roomsById);
+
+    if (option) {
+      optionsById.set(option.id, option);
+    }
+  });
+
+  return [...optionsById.values()].sort((left, right) =>
+    left.label.localeCompare(right.label, undefined, { numeric: true })
+  );
+}
+
+function getDefaultBuildingFilter(reservations: ReservationRecord[]) {
+  const buildingIds = new Set(
+    reservations.map((reservation) => reservation.buildingId.toLowerCase())
+  );
+
+  return (
+    MAIN_CAMPUS_BUILDING_OPTIONS.find((option) => buildingIds.has(option.id))?.id ??
+    null
+  );
+}
+
+function filterReservationsByBuildingAndFloor(
+  reservations: ReservationRecord[],
+  roomsById: Record<string, Room>,
+  buildingFilter: ReservationFilterValue,
+  floorFilter: ReservationFilterValue
+) {
+  return reservations.filter((reservation) => {
+    if (
+      buildingFilter &&
+      reservation.buildingId.toLowerCase() !== buildingFilter
+    ) {
+      return false;
+    }
+
+    if (!floorFilter) {
+      return true;
+    }
+
+    return getReservationFloorOption(reservation, roomsById)?.id === floorFilter;
+  });
+}
+
+function ReservationRadioGroup({
+  options,
+  selectedValue,
+  onChange,
+}: {
+  options: ReservationFilterOption[];
+  selectedValue: ReservationFilterValue;
+  onChange: (value: ReservationFilterValue) => void;
+}) {
+  if (options.length === 0) {
+    return null;
+  }
+
+  return (
+    <View style={styles.reservationFilterRow}>
+      {options.map((option) => {
+        const selected = selectedValue === option.id;
+
+        return (
+          <Pressable
+            key={option.id}
+            style={[
+              styles.reservationRadioChip,
+              selected ? styles.reservationRadioChipSelected : null,
+            ]}
+            onPress={() => onChange(option.id)}
+          >
+            <View
+              style={[
+                styles.reservationRadioOuter,
+                selected ? styles.reservationRadioOuterSelected : null,
+              ]}
+            >
+              {selected ? <View style={styles.reservationRadioInner} /> : null}
+            </View>
+            <Text style={styles.reservationRadioText} numberOfLines={1}>
+              {option.label}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </View>
+  );
+}
+
 function ReservationCard({
   reservation,
   showPendingStage = false,
@@ -405,6 +545,15 @@ export default function DashboardHomeScreen() {
   const [reservations, setReservations] = React.useState<ReservationRecord[]>([]);
   const [roomsById, setRoomsById] = React.useState<Record<string, Room>>({});
   const [userRole, setUserRole] = React.useState<string | null>(null);
+  const [assignedCampus, setAssignedCampus] = React.useState<ReservationCampus | null>(null);
+  const [ongoingBuildingFilter, setOngoingBuildingFilter] =
+    React.useState<ReservationFilterValue>(null);
+  const [ongoingFloorFilter, setOngoingFloorFilter] =
+    React.useState<ReservationFilterValue>(null);
+  const [upcomingBuildingFilter, setUpcomingBuildingFilter] =
+    React.useState<ReservationFilterValue>(null);
+  const [upcomingFloorFilter, setUpcomingFloorFilter] =
+    React.useState<ReservationFilterValue>(null);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -462,6 +611,7 @@ export default function DashboardHomeScreen() {
         ? profile.campus
         : null;
       setUserRole(normalizedRole);
+      setAssignedCampus(campus);
 
       const nextReservations =
         normalizedRole === "Utility Staff" && campus
@@ -565,6 +715,125 @@ export default function DashboardHomeScreen() {
         !ongoingReservations.some((ongoingItem) => ongoingItem.id === reservation.id)
     )
     .sort(sortUpcomingReservations);
+  const defaultOngoingBuildingFilter = React.useMemo(
+    () =>
+      assignedCampus === "main"
+        ? getDefaultBuildingFilter(ongoingReservations)
+        : null,
+    [assignedCampus, ongoingReservations]
+  );
+  const defaultUpcomingBuildingFilter = React.useMemo(
+    () =>
+      assignedCampus === "main"
+        ? getDefaultBuildingFilter(upcomingReservations)
+        : null,
+    [assignedCampus, upcomingReservations]
+  );
+  const effectiveOngoingBuildingFilter =
+    assignedCampus === "main"
+      ? ongoingBuildingFilter ?? defaultOngoingBuildingFilter
+      : null;
+  const effectiveUpcomingBuildingFilter =
+    assignedCampus === "main"
+      ? upcomingBuildingFilter ?? defaultUpcomingBuildingFilter
+      : null;
+  const ongoingBuildingOptions = React.useMemo(
+    () =>
+      isUtilityStaff && assignedCampus === "main"
+        ? MAIN_CAMPUS_BUILDING_OPTIONS
+        : [],
+    [assignedCampus, isUtilityStaff]
+  );
+  const upcomingBuildingOptions = React.useMemo(
+    () =>
+      isUtilityStaff && assignedCampus === "main"
+        ? MAIN_CAMPUS_BUILDING_OPTIONS
+        : [],
+    [assignedCampus, isUtilityStaff]
+  );
+  const ongoingFloorOptions = React.useMemo(
+    () =>
+      isUtilityStaff
+        ? getSectionFloorOptions(
+            ongoingReservations,
+            roomsById,
+            effectiveOngoingBuildingFilter
+          )
+        : [],
+    [
+      effectiveOngoingBuildingFilter,
+      isUtilityStaff,
+      ongoingReservations,
+      roomsById,
+    ]
+  );
+  const upcomingFloorOptions = React.useMemo(
+    () =>
+      isUtilityStaff
+        ? getSectionFloorOptions(
+            upcomingReservations,
+            roomsById,
+            effectiveUpcomingBuildingFilter
+          )
+        : [],
+    [
+      effectiveUpcomingBuildingFilter,
+      isUtilityStaff,
+      upcomingReservations,
+      roomsById,
+    ]
+  );
+  const effectiveOngoingFloorFilter =
+    ongoingFloorFilter ?? ongoingFloorOptions[0]?.id ?? null;
+  const effectiveUpcomingFloorFilter =
+    upcomingFloorFilter ?? upcomingFloorOptions[0]?.id ?? null;
+  const filteredOngoingReservations = isUtilityStaff
+    ? filterReservationsByBuildingAndFloor(
+        ongoingReservations,
+        roomsById,
+        effectiveOngoingBuildingFilter,
+        effectiveOngoingFloorFilter
+      )
+    : ongoingReservations;
+  const filteredUpcomingReservations = isUtilityStaff
+    ? filterReservationsByBuildingAndFloor(
+        upcomingReservations,
+        roomsById,
+        effectiveUpcomingBuildingFilter,
+        effectiveUpcomingFloorFilter
+      )
+    : upcomingReservations;
+
+  React.useEffect(() => {
+    if (assignedCampus !== "main" && ongoingBuildingFilter) {
+      setOngoingBuildingFilter(null);
+    }
+  }, [assignedCampus, ongoingBuildingFilter]);
+
+  React.useEffect(() => {
+    if (assignedCampus !== "main" && upcomingBuildingFilter) {
+      setUpcomingBuildingFilter(null);
+    }
+  }, [assignedCampus, upcomingBuildingFilter]);
+
+  React.useEffect(() => {
+    if (
+      ongoingFloorFilter &&
+      !ongoingFloorOptions.some((option) => option.id === ongoingFloorFilter)
+    ) {
+      setOngoingFloorFilter(null);
+    }
+  }, [ongoingFloorFilter, ongoingFloorOptions]);
+
+  React.useEffect(() => {
+    if (
+      upcomingFloorFilter &&
+      !upcomingFloorOptions.some((option) => option.id === upcomingFloorFilter)
+    ) {
+      setUpcomingFloorFilter(null);
+    }
+  }, [upcomingFloorFilter, upcomingFloorOptions]);
+
   const hasUnreadInbox = unreadInboxCount > 0;
   const isReservationStarted = !isUtilityStaff && Boolean(ongoingReservation?.checkedInAt);
   const canStartOngoingReservation = canStartReservation(
@@ -974,43 +1243,66 @@ export default function DashboardHomeScreen() {
                 <Text style={styles.sectionTitle}>
                   {isUtilityStaff ? "Ongoing Reservations" : "Ongoing Reservation"}
                 </Text>
-                {ongoingReservations.map((reservation, index) => (
-                  <View
-                    key={reservation.id}
-                    style={index === ongoingReservations.length - 1 ? null : styles.dashboardGroupItem}
-                  >
-                    <ReservationCard
-                      reservation={reservation}
-                      compactTitle
-                      locationLabel={getRoomLocationLabel(reservation)}
-                    />
-                    {!isUtilityStaff && canManageOngoingReservation ? (
-                      <Pressable
-                        style={[
-                          styles.reservationActionButton,
-                          isReservationStarted
-                            ? styles.reservationActionButtonFinish
-                            : styles.reservationActionButtonStart,
-                          reservationActionLoading
-                            ? styles.reservationActionButtonDisabled
-                            : null,
-                        ]}
-                        onPress={handleReservationAction}
-                        disabled={reservationActionLoading}
-                      >
-                        <Text style={styles.reservationActionButtonText}>
-                          {reservationActionLoading
-                            ? isReservationStarted
-                              ? "Finishing..."
-                              : "Starting..."
-                            : isReservationStarted
-                              ? "Finish Reservation"
-                              : "Start Reservation"}
-                        </Text>
-                      </Pressable>
-                    ) : null}
-                  </View>
-                ))}
+                {isUtilityStaff && assignedCampus === "main" ? (
+                  <ReservationRadioGroup
+                    options={ongoingBuildingOptions}
+                    selectedValue={effectiveOngoingBuildingFilter}
+                    onChange={(value) => {
+                      setOngoingBuildingFilter(value);
+                      setOngoingFloorFilter(null);
+                    }}
+                  />
+                ) : null}
+                {isUtilityStaff ? (
+                  <ReservationRadioGroup
+                    options={ongoingFloorOptions}
+                    selectedValue={effectiveOngoingFloorFilter}
+                    onChange={setOngoingFloorFilter}
+                  />
+                ) : null}
+                {filteredOngoingReservations.length === 0 ? (
+                  <Text style={styles.emptyText}>
+                    There are no ongoing reservations for this filter.
+                  </Text>
+                ) : (
+                  filteredOngoingReservations.map((reservation, index) => (
+                    <View
+                      key={reservation.id}
+                      style={index === filteredOngoingReservations.length - 1 ? null : styles.dashboardGroupItem}
+                    >
+                      <ReservationCard
+                        reservation={reservation}
+                        compactTitle
+                        locationLabel={getRoomLocationLabel(reservation)}
+                      />
+                      {!isUtilityStaff && canManageOngoingReservation ? (
+                        <Pressable
+                          style={[
+                            styles.reservationActionButton,
+                            isReservationStarted
+                              ? styles.reservationActionButtonFinish
+                              : styles.reservationActionButtonStart,
+                            reservationActionLoading
+                              ? styles.reservationActionButtonDisabled
+                              : null,
+                          ]}
+                          onPress={handleReservationAction}
+                          disabled={reservationActionLoading}
+                        >
+                          <Text style={styles.reservationActionButtonText}>
+                            {reservationActionLoading
+                              ? isReservationStarted
+                                ? "Finishing..."
+                                : "Starting..."
+                              : isReservationStarted
+                                ? "Finish Reservation"
+                                : "Start Reservation"}
+                          </Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                  ))
+                )}
               </View>
             ) : (
               <EmptyStateCard
@@ -1055,18 +1347,41 @@ export default function DashboardHomeScreen() {
             ) : (
               <View style={styles.card}>
                 <Text style={styles.sectionTitle}>Upcoming Reservations</Text>
-                {upcomingReservations.map((reservation, index) => (
-                  <View
-                    key={reservation.id}
-                    style={index === upcomingReservations.length - 1 ? { marginBottom: 0 } : null}
-                  >
-                    <ReservationCard
-                      reservation={reservation}
-                      compactTitle
-                      locationLabel={getRoomLocationLabel(reservation)}
-                    />
-                  </View>
-                ))}
+                {isUtilityStaff && assignedCampus === "main" ? (
+                  <ReservationRadioGroup
+                    options={upcomingBuildingOptions}
+                    selectedValue={effectiveUpcomingBuildingFilter}
+                    onChange={(value) => {
+                      setUpcomingBuildingFilter(value);
+                      setUpcomingFloorFilter(null);
+                    }}
+                  />
+                ) : null}
+                {isUtilityStaff ? (
+                  <ReservationRadioGroup
+                    options={upcomingFloorOptions}
+                    selectedValue={effectiveUpcomingFloorFilter}
+                    onChange={setUpcomingFloorFilter}
+                  />
+                ) : null}
+                {filteredUpcomingReservations.length === 0 ? (
+                  <Text style={styles.emptyText}>
+                    There are no upcoming reservations for this filter.
+                  </Text>
+                ) : (
+                  filteredUpcomingReservations.map((reservation, index) => (
+                    <View
+                      key={reservation.id}
+                      style={index === filteredUpcomingReservations.length - 1 ? { marginBottom: 0 } : null}
+                    >
+                      <ReservationCard
+                        reservation={reservation}
+                        compactTitle
+                        locationLabel={getRoomLocationLabel(reservation)}
+                      />
+                    </View>
+                  ))
+                )}
               </View>
             )}
           </>
