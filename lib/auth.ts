@@ -1,9 +1,12 @@
 import { Platform } from "react-native";
 import {
+  EmailAuthProvider,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signOut,
+  reauthenticateWithCredential,
   updateProfile,
+  updatePassword,
   sendEmailVerification,
   sendPasswordResetEmail,
   GoogleAuthProvider,
@@ -280,6 +283,54 @@ export async function saveUserProfile(
   );
 }
 
+export async function updateUserProfileName(
+  uid: string,
+  data: {
+    firstName: string;
+    lastName: string;
+  }
+) {
+  const currentUser = auth.currentUser;
+  const firstName = data.firstName.trim();
+  const lastName = data.lastName.trim();
+
+  await saveUserProfile(uid, {
+    email: currentUser?.email ?? '',
+    firstName,
+    lastName,
+  });
+
+  if (currentUser) {
+    await updateProfile(currentUser, {
+      displayName: [firstName, lastName].filter(Boolean).join(' ').trim(),
+    });
+  }
+}
+
+export async function updateUserPassword(
+  currentPassword: string,
+  nextPassword: string
+) {
+  const currentUser = auth.currentUser;
+
+  if (!currentUser) {
+    throw { code: 'auth/not-authenticated' };
+  }
+
+  if (!currentUser.email) {
+    throw { code: 'auth/missing-email' };
+  }
+
+  const credential = EmailAuthProvider.credential(
+    currentUser.email,
+    currentPassword
+  );
+
+  await reauthenticateWithCredential(currentUser, credential);
+
+  await updatePassword(currentUser, nextPassword);
+}
+
 export async function saveExpoPushToken(uid: string, token: string) {
   const normalizedToken = token.trim();
 
@@ -308,7 +359,11 @@ export async function resendVerificationEmail(email: string, password: string) {
 export function getAuthErrorMessage(code: string): string {
   const safeMessages: Record<string, string> = {
     "auth/email-already-in-use": "This email is already registered.",
-    "auth/weak-password": "Password must be at least 6 characters.",
+    "auth/weak-password": "Password must be at least 8 characters and include 1 uppercase letter and 1 number.",
+    "auth/requires-recent-login":
+      "For security, please log in again before changing your password.",
+    "auth/not-authenticated": "Please log in again and try once more.",
+    "auth/missing-email": "This account is missing an email address.",
     "auth/invalid-email": "Please enter a valid email address.",
     "auth/invalid-credential":
       "Google Sign-In failed. Please try again.",
