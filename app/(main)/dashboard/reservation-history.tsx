@@ -18,7 +18,6 @@ import { colors, fonts } from '@/constants/theme';
 import { auth } from '@/lib/firebase';
 import {
   cancelReservation,
-  completeReservation,
   getReservationsByUser,
 } from '@/services/reservations.service';
 import { formatTime12h } from '@/services/schedules.service';
@@ -322,32 +321,6 @@ export default function ReservationHistoryScreen() {
     [actionLoadingId, loadReservations]
   );
 
-  const handleComplete = React.useCallback(
-    async (reservationId: string) => {
-      const currentUser = auth.currentUser;
-
-      if (!currentUser || actionLoadingId) {
-        return;
-      }
-
-      try {
-        setActionLoadingId(reservationId);
-        await completeReservation(reservationId, currentUser.uid);
-        await loadReservations(false);
-      } catch (caughtError) {
-        Alert.alert(
-          'Update Failed',
-          caughtError instanceof Error
-            ? caughtError.message
-            : "We couldn't complete this reservation right now."
-        );
-      } finally {
-        setActionLoadingId(null);
-      }
-    },
-    [actionLoadingId, loadReservations]
-  );
-
   const filteredReservations = React.useMemo(() => {
     if (activeFilter === 'all') {
       return reservations;
@@ -580,29 +553,6 @@ export default function ReservationHistoryScreen() {
                         ]}
                       >
                         {actionLoadingId === reservation.id ? 'Processing...' : 'Cancel'}
-                      </Text>
-                    </Pressable>
-                  ) : null}
-                  {!isExpired && reservation.status === 'approved' ? (
-                    <Pressable
-                      style={[
-                        styles.reservationOutlineButton,
-                        styles.reservationOutlineButtonPrimary,
-                      ]}
-                      onPress={() => {
-                        void handleComplete(reservation.id);
-                      }}
-                      disabled={actionLoadingId === reservation.id}
-                    >
-                      <Text
-                        style={[
-                          styles.reservationOutlineButtonText,
-                          styles.reservationOutlineButtonTextPrimary,
-                        ]}
-                      >
-                        {actionLoadingId === reservation.id
-                          ? 'Processing...'
-                          : 'Mark Complete'}
                       </Text>
                     </Pressable>
                   ) : null}
