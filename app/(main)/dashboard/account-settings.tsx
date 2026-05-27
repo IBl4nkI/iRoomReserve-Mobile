@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Alert,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -16,6 +17,7 @@ import { router } from 'expo-router';
 import DashboardTopNav from '@/components/dashboard/DashboardTopNav';
 import { colors, fonts } from '@/constants/theme';
 import {
+  deleteCurrentUserAccount,
   getAuthErrorMessage,
   getUserProfile,
   updateUserPassword,
@@ -172,6 +174,8 @@ export default function AccountSettingsScreen() {
   const [nameSuccessMessage, setNameSuccessMessage] = React.useState('');
   const [passwordErrorMessage, setPasswordErrorMessage] = React.useState('');
   const [passwordSuccessMessage, setPasswordSuccessMessage] = React.useState('');
+  const [deleteErrorMessage, setDeleteErrorMessage] = React.useState('');
+  const [deletingAccount, setDeletingAccount] = React.useState(false);
 
   const validatePassword = React.useCallback((password: string): string | null => {
     if (password.length < 8) {
@@ -345,6 +349,26 @@ export default function AccountSettingsScreen() {
     }
   }, [confirmPassword, currentPassword, newPassword, validatePassword]);
 
+  const handleDeleteAccount = React.useCallback(async () => {
+    try {
+      setDeletingAccount(true);
+      setDeleteErrorMessage('');
+      await deleteCurrentUserAccount();
+      router.replace('/(auth)/login');
+    } catch (error) {
+      const code =
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        typeof error.code === 'string'
+          ? error.code
+          : '';
+      setDeleteErrorMessage(getAuthErrorMessage(code));
+    } finally {
+      setDeletingAccount(false);
+    }
+  }, []);
+
   return (
     <KeyboardAvoidingView
       style={localStyles.flex}
@@ -455,6 +479,7 @@ export default function AccountSettingsScreen() {
                         setShowCurrentPassword(false);
                         setShowNewPassword(false);
                         setShowConfirmPassword(false);
+                        setDeleteErrorMessage('');
                       }
                       setPasswordErrorMessage('');
                       setPasswordSuccessMessage('');
@@ -525,6 +550,44 @@ export default function AccountSettingsScreen() {
               {!editingPassword && passwordSuccessMessage ? (
                 <AuthMessage message={passwordSuccessMessage} tone="success" />
               ) : null}
+
+              <View style={[styles.card, localStyles.dangerSectionCard]}>
+                <Text style={localStyles.dangerTitle}>Delete Account</Text>
+                <Text style={localStyles.dangerBody}>
+                  Permanently delete your account and profile data. This action cannot be undone.
+                </Text>
+
+                {deleteErrorMessage ? (
+                  <AuthMessage message={deleteErrorMessage} tone="error" />
+                ) : null}
+
+                <TouchableOpacity
+                  style={localStyles.deleteButton}
+                  onPress={() => {
+                    Alert.alert(
+                      'Delete Account',
+                      'This permanently deletes your account and cannot be undone. Are you sure you want to continue?',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Delete',
+                          style: 'destructive',
+                          onPress: () => {
+                            void handleDeleteAccount();
+                          },
+                        },
+                      ]
+                    );
+                  }}
+                  disabled={deletingAccount}
+                >
+                  {deletingAccount ? (
+                    <ActivityIndicator color={colors.dangerText} />
+                  ) : (
+                    <Text style={localStyles.deleteButtonText}>Delete Account</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </>
           )}
         </View>
@@ -559,6 +622,36 @@ const localStyles = StyleSheet.create({
   },
   editPanel: {
     marginBottom: 12,
+  },
+  dangerBody: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontFamily: fonts.regular,
+    color: colors.secondary,
+    marginBottom: 12,
+  },
+  dangerSectionCard: {
+    marginBottom: 6,
+  },
+  dangerTitle: {
+    fontSize: 14,
+    fontFamily: fonts.bold,
+    color: colors.dangerText,
+    marginBottom: 6,
+  },
+  deleteButton: {
+    backgroundColor: colors.dangerBackground,
+    borderWidth: 1,
+    borderColor: colors.dangerBorder,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deleteButtonText: {
+    color: colors.dangerText,
+    fontFamily: fonts.bold,
+    fontSize: 14,
   },
   errorBox: {
     backgroundColor: colors.dangerBackground,

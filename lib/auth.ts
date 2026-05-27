@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import {
+  deleteUser,
   EmailAuthProvider,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -12,7 +13,7 @@ import {
   GoogleAuthProvider,
   signInWithCredential,
 } from "firebase/auth";
-import { arrayUnion, doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { arrayUnion, deleteDoc, doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./firebase";
 
 const ALLOWED_DOMAIN = "sdca.edu.ph";
@@ -329,6 +330,17 @@ export async function updateUserPassword(
   await reauthenticateWithCredential(currentUser, credential);
 
   await updatePassword(currentUser, nextPassword);
+}
+
+export async function deleteCurrentUserAccount() {
+  const currentUser = auth.currentUser;
+
+  if (!currentUser) {
+    throw { code: 'auth/not-authenticated' };
+  }
+
+  await deleteDoc(doc(db, "users", currentUser.uid));
+  await deleteUser(currentUser);
 }
 
 export async function saveExpoPushToken(uid: string, token: string) {
