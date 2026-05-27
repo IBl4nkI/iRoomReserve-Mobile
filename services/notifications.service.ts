@@ -1,12 +1,14 @@
 import {
   collection,
   doc,
+  getDocs,
   onSnapshot,
   orderBy,
   query,
   type QuerySnapshot,
   type Timestamp,
   updateDoc,
+  writeBatch,
   where,
 } from "firebase/firestore";
 
@@ -87,4 +89,42 @@ export function onUnreadNotifications(
 
 export async function markNotificationRead(notificationId: string) {
   await updateDoc(doc(db, "notifications", notificationId), { read: true });
+}
+
+export async function markAllNotificationsRead(uid: string) {
+  const notificationsQuery = query(
+    collection(db, "notifications"),
+    where("recipientUid", "==", uid),
+    where("read", "==", false)
+  );
+  const snapshot = await getDocs(notificationsQuery);
+
+  if (snapshot.empty) {
+    return;
+  }
+
+  const batch = writeBatch(db);
+  snapshot.docs.forEach((notificationDoc) => {
+    batch.update(notificationDoc.ref, { read: true });
+  });
+  await batch.commit();
+}
+
+export async function deleteAllReadNotifications(uid: string) {
+  const notificationsQuery = query(
+    collection(db, "notifications"),
+    where("recipientUid", "==", uid),
+    where("read", "==", true)
+  );
+  const snapshot = await getDocs(notificationsQuery);
+
+  if (snapshot.empty) {
+    return;
+  }
+
+  const batch = writeBatch(db);
+  snapshot.docs.forEach((notificationDoc) => {
+    batch.delete(notificationDoc.ref);
+  });
+  await batch.commit();
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
@@ -9,6 +9,8 @@ import { colors } from '@/constants/theme';
 import { getUserProfile } from '@/lib/auth';
 import { auth } from '@/lib/firebase';
 import {
+  deleteAllReadNotifications,
+  markAllNotificationsRead,
   markNotificationRead,
   onAllNotifications,
   type AppNotification,
@@ -186,6 +188,9 @@ function getReservationStatusLabel(notification: AppNotification) {
     case "reservation_approved":
       return "Reservation Approved";
     default:
+      if (notification.title?.trim() === "Faculty Adviser Approved") {
+        return "Dept. Head/Adviser Approved";
+      }
       return notification.title?.trim() || "Reservation Update";
   }
 }
@@ -230,6 +235,7 @@ export default function InboxScreen() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const [markingReadId, setMarkingReadId] = React.useState<string | null>(null);
+  const [bulkActionLoading, setBulkActionLoading] = React.useState(false);
 
   React.useEffect(() => {
     const currentUser = auth.currentUser;
@@ -304,6 +310,8 @@ export default function InboxScreen() {
   const showTabs = !loading && (items.length > 0 || !error);
   const showEmptyState = !loading && !error && visibleItems.length === 0;
   const showList = !loading && visibleItems.length > 0;
+  const showMarkAllAsRead = activeTab === 'Unread' && unreadCount > 0;
+  const showDeleteAllMail = activeTab === 'Read' && readCount > 0;
 
   const handleMarkAsRead = React.useCallback(async (notificationId: string) => {
     if (markingReadId) {
@@ -317,6 +325,51 @@ export default function InboxScreen() {
       setMarkingReadId(null);
     }
   }, [markingReadId]);
+
+  const handleMarkAllAsRead = React.useCallback(async () => {
+    const currentUser = auth.currentUser;
+    if (!currentUser || bulkActionLoading) {
+      return;
+    }
+
+    try {
+      setBulkActionLoading(true);
+      await markAllNotificationsRead(currentUser.uid);
+    } finally {
+      setBulkActionLoading(false);
+    }
+  }, [bulkActionLoading]);
+
+  const handleDeleteAllMail = React.useCallback(() => {
+    const currentUser = auth.currentUser;
+    if (!currentUser || bulkActionLoading) {
+      return;
+    }
+
+    Alert.alert(
+      'Delete All Mail',
+      'Are you sure you want to delete all read mail?',
+      [
+        {
+          style: 'cancel',
+          text: 'Cancel',
+        },
+        {
+          style: 'destructive',
+          text: 'Delete',
+          onPress: async () => {
+            try {
+              setBulkActionLoading(true);
+              setExpandedItemId(null);
+              await deleteAllReadNotifications(currentUser.uid);
+            } finally {
+              setBulkActionLoading(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [bulkActionLoading]);
 
   return (
     <ScrollView
@@ -349,47 +402,75 @@ export default function InboxScreen() {
         ) : null}
 
         {showTabs ? (
-        <View style={styles.filterTabsRow}>
-          {(['Unread', 'Read', 'All Mail'] as InboxTab[]).map((tab) => {
-            const isActive = activeTab === tab;
-            const count =
-              tab === 'Unread' ? unreadCount : tab === 'Read' ? readCount : items.length;
+        <View style={{ marginBottom: 18 }}>
+          <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
+            <View style={[styles.filterTabsRow, { flex: 1, marginBottom: 0 }]}>
+              {(['Unread', 'Read', 'All Mail'] as InboxTab[]).map((tab) => {
+                const isActive = activeTab === tab;
+                const count =
+                  tab === 'Unread' ? unreadCount : tab === 'Read' ? readCount : items.length;
 
-            return (
-              <Pressable
-                key={tab}
-                style={[
-                  styles.filterTabButton,
-                  isActive ? styles.filterTabButtonActive : null,
-                ]}
-                onPress={() => setActiveTab(tab)}
-              >
-                <Text
-                  style={[
-                    styles.filterTabButtonText,
-                    isActive ? styles.filterTabButtonTextActive : null,
-                  ]}
-                >
-                  {tab}
-                </Text>
-                <View
-                  style={[
-                    styles.filterTabBadge,
-                    isActive ? styles.filterTabBadgeActive : null,
-                  ]}
-                >
-                  <Text
+                return (
+                  <Pressable
+                    key={tab}
                     style={[
-                      styles.filterTabBadgeText,
-                      isActive ? styles.filterTabBadgeTextActive : null,
+                      styles.filterTabButton,
+                      isActive ? styles.filterTabButtonActive : null,
                     ]}
+                    onPress={() => setActiveTab(tab)}
                   >
-                    {count}
-                  </Text>
-                </View>
+                    <Text
+                      style={[
+                        styles.filterTabButtonText,
+                        isActive ? styles.filterTabButtonTextActive : null,
+                      ]}
+                    >
+                      {tab}
+                    </Text>
+                    <View
+                      style={[
+                        styles.filterTabBadge,
+                        isActive ? styles.filterTabBadgeActive : null,
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.filterTabBadgeText,
+                          isActive ? styles.filterTabBadgeTextActive : null,
+                        ]}
+                      >
+                        {count}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {showMarkAllAsRead ? (
+              <Pressable
+                disabled={bulkActionLoading}
+                onPress={() => {
+                  void handleMarkAllAsRead();
+                }}
+              >
+                <Text style={styles.textLink}>
+                  {bulkActionLoading ? 'Marking...' : 'Mark All as Read'}
+                </Text>
               </Pressable>
-            );
-          })}
+            ) : null}
+
+            {showDeleteAllMail ? (
+              <Pressable
+                disabled={bulkActionLoading}
+                onPress={handleDeleteAllMail}
+              >
+                <Text style={styles.textLink}>
+                  {bulkActionLoading ? 'Deleting...' : 'Delete All Mail'}
+                </Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
         ) : null}
 

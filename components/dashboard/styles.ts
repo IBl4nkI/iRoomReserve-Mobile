@@ -498,6 +498,13 @@ export const dashboardStyles = StyleSheet.create({
     fontFamily: fonts.regular,
     color: colors.secondary,
   },
+  textLink: {
+    color: colors.primary,
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    textDecorationLine: 'underline',
+    marginRight: 8,
+  },
   filterTabsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
