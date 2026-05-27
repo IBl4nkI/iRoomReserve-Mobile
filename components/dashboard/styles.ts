@@ -412,7 +412,7 @@ export const dashboardStyles = StyleSheet.create({
     borderColor: colors.border,
     paddingTop: 16,
     paddingHorizontal: 16,
-    paddingBottom: 6,
+    paddingBottom: 16,
     marginBottom: 12,
   },
   reservationContent: {

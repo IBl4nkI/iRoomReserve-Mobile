@@ -608,7 +608,7 @@ export default function ReservationHistoryScreen() {
                   ) : null}
                   {reservation.status === 'completed' ? (
                     <Pressable
-                      style={[styles.inlineSecondaryButton, { marginTop: -4, marginBottom: 8 }]}
+                      style={[styles.inlineSecondaryButton, { marginTop: -2, marginBottom: 0 }]}
                       onPress={() =>
                         router.push({
                           pathname: '/(main)/dashboard/feedback',

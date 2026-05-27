@@ -9,7 +9,7 @@ import {
   GoogleAuthProvider,
   signInWithCredential,
 } from "firebase/auth";
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
+import { arrayUnion, doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./firebase";
 
 const ALLOWED_DOMAIN = "sdca.edu.ph";
@@ -232,6 +232,7 @@ export async function getUserProfile(uid: string) {
       firstName: string;
       lastName: string;
       email: string;
+      expoPushTokens?: string[];
       role?: string;
       status?: string;
     };
@@ -273,6 +274,23 @@ export async function saveUserProfile(
     doc(db, "users", uid),
     {
       ...data,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+}
+
+export async function saveExpoPushToken(uid: string, token: string) {
+  const normalizedToken = token.trim();
+
+  if (!normalizedToken) {
+    return;
+  }
+
+  await setDoc(
+    doc(db, "users", uid),
+    {
+      expoPushTokens: arrayUnion(normalizedToken),
       updatedAt: serverTimestamp(),
     },
     { merge: true }

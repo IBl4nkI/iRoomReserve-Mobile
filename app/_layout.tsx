@@ -6,6 +6,7 @@ import { useFonts } from 'expo-font';
 import { getUserProfile } from '@/lib/auth';
 import { auth } from '@/lib/firebase';
 import { PresenceMonitorProvider } from '@/components/PresenceMonitorProvider';
+import { PushNotificationProvider } from '@/components/PushNotificationProvider';
 import { ToastProvider } from '@/components/ToastProvider';
 import { SelectionFilterProvider } from '@/components/SelectionFilterContext';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -74,12 +75,14 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <SelectionFilterProvider>
         <PresenceMonitorProvider>
-          <ToastProvider>
-            <View style={{ flex: 1, backgroundColor: colors.background }}>
-              <StatusBar style="dark" backgroundColor={colors.background} />
-              <Slot />
-            </View>
-          </ToastProvider>
+          <PushNotificationProvider>
+            <ToastProvider>
+              <View style={{ flex: 1, backgroundColor: colors.background }}>
+                <StatusBar style="dark" backgroundColor={colors.background} />
+                <Slot />
+              </View>
+            </ToastProvider>
+          </PushNotificationProvider>
         </PresenceMonitorProvider>
       </SelectionFilterProvider>
     </SafeAreaProvider>
