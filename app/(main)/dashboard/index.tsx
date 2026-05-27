@@ -26,7 +26,7 @@ import {
   deactivatePresenceMonitoring,
   syncPresenceMonitoringSession,
 } from "@/services/presence-monitor.service";
-import { onAllNotifications, onUnreadNotifications } from "@/services/notifications.service";
+import { onUnreadNotifications } from "@/services/notifications.service";
 import { getRoomsByIds } from "@/services/rooms.service";
 import {
   checkInReservation,
@@ -603,35 +603,6 @@ export default function DashboardHomeScreen() {
 
     return unsubscribe;
   }, []);
-
-  React.useEffect(() => {
-    const currentUser = auth.currentUser;
-
-    if (!currentUser || isUtilityStaff) {
-      return;
-    }
-
-    let active = true;
-    let initialSnapshotHandled = false;
-
-    const unsubscribe = onAllNotifications(currentUser.uid, () => {
-      if (!active) {
-        return;
-      }
-
-      if (!initialSnapshotHandled) {
-        initialSnapshotHandled = true;
-        return;
-      }
-
-      void loadDashboard(false);
-    });
-
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, [isUtilityStaff, loadDashboard]);
 
   React.useEffect(() => {
     const currentUser = auth.currentUser;

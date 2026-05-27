@@ -67,7 +67,7 @@ export default function RootLayout() {
     return () => clearTimeout(timeout);
   }, [user, loading, hasRole, profileStatus, segments, fontsLoaded]);
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded || loading) {
     return <View style={{ flex: 1, backgroundColor: colors.background }} />;
   }
 
