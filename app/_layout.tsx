@@ -13,6 +13,12 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import { colors } from '@/constants/theme';
 
+function getApprovedUserRoute(role?: string | null) {
+  return role?.trim() === 'Utility Staff'
+    ? '/(main)/dashboard'
+    : '/(main)/campus-select';
+}
+
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
     'CenturyGothic-Regular': require('@/assets/fonts/centurygothic.ttf'),
@@ -21,6 +27,7 @@ export default function RootLayout() {
   const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [hasRole, setHasRole] = useState<boolean | null>(null);
+  const [profileRole, setProfileRole] = useState<string | null>(null);
   const [profileStatus, setProfileStatus] = useState<string | null>(null);
   const router = useRouter();
   const segments = useSegments();
@@ -30,6 +37,7 @@ export default function RootLayout() {
       setUser(firebaseUser);
       if (!firebaseUser) {
         setHasRole(null);
+        setProfileRole(null);
         setProfileStatus(null);
         setLoading(false);
         return;
@@ -38,6 +46,7 @@ export default function RootLayout() {
       try {
         const profile = await getUserProfile(firebaseUser.uid);
         setHasRole(Boolean(profile?.role));
+        setProfileRole(profile?.role?.trim() ?? null);
         setProfileStatus(profile?.status ?? null);
       } finally {
         setLoading(false);
@@ -48,24 +57,33 @@ export default function RootLayout() {
 
   useEffect(() => {
     if (loading || !fontsLoaded) return;
+
     const firstSegment = String(segments[0] ?? '');
     const inAuthGroup = firstSegment === '(auth)';
     const inMainGroup = firstSegment === '(main)';
     const isRoleSelection = segments.includes('role-selection');
-    const isApprovedUser = Boolean(user) && hasRole && profileStatus !== 'pending' && profileStatus !== 'rejected';
+    const isApprovedUser =
+      Boolean(user) &&
+      hasRole === true &&
+      profileStatus !== 'pending' &&
+      profileStatus !== 'rejected';
 
-    const timeout = setTimeout(() => {
-      if (!user && !inAuthGroup) {
+    if (!user) {
+      if (!inAuthGroup) {
         router.replace('/(auth)/login');
-      } else if (user && hasRole === false && !isRoleSelection) {
-        router.replace('/(auth)/role-selection');
-      } else if (isApprovedUser && !inMainGroup) {
-        router.replace('/(main)/campus-select');
       }
-    }, 100);
+      return;
+    }
 
-    return () => clearTimeout(timeout);
-  }, [user, loading, hasRole, profileStatus, segments, fontsLoaded]);
+    if (hasRole === false && !isRoleSelection) {
+      router.replace('/(auth)/role-selection');
+      return;
+    }
+
+    if (isApprovedUser && !inMainGroup) {
+      router.replace(getApprovedUserRoute(profileRole));
+    }
+  }, [user, loading, hasRole, profileRole, profileStatus, segments, fontsLoaded, router]);
 
   if (!fontsLoaded || loading) {
     return <View style={{ flex: 1, backgroundColor: colors.background }} />;
