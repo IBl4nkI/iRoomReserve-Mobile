@@ -48,10 +48,6 @@ const utilityStaffNavItems = [
     route: '/(main)/dashboard/account-settings',
   },
   {
-    label: 'Feedback',
-    route: '/(main)/dashboard/feedback',
-  },
-  {
     label: 'Inbox',
     route: '/(main)/dashboard/inbox',
   },

@@ -455,7 +455,7 @@ export default function InboxScreen() {
                 }}
               >
                 <Text style={styles.textLink}>
-                  {bulkActionLoading ? 'Marking...' : 'Mark All as Read'}
+                  {bulkActionLoading ? 'Marking...' : 'Mark All Read'}
                 </Text>
               </Pressable>
             ) : null}
