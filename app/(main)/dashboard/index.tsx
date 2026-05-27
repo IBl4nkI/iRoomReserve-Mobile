@@ -26,7 +26,7 @@ import {
   deactivatePresenceMonitoring,
   syncPresenceMonitoringSession,
 } from "@/services/presence-monitor.service";
-import { onUnreadNotifications } from "@/services/notifications.service";
+import { onAllNotifications, onUnreadNotifications } from "@/services/notifications.service";
 import { getRoomsByIds } from "@/services/rooms.service";
 import {
   checkInReservation,
@@ -607,6 +607,35 @@ export default function DashboardHomeScreen() {
   React.useEffect(() => {
     const currentUser = auth.currentUser;
 
+    if (!currentUser || isUtilityStaff) {
+      return;
+    }
+
+    let active = true;
+    let initialSnapshotHandled = false;
+
+    const unsubscribe = onAllNotifications(currentUser.uid, () => {
+      if (!active) {
+        return;
+      }
+
+      if (!initialSnapshotHandled) {
+        initialSnapshotHandled = true;
+        return;
+      }
+
+      void loadDashboard(false);
+    });
+
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [isUtilityStaff, loadDashboard]);
+
+  React.useEffect(() => {
+    const currentUser = auth.currentUser;
+
     if (loading || !currentUser) {
       return;
     }
@@ -1031,47 +1060,17 @@ export default function DashboardHomeScreen() {
                   <View
                     key={reservation.id}
                     style={[
-                      styles.listItem,
                       index === pendingReservations.length - 1
                         ? { marginBottom: 0 }
                         : null,
                     ]}
                   >
-                    {(() => {
-                      const room = roomsById[reservation.roomId];
-                      const locationLabel = room?.floor
-                        ? `${reservation.buildingName} - ${room.floor}`
-                        : reservation.buildingName;
-
-                      return (
-                        <>
-                          <View style={styles.reservationHeaderRow}>
-                            <View style={styles.reservationHeaderContent}>
-                              <Text style={styles.reservationRoomName}>
-                                {reservation.roomName}
-                              </Text>
-                            </View>
-                            <View style={styles.reservationHeaderBadge}>
-                              <StatusChip status="Pending" />
-                            </View>
-                          </View>
-                          <Text style={styles.reservationMeta}>{locationLabel}</Text>
-                          <Text style={styles.reservationMeta}>
-                            {formatReservationDates(reservation.dates, reservation.date)}
-                          </Text>
-                          <Text style={styles.reservationMeta}>
-                            {formatTime12h(reservation.startTime)} - {formatTime12h(reservation.endTime)}
-                          </Text>
-                          <Text style={styles.reservationMeta}>
-                            {reservation.programDepartmentOrganization || "Program / Department / Organization not provided"}
-                          </Text>
-                          <Text style={styles.reservationPurpose}>{reservation.purpose}</Text>
-                          <Text style={[styles.reservationMeta, { color: colors.primary }]}>
-                            {getPendingStageLabel(reservation)}
-                          </Text>
-                        </>
-                      );
-                    })()}
+                    <ReservationCard
+                      reservation={reservation}
+                      compactTitle
+                      locationLabel={getRoomLocationLabel(reservation)}
+                      showPendingStage
+                    />
                   </View>
                 ))}
               </View>

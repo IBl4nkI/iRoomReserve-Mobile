@@ -9,6 +9,7 @@ import { auth } from "@/lib/firebase";
 
 const RESERVATION_UPDATES_CHANNEL_ID = "reservation-updates";
 const INBOX_ROUTE = "/(main)/dashboard/inbox";
+let hasWarnedAboutMissingPushSetup = false;
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -90,6 +91,22 @@ export function PushNotificationProvider({
 
         await saveExpoPushToken(currentUser.uid, pushToken);
       } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const isMissingFirebaseSetup =
+          Platform.OS === "android" &&
+          (message.includes("Default FirebaseApp is not initialized") ||
+            message.includes("fcm-credentials"));
+
+        if (isMissingFirebaseSetup) {
+          if (!hasWarnedAboutMissingPushSetup) {
+            hasWarnedAboutMissingPushSetup = true;
+            console.warn(
+              "[push-notifications] Android push notifications are not configured yet. Add google-services.json and Expo FCM credentials before testing device push notifications."
+            );
+          }
+          return;
+        }
+
         console.warn("[push-notifications] unable to register push token", error);
       }
     };

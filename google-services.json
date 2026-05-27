@@ -1,0 +1,55 @@
+{
+  "project_info": {
+    "project_number": "735804203844",
+    "firebase_url": "https://iroomreserve-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "iroomreserve",
+    "storage_bucket": "iroomreserve.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:735804203844:android:1b900bd3929203037b6d11",
+        "android_client_info": {
+          "package_name": "com.iroomreserve.mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "735804203844-l9gmv96nve8udgbb5diolcpqcpdlip6p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.iroomreserve.mobile",
+            "certificate_hash": "5e8f16062ea3cd2c4a0d547876baa6f38cabf625"
+          }
+        },
+        {
+          "client_id": "735804203844-ltdl1sca9sjapnpi3qk4c0tqtlah15h8.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCVXu2Rzp0kqKpggK9mU-s4ohKW3JbNMjM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "735804203844-ltdl1sca9sjapnpi3qk4c0tqtlah15h8.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "735804203844-aiipvcr0a2crkv3qr1qiqphb7t9ntaj1.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.iroomreserve.mobile"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
