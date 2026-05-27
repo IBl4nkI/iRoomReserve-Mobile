@@ -54,6 +54,11 @@ export default function RoleSelectionScreen() {
           return;
         }
 
+        if (profile?.role && profile.status !== "pending" && profile.status !== "rejected") {
+          router.replace(profile.role === "Utility Staff" ? "/(main)/dashboard" : "/(main)/campus-select");
+          return;
+        }
+
         if (profile?.role) {
           setSelectedRole(profile.role);
         }
