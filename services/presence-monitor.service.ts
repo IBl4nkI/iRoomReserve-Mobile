@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import ReactNativeBackgroundActions from "react-native-background-actions";
 import {
   AppState,
+  NativeModules,
   PermissionsAndroid,
   Platform,
   type AppStateStatus,
@@ -21,6 +22,7 @@ const BLE_SERVICE_UUID =
   process.env.EXPO_PUBLIC_ESP32_BLE_SERVICE_UUID?.trim() ?? "";
 const BLE_BEACON_CHAR_UUID =
   process.env.EXPO_PUBLIC_ESP32_BLE_BEACON_CHARACTERISTIC_UUID?.trim() ?? "";
+const REQUIRED_WIFI_SSID = "St Dominic College of Asia";
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const PRESENCE_SCAN_TIMEOUT_MS = 10_000;
 const PRESENCE_NOTIFICATION_CHANNEL_ID = "presence-monitoring";
@@ -41,6 +43,7 @@ const BASE64_ALPHABET =
 type PresenceWarningReason =
   | "bluetooth_off"
   | "out_of_range"
+  | "wifi_disconnected"
   | "beacon_not_detected"
   | "beacon_connection_failed";
 
@@ -108,6 +111,29 @@ function ensureBleConfiguration() {
 
 function sleep(durationMs: number) {
   return new Promise((resolve) => setTimeout(resolve, durationMs));
+}
+
+async function getCurrentWifiSsid() {
+  if (Platform.OS !== "android") {
+    return null;
+  }
+
+  const wifiInfoModule = NativeModules.WifiInfoModule as
+    | {
+        getCurrentSsid?: () => Promise<string | null>;
+      }
+    | undefined;
+
+  if (typeof wifiInfoModule?.getCurrentSsid !== "function") {
+    return null;
+  }
+
+  return await wifiInfoModule.getCurrentSsid();
+}
+
+async function isConnectedToRequiredWifi() {
+  const ssid = await getCurrentWifiSsid();
+  return ssid?.trim() === REQUIRED_WIFI_SSID;
 }
 
 async function requestBluetoothPermissions() {
@@ -247,6 +273,8 @@ function buildWarningState(
     message:
       reason === "bluetooth_off"
         ? "Turn on Bluetooth to keep this reservation active."
+        : reason === "wifi_disconnected"
+          ? `Connect to "${REQUIRED_WIFI_SSID}".`
         : reason === "beacon_connection_failed"
           ? "We found the room beacon, but couldn't reconnect to it yet. Keep Bluetooth on and retry in a moment."
         : reason === "beacon_not_detected"
@@ -255,6 +283,43 @@ function buildWarningState(
     reason,
     reservationId,
   };
+}
+
+function getBackgroundNotificationContent(
+  reason: PresenceWarningReason | null
+): { taskDesc: string; taskTitle: string } {
+  if (reason === null) {
+    return {
+      taskDesc: BACKGROUND_TASK_OPTIONS.taskDesc,
+      taskTitle: BACKGROUND_TASK_OPTIONS.taskTitle,
+    };
+  }
+
+  return {
+    taskDesc:
+      reason === "bluetooth_off"
+        ? "Turn bluetooth back on"
+        : reason === "wifi_disconnected"
+          ? "Connect to St Dominic College of Asia"
+        : "Room is out of range",
+    taskTitle: "iRoomReserve: Warning",
+  };
+}
+
+async function updateBackgroundNotification(reason: PresenceWarningReason | null) {
+  if (!hasBackgroundActionsRuntime()) {
+    return;
+  }
+
+  if (!ReactNativeBackgroundActions.isRunning()) {
+    return;
+  }
+
+  await ReactNativeBackgroundActions.updateNotification(
+    getBackgroundNotificationContent(reason)
+  ).catch((error) => {
+    console.warn("[presence-monitor] unable to update background notification", error);
+  });
 }
 
 function emitWarning(warning: PresenceWarningState | null) {
@@ -510,6 +575,17 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
     };
   }
 
+  const wifiConnected = await isConnectedToRequiredWifi();
+  if (!wifiConnected) {
+    return {
+      appState,
+      bluetoothOn,
+      inRange: true,
+      reason: "wifi_disconnected" as const,
+      rssi: presence.rssi,
+    };
+  }
+
   return {
     appState,
     bluetoothOn,
@@ -536,6 +612,7 @@ async function processPresenceCheck(session: PresenceMonitorSession) {
       }
     } else if (session.lastBackgroundWarningReason !== result.reason) {
       await scheduleBackgroundWarningNotification(warning.message);
+      await updateBackgroundNotification(result.reason);
       await saveActiveSession({
         ...session,
         lastBackgroundWarningReason: result.reason,
@@ -543,6 +620,9 @@ async function processPresenceCheck(session: PresenceMonitorSession) {
     }
   } else {
     emitWarning(null);
+    if (result.appState === "background") {
+      await updateBackgroundNotification(null);
+    }
     if (session.lastBackgroundWarningReason !== null) {
       await saveActiveSession({
         ...session,
