@@ -27,6 +27,26 @@ const GOOGLE_IOS_CLIENT_ID =
 
 let googleConfigured = false;
 let googleSigninModule: any = null;
+const USER_PROFILE_CACHE_TTL_MS = 60_000;
+
+type UserProfile = {
+  campus?: "digi" | "main" | null;
+  campusName?: string | null;
+  firstName: string;
+  lastName: string;
+  email: string;
+  expoPushTokens?: string[];
+  role?: string;
+  status?: string;
+};
+
+const userProfileCache = new Map<
+  string,
+  {
+    expiresAt: number;
+    value: UserProfile | null;
+  }
+>();
 
 function sleep(durationMs: number) {
   return new Promise((resolve) => setTimeout(resolve, durationMs));
@@ -232,21 +252,46 @@ export async function registerWithEmail(
   return { credential, actualRole };
 }
 
-export async function getUserProfile(uid: string) {
+function invalidateUserProfileCache(uid?: string) {
+  if (uid) {
+    userProfileCache.delete(uid);
+    return;
+  }
+
+  userProfileCache.clear();
+}
+
+async function getUserProfileUncached(uid: string) {
   const snap = await getDoc(doc(db, "users", uid));
   if (snap.exists()) {
-    return snap.data() as {
-      campus?: "digi" | "main" | null;
-      campusName?: string | null;
-      firstName: string;
-      lastName: string;
-      email: string;
-      expoPushTokens?: string[];
-      role?: string;
-      status?: string;
-    };
+    return snap.data() as UserProfile;
   }
   return null;
+}
+
+export async function getUserProfile(
+  uid: string,
+  options?: {
+    forceRefresh?: boolean;
+  }
+) {
+  if (!options?.forceRefresh) {
+    const cachedProfile = userProfileCache.get(uid);
+    if (cachedProfile && cachedProfile.expiresAt > Date.now()) {
+      return cachedProfile.value;
+    }
+  }
+
+  const profile = await getUserProfileUncached(uid);
+  if (profile) {
+    userProfileCache.set(uid, {
+      expiresAt: Date.now() + USER_PROFILE_CACHE_TTL_MS,
+      value: profile,
+    });
+  } else {
+    userProfileCache.delete(uid);
+  }
+  return profile;
 }
 
 export async function getUserProfileWithRetry(
@@ -274,6 +319,7 @@ export async function getUserProfileWithRetry(
 }
 
 export async function logout() {
+  invalidateUserProfileCache(auth.currentUser?.uid);
   await stopLocalPresenceMonitoring().catch(() => {
     // Best-effort local cleanup. Sign-out should still continue.
   });
@@ -315,6 +361,7 @@ export async function saveUserProfile(
     },
     { merge: true }
   );
+  invalidateUserProfileCache(uid);
 }
 
 export async function updateUserProfileName(

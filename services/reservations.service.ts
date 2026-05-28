@@ -1,6 +1,15 @@
 import { apiRequest } from "@/services/api";
 import type { ReservationCampus, ReservationRecord } from "@/types/reservation";
 
+const RESERVATION_QUERY_CACHE_TTL_MS = 15_000;
+
+type ReservationQueryCacheEntry = {
+  expiresAt: number;
+  value: ReservationRecord[];
+};
+
+const reservationQueryCache = new Map<string, ReservationQueryCacheEntry>();
+
 interface ReservationAttachmentPayload {
   approvalDocumentMimeType?: string;
   approvalDocumentName?: string;
@@ -62,6 +71,32 @@ export interface ReservationPresenceHeartbeatResponse {
   timedOut: boolean;
 }
 
+function invalidateReservationQueryCache() {
+  reservationQueryCache.clear();
+}
+
+async function getCachedReservationQuery(
+  cacheKey: string,
+  fetcher: () => Promise<ReservationRecord[]>,
+  options?: {
+    forceRefresh?: boolean;
+  }
+) {
+  if (!options?.forceRefresh) {
+    const cachedValue = reservationQueryCache.get(cacheKey);
+    if (cachedValue && cachedValue.expiresAt > Date.now()) {
+      return cachedValue.value;
+    }
+  }
+
+  const reservations = await fetcher();
+  reservationQueryCache.set(cacheKey, {
+    expiresAt: Date.now() + RESERVATION_QUERY_CACHE_TTL_MS,
+    value: reservations,
+  });
+  return reservations;
+}
+
 export async function createReservation(
   reservation: SingleReservationCreateInput
 ): Promise<string> {
@@ -73,6 +108,7 @@ export async function createReservation(
     method: "POST",
   });
 
+  invalidateReservationQueryCache();
   return payload.id;
 }
 
@@ -93,31 +129,48 @@ export async function createRecurringReservation(
     method: "POST",
   });
 
+  invalidateReservationQueryCache();
   return payload.ids;
 }
 
 export async function getReservationsByUser(
-  userId: string
+  userId: string,
+  options?: {
+    forceRefresh?: boolean;
+  }
 ): Promise<ReservationRecord[]> {
-  return apiRequest<ReservationRecord[]>("/api/reservations", {
-    method: "GET",
-    params: {
-      statuses: "pending,approved,rejected,completed,cancelled",
-      userId,
-    },
-  });
+  return getCachedReservationQuery(
+    `user:${userId}`,
+    () =>
+      apiRequest<ReservationRecord[]>("/api/reservations", {
+        method: "GET",
+        params: {
+          statuses: "pending,approved,rejected,completed,cancelled",
+          userId,
+        },
+      }),
+    options
+  );
 }
 
 export async function getReservationsByCampus(
-  campus: ReservationCampus
+  campus: ReservationCampus,
+  options?: {
+    forceRefresh?: boolean;
+  }
 ): Promise<ReservationRecord[]> {
-  return apiRequest<ReservationRecord[]>("/api/reservations", {
-    method: "GET",
-    params: {
-      campus,
-      statuses: "pending,approved,rejected,completed,cancelled",
-    },
-  });
+  return getCachedReservationQuery(
+    `campus:${campus}`,
+    () =>
+      apiRequest<ReservationRecord[]>("/api/reservations", {
+        method: "GET",
+        params: {
+          campus,
+          statuses: "pending,approved,rejected,completed,cancelled",
+        },
+      }),
+    options
+  );
 }
 
 export async function getReservationsByRoom(
@@ -145,6 +198,7 @@ export async function checkInReservation(
     },
     method: "PATCH",
   });
+  invalidateReservationQueryCache();
 }
 
 export async function completeReservation(
@@ -158,6 +212,7 @@ export async function completeReservation(
     },
     method: "PATCH",
   });
+  invalidateReservationQueryCache();
 }
 
 export async function confirmFinishedReservation(
@@ -171,6 +226,7 @@ export async function confirmFinishedReservation(
     },
     method: "PATCH",
   });
+  invalidateReservationQueryCache();
 }
 
 export async function cancelReservation(
@@ -184,6 +240,7 @@ export async function cancelReservation(
     },
     method: "PATCH",
   });
+  invalidateReservationQueryCache();
 }
 
 export async function deleteReservation(
@@ -197,6 +254,7 @@ export async function deleteReservation(
     },
     method: "PATCH",
   });
+  invalidateReservationQueryCache();
 }
 
 export async function startReservationPresenceMonitor(
@@ -212,6 +270,7 @@ export async function startReservationPresenceMonitor(
     },
     method: "PATCH",
   });
+  invalidateReservationQueryCache();
 }
 
 export async function sendReservationPresenceHeartbeat(

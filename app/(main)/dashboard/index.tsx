@@ -658,7 +658,12 @@ export default function DashboardHomeScreen() {
     );
   }, []);
 
-  const loadDashboard = React.useCallback(async (showSpinner = true) => {
+  const loadDashboard = React.useCallback(async (
+    options?: {
+      forceRefresh?: boolean;
+      showSpinner?: boolean;
+    }
+  ) => {
     const currentUser = auth.currentUser;
     if (!currentUser) {
       if (isMountedRef.current) {
@@ -667,12 +672,15 @@ export default function DashboardHomeScreen() {
       return;
     }
 
+    const showSpinner = options?.showSpinner ?? true;
+    const forceRefresh = options?.forceRefresh ?? false;
+
     if (showSpinner && isMountedRef.current) {
       setLoading(true);
     }
 
     try {
-      const profile = await getUserProfile(currentUser.uid);
+      const profile = await getUserProfile(currentUser.uid, { forceRefresh });
 
       if (!isMountedRef.current) {
         return;
@@ -691,8 +699,8 @@ export default function DashboardHomeScreen() {
 
       const nextReservations =
         normalizedRole === "Utility Staff" && campus
-          ? await getReservationsByCampus(campus)
-          : await getReservationsByUser(currentUser.uid);
+          ? await getReservationsByCampus(campus, { forceRefresh })
+          : await getReservationsByUser(currentUser.uid, { forceRefresh });
       const todayDateKey = getLocalDateKey();
       const currentTimeKey = getCurrentTimeKey();
 
@@ -716,7 +724,7 @@ export default function DashboardHomeScreen() {
             );
 
             effectiveReservations = campus
-              ? await getReservationsByCampus(campus)
+              ? await getReservationsByCampus(campus, { forceRefresh: true })
               : nextReservations;
           } catch (cleanupError) {
             console.warn(
@@ -740,7 +748,7 @@ export default function DashboardHomeScreen() {
         isUtilityStaff: normalizedRole === "Utility Staff",
         todayDateKey,
       });
-      const rooms = await getRoomsByIds(roomIds);
+      const rooms = await getRoomsByIds(roomIds, { forceRefresh });
 
       if (!isMountedRef.current) {
         return;
@@ -783,7 +791,7 @@ export default function DashboardHomeScreen() {
   useFocusEffect(
     React.useCallback(() => {
       isMountedRef.current = true;
-      void loadDashboard(false);
+      void loadDashboard({ showSpinner: false });
 
       return () => {
         isMountedRef.current = false;
@@ -795,7 +803,7 @@ export default function DashboardHomeScreen() {
     setRefreshing(true);
 
     try {
-      await loadDashboard(false);
+      await loadDashboard({ forceRefresh: true, showSpinner: false });
     } finally {
       if (isMountedRef.current) {
         setRefreshing(false);
@@ -1077,7 +1085,7 @@ export default function DashboardHomeScreen() {
     }
 
     const intervalId = setInterval(() => {
-      void loadDashboard(false);
+      void loadDashboard({ showSpinner: false });
     }, 15_000);
 
     return () => {
@@ -1096,7 +1104,7 @@ export default function DashboardHomeScreen() {
         setStaffFinishReservationId(reservation.id);
         await confirmFinishedReservation(reservation.id, currentUser.uid);
         showToast("Room marked as vacant.");
-        await loadDashboard(false);
+        await loadDashboard({ forceRefresh: true, showSpinner: false });
       } catch (caughtError) {
         Alert.alert(
           "Finish Confirmation Failed",
@@ -1364,7 +1372,7 @@ export default function DashboardHomeScreen() {
                     });
 
                     showToast("Reservation started with Bluetooth check-in.");
-                    await loadDashboard(false);
+                    await loadDashboard({ forceRefresh: true, showSpinner: false });
                   } catch (caughtError) {
                     Alert.alert(
                       "Bluetooth Check-In Failed",
@@ -1388,7 +1396,7 @@ export default function DashboardHomeScreen() {
         return;
       }
 
-      await loadDashboard(false);
+      await loadDashboard({ forceRefresh: true, showSpinner: false });
     } catch (caughtError) {
       Alert.alert(
         "Reservation Update Failed",
