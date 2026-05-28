@@ -712,17 +712,17 @@ export default function DashboardHomeScreen() {
   const ongoingReservations = isUtilityStaff
     ? reservations.filter(
         (reservation) =>
-          (reservation.status === "approved" &&
-            Boolean(reservation.checkedInAt) &&
-            isOngoingReservation(reservation, todayDateKey, currentTimeKey)) ||
-          isAwaitingStaffReleaseReservation(reservation)
+          reservation.status === "approved" &&
+          Boolean(reservation.checkedInAt) &&
+          isOngoingReservation(reservation, todayDateKey, currentTimeKey)
       )
     : reservations
         .filter(
           (reservation) =>
             (reservation.status === "approved" &&
               isOngoingReservation(reservation, todayDateKey, currentTimeKey)) ||
-            isAwaitingStaffReleaseReservation(reservation)
+            (isAwaitingStaffReleaseReservation(reservation) &&
+              roomsById[reservation.roomId]?.activeReservationId === reservation.id)
         )
         .slice(0, 1);
   const ongoingReservation = ongoingReservations[0] ?? null;
@@ -731,8 +731,7 @@ export default function DashboardHomeScreen() {
   const monitorableReservation = !isUtilityStaff
     ? reservations.find(
         (reservation) =>
-          (reservation.status === "approved" ||
-            isAwaitingStaffReleaseReservation(reservation)) &&
+          reservation.status === "approved" &&
           Boolean(reservation.checkedInAt) &&
           reservation.checkInMethod === "bluetooth" &&
           !reservation.occupancyReleasedAt
@@ -960,6 +959,20 @@ export default function DashboardHomeScreen() {
     monitorableRoomBeaconId,
     shouldMonitorOngoingReservation,
   ]);
+
+  React.useEffect(() => {
+    if (!isAwaitingStaffRelease) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      void loadDashboard(false);
+    }, 15_000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [isAwaitingStaffRelease, loadDashboard]);
 
   const handleStaffFinishConfirmation = React.useCallback(
     async (reservation: ReservationRecord) => {
