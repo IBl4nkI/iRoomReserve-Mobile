@@ -28,7 +28,9 @@ const parsedRssiThreshold = Number(
 const BLE_RSSI_THRESHOLD = Number.isFinite(parsedRssiThreshold)
   ? parsedRssiThreshold
   : -75;
-const REQUIRED_WIFI_SSID = "St Dominic College of Asia";
+const REQUIRED_WIFI_SSID =
+  process.env.EXPO_PUBLIC_REQUIRED_WIFI_SSID?.trim() ||
+  "St Dominic College of Asia";
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const PRESENCE_SCAN_TIMEOUT_MS = 10_000;
 const PRESENCE_NOTIFICATION_CHANNEL_ID = "presence-monitoring";
@@ -55,6 +57,7 @@ type PresenceWarningReason =
 
 interface PresenceMonitorSession {
   beaconId: string;
+  deviceId?: string;
   lastBackgroundWarningReason: PresenceWarningReason | null;
   reservationId: string;
   userId: string;
@@ -189,7 +192,7 @@ async function resetBleManager() {
 }
 
 function getExpectedBeaconNameState(
-  device: Pick<Device, "localName" | "name">,
+  device: Pick<Device, "localName" | "name" | "serviceUUIDs">,
   expectedBeaconId: string
 ) {
   const normalizedExpectedBeaconId = expectedBeaconId.trim().toLowerCase();
@@ -197,9 +200,22 @@ function getExpectedBeaconNameState(
     return "mismatch" as const;
   }
 
+  const normalizedServiceUuid = BLE_SERVICE_UUID.trim().toLowerCase();
+
   const visibleNames = [device.localName, device.name]
     .map((value) => value?.trim().toLowerCase())
     .filter((value): value is string => Boolean(value));
+
+  const visibleServiceUuids = (device.serviceUUIDs ?? [])
+    .map((value) => value?.trim().toLowerCase())
+    .filter((value): value is string => Boolean(value));
+
+  if (
+    normalizedServiceUuid &&
+    visibleServiceUuids.includes(normalizedServiceUuid)
+  ) {
+    return "service_match" as const;
+  }
 
   if (visibleNames.length === 0) {
     return "missing" as const;
@@ -241,6 +257,61 @@ async function disconnectConnectedBeaconDevices() {
     // Best-effort cleanup. Some Android BLE stacks report no connected devices
     // even when a stale connection is being torn down.
   }
+}
+
+async function readBeaconCharacteristic(device: Device, expectedBase64: string) {
+  const discoveredDevice = await device.discoverAllServicesAndCharacteristics();
+  const beaconCharacteristic = await discoveredDevice.readCharacteristicForService(
+    BLE_SERVICE_UUID,
+    BLE_BEACON_CHAR_UUID
+  );
+
+  return {
+    discoveredDevice,
+    matches: beaconCharacteristic.value === expectedBase64,
+  };
+}
+
+async function tryConnectToKnownBeaconDevice(
+  deviceId: string,
+  expectedBase64: string
+) {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    let connectedDevice: Device | null = null;
+
+    try {
+      connectedDevice = await bleManager.connectToDevice(deviceId, {
+        autoConnect: false,
+        timeout: 10_000,
+      });
+
+      const { discoveredDevice, matches } = await readBeaconCharacteristic(
+        connectedDevice,
+        expectedBase64
+      );
+      const rssi =
+        typeof discoveredDevice.rssi === "number" && !Number.isNaN(discoveredDevice.rssi)
+          ? discoveredDevice.rssi
+          : typeof connectedDevice.rssi === "number" && !Number.isNaN(connectedDevice.rssi)
+            ? connectedDevice.rssi
+            : null;
+
+      await discoveredDevice.cancelConnection().catch(() => undefined);
+
+      return {
+        inRange: matches,
+        rssi,
+      };
+    } catch {
+      await connectedDevice?.cancelConnection().catch(() => undefined);
+
+      if (attempt < 2) {
+        await sleep(500);
+      }
+    }
+  }
+
+  return null;
 }
 
 async function readConnectedBeaconPresence(expectedBase64: string) {
@@ -424,7 +495,7 @@ async function scheduleBackgroundWarningNotification(message: string) {
   }
 }
 
-async function scanForBeaconPresence(expectedBeaconId: string) {
+async function scanForBeaconPresenceOnce(expectedBeaconId: string) {
   ensureBleConfiguration();
 
   const expectedBase64 = encodeAsciiToBase64(expectedBeaconId);
@@ -505,7 +576,10 @@ async function scanForBeaconPresence(expectedBeaconId: string) {
         return;
       }
 
-      if (beaconNameState === "match") {
+      if (
+        beaconNameState === "match" ||
+        beaconNameState === "service_match"
+      ) {
         foundExpectedBeaconAdvertisement = true;
       }
 
@@ -550,12 +624,51 @@ async function scanForBeaconPresence(expectedBeaconId: string) {
         await connectedDevice.cancelConnection().catch(() => undefined);
       } catch {
         await connectedDevice?.cancelConnection().catch(() => undefined);
-        if (beaconNameState === "match") {
+        if (
+          beaconNameState === "match" ||
+          beaconNameState === "service_match"
+        ) {
           foundExpectedBeaconButReadFailed = true;
         }
       }
     });
   });
+}
+
+async function scanForBeaconPresence(expectedBeaconId: string) {
+  let lastResult:
+    | {
+        inRange: boolean;
+        rssi: number | null;
+        reason: "out_of_range" | "beacon_not_detected" | "beacon_connection_failed";
+      }
+    | null = null;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const result = await scanForBeaconPresenceOnce(expectedBeaconId);
+      lastResult = result;
+
+      if (result.inRange || result.reason !== "beacon_not_detected" || attempt === 1) {
+        return result;
+      }
+    } catch (error) {
+      if (attempt === 1) {
+        throw error;
+      }
+    }
+
+    await resetBleManager();
+    await sleep(750);
+  }
+
+  return (
+    lastResult ?? {
+      inRange: false,
+      reason: "beacon_not_detected" as const,
+      rssi: null,
+    }
+  );
 }
 
 async function performPresenceCheck(session: PresenceMonitorSession) {
@@ -571,6 +684,44 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
       reason: "bluetooth_off" as const,
       rssi: null,
     };
+  }
+
+  if (session.deviceId) {
+    const knownDevicePresence = await tryConnectToKnownBeaconDevice(
+      session.deviceId,
+      encodeAsciiToBase64(session.beaconId)
+    );
+
+    if (knownDevicePresence?.inRange) {
+      if (isBeaconRssiWeak(knownDevicePresence.rssi)) {
+        return {
+          appState,
+          bluetoothOn,
+          inRange: false,
+          reason: "out_of_range" as const,
+          rssi: knownDevicePresence.rssi,
+        };
+      }
+
+      const wifiConnected = await isConnectedToRequiredWifi();
+      if (!wifiConnected) {
+        return {
+          appState,
+          bluetoothOn,
+          inRange: true,
+          reason: "wifi_disconnected" as const,
+          rssi: knownDevicePresence.rssi,
+        };
+      }
+
+      return {
+        appState,
+        bluetoothOn,
+        inRange: true,
+        reason: null,
+        rssi: knownDevicePresence.rssi,
+      };
+    }
   }
 
   const presence = await scanForBeaconPresence(session.beaconId);
@@ -760,6 +911,7 @@ function isBluetoothUnauthorizedError(error: unknown) {
 
 export async function activatePresenceMonitoring(input: {
   beaconId: string;
+  deviceId?: string;
   reservationId: string;
   userId: string;
 }) {
@@ -774,6 +926,7 @@ export async function activatePresenceMonitoring(input: {
 
   await saveActiveSession({
     beaconId: input.beaconId.trim(),
+    deviceId: input.deviceId?.trim() || undefined,
     lastBackgroundWarningReason: null,
     reservationId: input.reservationId,
     userId: input.userId,
@@ -788,6 +941,7 @@ export async function syncPresenceMonitoringSession(
   input:
     | {
         beaconId: string;
+        deviceId?: string;
         reservationId: string;
         userId: string;
       }
@@ -812,6 +966,7 @@ export async function syncPresenceMonitoringSession(
   ) {
     await saveActiveSession({
       beaconId: input.beaconId.trim(),
+      deviceId: input.deviceId?.trim() || existingSession?.deviceId || undefined,
       lastBackgroundWarningReason: null,
       reservationId: input.reservationId,
       userId: input.userId,

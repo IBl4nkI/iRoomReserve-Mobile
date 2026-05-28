@@ -1234,6 +1234,7 @@ export default function DashboardHomeScreen() {
                     connectedBeaconDeviceRef.current = null;
                     await activatePresenceMonitoring({
                       beaconId: ongoingRoomBeaconId,
+                      deviceId: matchedDevice.id,
                       reservationId: ongoingReservation.id,
                       userId: currentUser.uid,
                     });
