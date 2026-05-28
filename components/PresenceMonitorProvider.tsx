@@ -29,6 +29,16 @@ export function PresenceMonitorProvider({
     return subscribeToPresenceWarnings(setWarning);
   }, []);
 
+  React.useEffect(() => {
+    return auth.onAuthStateChanged((user) => {
+      if (!user) {
+        setWarning(null);
+        setFinishing(false);
+        setRetrying(false);
+      }
+    });
+  }, []);
+
   async function handleRetryConnection() {
     try {
       setRetrying(true);

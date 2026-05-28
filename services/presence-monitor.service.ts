@@ -1004,6 +1004,16 @@ export async function deactivatePresenceMonitoring() {
   }
 }
 
+export async function stopLocalPresenceMonitoring() {
+  emitWarning(null);
+  await clearActiveSession();
+  stopForegroundMonitor();
+
+  if (hasBackgroundActionsRuntime() && ReactNativeBackgroundActions.isRunning()) {
+    await ReactNativeBackgroundActions.stop();
+  }
+}
+
 export async function retryPresenceMonitoringCheck() {
   initializePresenceMonitorRuntime();
   const permissionGranted = await requestBluetoothPermissions();

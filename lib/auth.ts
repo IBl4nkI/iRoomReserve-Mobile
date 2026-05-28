@@ -15,6 +15,7 @@ import {
 } from "firebase/auth";
 import { arrayUnion, deleteDoc, doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
 import { auth, db } from "./firebase";
+import { stopLocalPresenceMonitoring } from "@/services/presence-monitor.service";
 
 const ALLOWED_DOMAIN = "sdca.edu.ph";
 const SUPERADMIN_EMAIL = "johncyrus.agoncillo@sdca.edu.ph";
@@ -245,6 +246,10 @@ export async function getUserProfile(uid: string) {
 }
 
 export async function logout() {
+  await stopLocalPresenceMonitoring().catch(() => {
+    // Best-effort local cleanup. Sign-out should still continue.
+  });
+
   if (Platform.OS !== "web") {
     try {
       ensureGoogleConfigured();
