@@ -466,12 +466,13 @@ function getDashboardRelevantRoomIds(
   const relevantReservations = reservations.filter((reservation) => {
     if (options.isUtilityStaff) {
       return (
-        reservation.status === "approved" &&
-        isCurrentOrFutureReservation(
-          reservation,
-          options.todayDateKey,
-          options.currentTimeKey
-        )
+        (reservation.status === "approved" &&
+          isCurrentOrFutureReservation(
+            reservation,
+            options.todayDateKey,
+            options.currentTimeKey
+          )) ||
+        isAwaitingStaffReleaseReservation(reservation)
       );
     }
 
@@ -756,9 +757,10 @@ export default function DashboardHomeScreen() {
   const ongoingReservations = isUtilityStaff
     ? reservations.filter(
         (reservation) =>
-          reservation.status === "approved" &&
-          Boolean(reservation.checkedInAt) &&
-          isOngoingReservation(reservation, todayDateKey, currentTimeKey)
+          (reservation.status === "approved" &&
+            Boolean(reservation.checkedInAt) &&
+            isOngoingReservation(reservation, todayDateKey, currentTimeKey)) ||
+          isAwaitingStaffReleaseReservation(reservation)
       )
     : reservations
         .filter(
