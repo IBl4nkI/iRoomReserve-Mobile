@@ -33,6 +33,7 @@ const REQUIRED_WIFI_SSID =
   "St Dominic College of Asia";
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const PRESENCE_SCAN_TIMEOUT_MS = 10_000;
+const CONSECUTIVE_BEACON_WARNINGS_REQUIRED = 2;
 const PRESENCE_NOTIFICATION_CHANNEL_ID = "presence-monitoring";
 const BACKGROUND_TASK_OPTIONS = {
   color: colors.primary,
@@ -57,6 +58,7 @@ type PresenceWarningReason =
 
 interface PresenceMonitorSession {
   beaconId: string;
+  consecutiveBeaconWarningCount?: number;
   deviceId?: string;
   lastBackgroundWarningReason: PresenceWarningReason | null;
   reservationId: string;
@@ -122,6 +124,10 @@ function sleep(durationMs: number) {
   return new Promise((resolve) => setTimeout(resolve, durationMs));
 }
 
+function logPresenceRetryDebug(message: string, details?: Record<string, unknown>) {
+  console.log("[presence-retry]", message, details ?? {});
+}
+
 async function getCurrentWifiSsid() {
   if (Platform.OS !== "android") {
     return null;
@@ -147,6 +153,14 @@ async function isConnectedToRequiredWifi() {
 
 function isBeaconRssiWeak(rssi: number | null) {
   return typeof rssi === "number" && !Number.isNaN(rssi) && rssi <= BLE_RSSI_THRESHOLD;
+}
+
+function isBeaconWarningReason(reason: PresenceWarningReason | null) {
+  return (
+    reason === "out_of_range" ||
+    reason === "beacon_not_detected" ||
+    reason === "beacon_connection_failed"
+  );
 }
 
 async function requestBluetoothPermissions() {
@@ -176,6 +190,7 @@ async function requestBluetoothPermissions() {
 }
 
 async function resetBleManager() {
+  logPresenceRetryDebug("Resetting BLE manager");
   try {
     bleManager.stopDeviceScan();
   } catch {
@@ -189,6 +204,7 @@ async function resetBleManager() {
   }
 
   bleManager = createBleManager();
+  logPresenceRetryDebug("BLE manager reset complete");
 }
 
 function getExpectedBeaconNameState(
@@ -276,10 +292,15 @@ async function tryConnectToKnownBeaconDevice(
   deviceId: string,
   expectedBase64: string
 ) {
+  logPresenceRetryDebug("Trying known beacon device", { deviceId });
   for (let attempt = 0; attempt < 3; attempt += 1) {
     let connectedDevice: Device | null = null;
 
     try {
+      logPresenceRetryDebug("Known device attempt started", {
+        attempt: attempt + 1,
+        deviceId,
+      });
       connectedDevice = await bleManager.connectToDevice(deviceId, {
         autoConnect: false,
         timeout: 10_000,
@@ -298,12 +319,23 @@ async function tryConnectToKnownBeaconDevice(
 
       await discoveredDevice.cancelConnection().catch(() => undefined);
 
+      logPresenceRetryDebug("Known device attempt succeeded", {
+        attempt: attempt + 1,
+        deviceId,
+        matches,
+        rssi,
+      });
+
       return {
         inRange: matches,
         rssi,
       };
     } catch {
       await connectedDevice?.cancelConnection().catch(() => undefined);
+      logPresenceRetryDebug("Known device attempt failed", {
+        attempt: attempt + 1,
+        deviceId,
+      });
 
       if (attempt < 2) {
         await sleep(500);
@@ -636,6 +668,7 @@ async function scanForBeaconPresenceOnce(expectedBeaconId: string) {
 }
 
 async function scanForBeaconPresence(expectedBeaconId: string) {
+  logPresenceRetryDebug("Scanning for beacon presence", { expectedBeaconId });
   let lastResult:
     | {
         inRange: boolean;
@@ -647,12 +680,24 @@ async function scanForBeaconPresence(expectedBeaconId: string) {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const result = await scanForBeaconPresenceOnce(expectedBeaconId);
+      logPresenceRetryDebug("Beacon scan attempt result", {
+        attempt: attempt + 1,
+        expectedBeaconId,
+        inRange: result.inRange,
+        reason: result.reason,
+        rssi: result.rssi,
+      });
       lastResult = result;
 
       if (result.inRange || result.reason !== "beacon_not_detected" || attempt === 1) {
         return result;
       }
     } catch (error) {
+      logPresenceRetryDebug("Beacon scan attempt threw", {
+        attempt: attempt + 1,
+        expectedBeaconId,
+        message: error instanceof Error ? error.message : String(error),
+      });
       if (attempt === 1) {
         throw error;
       }
@@ -672,11 +717,20 @@ async function scanForBeaconPresence(expectedBeaconId: string) {
 }
 
 async function performPresenceCheck(session: PresenceMonitorSession) {
+  logPresenceRetryDebug("Performing presence check", {
+    reservationId: session.reservationId,
+    beaconId: session.beaconId,
+    deviceId: session.deviceId ?? null,
+    consecutiveBeaconWarningCount: session.consecutiveBeaconWarningCount ?? 0,
+  });
   const appState = getNormalizedAppState();
   const bluetoothState = await bleManager.state();
   const bluetoothOn = bluetoothState === State.PoweredOn;
 
   if (!bluetoothOn) {
+    logPresenceRetryDebug("Presence check failed because bluetooth is off", {
+      reservationId: session.reservationId,
+    });
     return {
       appState,
       bluetoothOn,
@@ -693,6 +747,10 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
     );
 
     if (knownDevicePresence?.inRange) {
+      logPresenceRetryDebug("Known device presence matched", {
+        reservationId: session.reservationId,
+        rssi: knownDevicePresence.rssi,
+      });
       if (isBeaconRssiWeak(knownDevicePresence.rssi)) {
         return {
           appState,
@@ -725,6 +783,12 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
   }
 
   const presence = await scanForBeaconPresence(session.beaconId);
+  logPresenceRetryDebug("Scan-based presence result", {
+    reservationId: session.reservationId,
+    inRange: presence.inRange,
+    reason: presence.reason,
+    rssi: presence.rssi,
+  });
 
   if (!presence.inRange) {
     return {
@@ -768,51 +832,87 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
 
 async function processPresenceCheck(session: PresenceMonitorSession) {
   const result = await performPresenceCheck(session);
+  const nextConsecutiveBeaconWarningCount = isBeaconWarningReason(result.reason)
+    ? (session.consecutiveBeaconWarningCount ?? 0) + 1
+    : 0;
+  const shouldSuppressTransientBeaconWarning =
+    isBeaconWarningReason(result.reason) &&
+    nextConsecutiveBeaconWarningCount < CONSECUTIVE_BEACON_WARNINGS_REQUIRED;
+  const effectiveResult = shouldSuppressTransientBeaconWarning
+    ? {
+        ...result,
+        inRange: true,
+        reason: null,
+      }
+    : result;
+  logPresenceRetryDebug("Processed presence check", {
+    reservationId: session.reservationId,
+    rawReason: result.reason,
+    effectiveReason: effectiveResult.reason,
+    inRange: effectiveResult.inRange,
+    rssi: effectiveResult.rssi,
+    consecutiveBeaconWarningCount: nextConsecutiveBeaconWarningCount,
+    suppressedTransientBeaconWarning: shouldSuppressTransientBeaconWarning,
+  });
   const checkedAt = new Date().toISOString();
 
-  if (result.reason) {
-    const warning = buildWarningState(result.reason, session.reservationId);
+  if (session.consecutiveBeaconWarningCount !== nextConsecutiveBeaconWarningCount) {
+    await saveActiveSession({
+      ...session,
+      consecutiveBeaconWarningCount: nextConsecutiveBeaconWarningCount,
+    });
+  }
 
-    if (result.appState === "foreground") {
+  if (effectiveResult.reason) {
+    const warning = buildWarningState(effectiveResult.reason, session.reservationId);
+
+    if (effectiveResult.appState === "foreground") {
       emitWarning(warning);
       if (session.lastBackgroundWarningReason !== null) {
         await saveActiveSession({
           ...session,
+          consecutiveBeaconWarningCount: nextConsecutiveBeaconWarningCount,
           lastBackgroundWarningReason: null,
         });
       }
-    } else if (session.lastBackgroundWarningReason !== result.reason) {
+    } else if (session.lastBackgroundWarningReason !== effectiveResult.reason) {
       await scheduleBackgroundWarningNotification(warning.message);
-      await updateBackgroundNotification(result.reason);
+      await updateBackgroundNotification(effectiveResult.reason);
       await saveActiveSession({
         ...session,
-        lastBackgroundWarningReason: result.reason,
+        consecutiveBeaconWarningCount: nextConsecutiveBeaconWarningCount,
+        lastBackgroundWarningReason: effectiveResult.reason,
       });
     }
   } else {
     emitWarning(null);
-    if (result.appState === "background") {
+    if (effectiveResult.appState === "background") {
       await updateBackgroundNotification(null);
     }
     if (session.lastBackgroundWarningReason !== null) {
       await saveActiveSession({
         ...session,
+        consecutiveBeaconWarningCount: nextConsecutiveBeaconWarningCount,
         lastBackgroundWarningReason: null,
       });
     }
   }
 
   const heartbeatResult = await sendReservationPresenceHeartbeat(session.reservationId, {
-    appState: result.appState,
+    appState: effectiveResult.appState,
     beaconId: session.beaconId,
-    bluetoothOn: result.bluetoothOn,
+    bluetoothOn: effectiveResult.bluetoothOn,
     checkedAt,
-    inRange: result.inRange,
-    rssi: result.rssi,
+    inRange: effectiveResult.inRange,
+    rssi: effectiveResult.rssi,
     userId: session.userId,
   }).catch((error) => {
     console.warn("[presence-monitor] unable to send heartbeat", error);
     return null;
+  });
+  logPresenceRetryDebug("Heartbeat result", {
+    reservationId: session.reservationId,
+    heartbeatResult,
   });
 
   if (heartbeatResult?.status === "stopped") {
@@ -926,6 +1026,7 @@ export async function activatePresenceMonitoring(input: {
 
   await saveActiveSession({
     beaconId: input.beaconId.trim(),
+    consecutiveBeaconWarningCount: 0,
     deviceId: input.deviceId?.trim() || undefined,
     lastBackgroundWarningReason: null,
     reservationId: input.reservationId,
@@ -966,6 +1067,7 @@ export async function syncPresenceMonitoringSession(
   ) {
     await saveActiveSession({
       beaconId: input.beaconId.trim(),
+      consecutiveBeaconWarningCount: 0,
       deviceId: input.deviceId?.trim() || existingSession?.deviceId || undefined,
       lastBackgroundWarningReason: null,
       reservationId: input.reservationId,
@@ -1016,7 +1118,9 @@ export async function stopLocalPresenceMonitoring() {
 
 export async function retryPresenceMonitoringCheck() {
   initializePresenceMonitorRuntime();
+  logPresenceRetryDebug("Manual retry requested");
   const permissionGranted = await requestBluetoothPermissions();
+  logPresenceRetryDebug("Manual retry permission result", { permissionGranted });
   if (!permissionGranted) {
     throw new Error("Bluetooth permission is required to retry the room connection.");
   }
@@ -1025,13 +1129,18 @@ export async function retryPresenceMonitoringCheck() {
 
   try {
     await syncCurrentWarningState();
+    logPresenceRetryDebug("Manual retry completed on first attempt");
   } catch (error) {
+    logPresenceRetryDebug("Manual retry first attempt failed", {
+      message: error instanceof Error ? error.message : String(error),
+    });
     if (!isBluetoothUnauthorizedError(error)) {
       throw error;
     }
 
     await resetBleManager();
     await syncCurrentWarningState();
+    logPresenceRetryDebug("Manual retry completed after BLE authorization recovery");
   }
 }
 
