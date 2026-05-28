@@ -10,7 +10,13 @@ import {
 import { useRouter } from "expo-router";
 import SelectionScreenLayout from "@/components/SelectionScreenLayout";
 import { auth } from "@/lib/firebase";
-import { getUserProfile, isAllowedEmail, logout, saveUserProfile } from "@/lib/auth";
+import {
+  getUserProfile,
+  getUserProfileWithRetry,
+  isAllowedEmail,
+  logout,
+  saveUserProfile,
+} from "@/lib/auth";
 import { colors, fonts } from "@/constants/theme";
 
 const ROLE_OPTIONS = [
@@ -49,7 +55,7 @@ export default function RoleSelectionScreen() {
       }
 
       try {
-        const profile = await getUserProfile(user.uid);
+        const profile = await getUserProfileWithRetry(user.uid);
         if (!isMounted) {
           return;
         }
@@ -99,7 +105,7 @@ export default function RoleSelectionScreen() {
       }
 
       const status = selectedRole === "Student" ? "approved" : "pending";
-      const profile = await getUserProfile(user.uid);
+      const profile = await getUserProfileWithRetry(user.uid);
       const [firstName = "", ...rest] = (user.displayName ?? "").split(" ");
 
       await saveUserProfile(user.uid, {

@@ -17,7 +17,7 @@ import { colors, fonts } from "@/constants/theme";
 import {
   loginWithEmail,
   getAuthErrorMessage,
-  getUserProfile,
+  getUserProfileWithRetry,
   resendVerificationEmail,
   signInWithGoogle,
   logout,
@@ -58,7 +58,7 @@ export default function LoginScreen() {
 
     try {
       const result = await signInWithGoogle();
-      const userProfile = await getUserProfile(result.user.uid);
+      const userProfile = await getUserProfileWithRetry(result.user.uid);
       if (!userProfile?.role) {
         router.replace("/(auth)/role-selection");
       } else if (userProfile.status === "pending") {
@@ -90,7 +90,7 @@ export default function LoginScreen() {
     setShowResendButton(false);
     try {
       const credential = await loginWithEmail(email, password);
-      const userProfile = await getUserProfile(credential.user.uid);
+      const userProfile = await getUserProfileWithRetry(credential.user.uid);
       if (userProfile?.status === "pending") {
         await logout();
         const message = encodeURIComponent(

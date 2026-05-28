@@ -28,6 +28,10 @@ const GOOGLE_IOS_CLIENT_ID =
 let googleConfigured = false;
 let googleSigninModule: any = null;
 
+function sleep(durationMs: number) {
+  return new Promise((resolve) => setTimeout(resolve, durationMs));
+}
+
 export function isAllowedEmail(email: string): boolean {
   return email.toLowerCase().endsWith(`@${ALLOWED_DOMAIN}`);
 }
@@ -242,6 +246,30 @@ export async function getUserProfile(uid: string) {
       status?: string;
     };
   }
+  return null;
+}
+
+export async function getUserProfileWithRetry(
+  uid: string,
+  options?: {
+    attempts?: number;
+    delayMs?: number;
+  }
+) {
+  const attempts = Math.max(1, options?.attempts ?? 3);
+  const delayMs = Math.max(0, options?.delayMs ?? 300);
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const profile = await getUserProfile(uid);
+    if (profile) {
+      return profile;
+    }
+
+    if (attempt < attempts - 1) {
+      await sleep(delayMs);
+    }
+  }
+
   return null;
 }
 
