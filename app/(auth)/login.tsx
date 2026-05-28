@@ -97,9 +97,11 @@ export default function LoginScreen() {
           "Your account is pending approval."
         );
         router.replace(`/(auth)/login?pending=true&message=${message}`);
+      } else if (!userProfile?.role) {
+        router.replace("/(auth)/role-selection");
       } else {
         showToast("Login successful!");
-        router.replace(getPostLoginRoute(userProfile?.role));
+        router.replace(getPostLoginRoute(userProfile.role));
       }
     } catch (err: unknown) {
       const firebaseError = err as { code?: string };
