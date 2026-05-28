@@ -3,14 +3,14 @@ import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
-import { getUserProfile } from '@/lib/auth';
+import { getUserProfileWithRetry } from '@/lib/auth';
 import { auth } from '@/lib/firebase';
 import { PresenceMonitorProvider } from '@/components/PresenceMonitorProvider';
 import { PushNotificationProvider } from '@/components/PushNotificationProvider';
 import { ToastProvider } from '@/components/ToastProvider';
 import { SelectionFilterProvider } from '@/components/SelectionFilterContext';
 import { onAuthStateChanged } from 'firebase/auth';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { colors } from '@/constants/theme';
 
 function getApprovedUserRoute(role?: string | null) {
@@ -31,9 +31,13 @@ export default function RootLayout() {
   const [profileStatus, setProfileStatus] = useState<string | null>(null);
   const router = useRouter();
   const segments = useSegments();
+  const authRequestIdRef = useRef(0);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      const requestId = authRequestIdRef.current + 1;
+      authRequestIdRef.current = requestId;
+      setLoading(true);
       setUser(firebaseUser);
       if (!firebaseUser) {
         setHasRole(null);
@@ -44,12 +48,20 @@ export default function RootLayout() {
       }
 
       try {
-        const profile = await getUserProfile(firebaseUser.uid);
+        const profile = await getUserProfileWithRetry(firebaseUser.uid, {
+          attempts: 5,
+          delayMs: 400,
+        });
+        if (authRequestIdRef.current !== requestId) {
+          return;
+        }
         setHasRole(Boolean(profile?.role));
         setProfileRole(profile?.role?.trim() ?? null);
         setProfileStatus(profile?.status ?? null);
       } finally {
-        setLoading(false);
+        if (authRequestIdRef.current === requestId) {
+          setLoading(false);
+        }
       }
     });
     return unsubscribe;
