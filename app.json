@@ -53,7 +53,7 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/logo-square.png",
+          "icon": "./assets/logo-square-notification.png",
           "color": "#B11B22"
         }
       ],
