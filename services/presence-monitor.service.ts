@@ -34,6 +34,7 @@ const REQUIRED_WIFI_SSID =
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const PRESENCE_SCAN_TIMEOUT_MS = 10_000;
 const CONSECUTIVE_BEACON_WARNINGS_REQUIRED = 2;
+const KNOWN_DEVICE_FAILURES_BEFORE_RESET = 2;
 const PRESENCE_NOTIFICATION_CHANNEL_ID = "presence-monitoring";
 const BACKGROUND_TASK_OPTIONS = {
   color: colors.primary,
@@ -60,6 +61,7 @@ interface PresenceMonitorSession {
   beaconId: string;
   consecutiveBeaconWarningCount?: number;
   deviceId?: string;
+  consecutiveKnownDeviceFailureCount?: number;
   lastBackgroundWarningReason: PresenceWarningReason | null;
   reservationId: string;
   userId: string;
@@ -128,6 +130,38 @@ function logPresenceRetryDebug(message: string, details?: Record<string, unknown
   console.log("[presence-retry]", message, details ?? {});
 }
 
+function getBeaconCandidateType(
+  device: Pick<Device, "localName" | "name" | "serviceUUIDs">,
+  expectedBeaconId: string
+) {
+  const normalizedExpectedBeaconId = expectedBeaconId.trim().toLowerCase();
+  const normalizedServiceUuid = BLE_SERVICE_UUID.trim().toLowerCase();
+
+  const visibleNames = [device.localName, device.name]
+    .map((value) => value?.trim().toLowerCase())
+    .filter((value): value is string => Boolean(value));
+  const visibleServiceUuids = (device.serviceUUIDs ?? [])
+    .map((value) => value?.trim().toLowerCase())
+    .filter((value): value is string => Boolean(value));
+
+  if (
+    normalizedServiceUuid &&
+    visibleServiceUuids.includes(normalizedServiceUuid)
+  ) {
+    return "service_match" as const;
+  }
+
+  if (visibleNames.includes(normalizedExpectedBeaconId)) {
+    return "name_match" as const;
+  }
+
+  if (visibleNames.length === 0) {
+    return "missing_name" as const;
+  }
+
+  return "mismatch" as const;
+}
+
 async function getCurrentWifiSsid() {
   if (Platform.OS !== "android") {
     return null;
@@ -148,7 +182,16 @@ async function getCurrentWifiSsid() {
 
 async function isConnectedToRequiredWifi() {
   const ssid = await getCurrentWifiSsid();
-  return ssid?.trim() === REQUIRED_WIFI_SSID;
+  const normalizedSsid = ssid?.trim() ?? null;
+  const matches = normalizedSsid === REQUIRED_WIFI_SSID;
+
+  logPresenceRetryDebug("Wi-Fi SSID check", {
+    actualSsid: normalizedSsid,
+    expectedSsid: REQUIRED_WIFI_SSID,
+    matches,
+  });
+
+  return matches;
 }
 
 function isBeaconRssiWeak(rssi: number | null) {
@@ -603,8 +646,22 @@ async function scanForBeaconPresenceOnce(expectedBeaconId: string) {
       }
 
       const beaconNameState = getExpectedBeaconNameState(device, expectedBeaconId);
+      const candidateType = getBeaconCandidateType(device, expectedBeaconId);
+      logPresenceRetryDebug("Scan discovered candidate", {
+        candidateType,
+        deviceId: device.id,
+        localName: device.localName ?? null,
+        name: device.name ?? null,
+        rssi: device.rssi ?? null,
+        serviceUUIDs: device.serviceUUIDs ?? [],
+      });
 
       if (beaconNameState === "mismatch") {
+        logPresenceRetryDebug("Candidate rejected before connect", {
+          candidateType,
+          deviceId: device.id,
+          expectedBeaconId,
+        });
         return;
       }
 
@@ -653,6 +710,13 @@ async function scanForBeaconPresenceOnce(expectedBeaconId: string) {
           return;
         }
 
+        logPresenceRetryDebug("Candidate read succeeded but beacon value mismatched", {
+          candidateType,
+          deviceId: device.id,
+          expectedBeaconId,
+          readValue: beaconCharacteristic.value ?? null,
+          rssi: typeof device.rssi === "number" ? device.rssi : strongestRssi,
+        });
         await connectedDevice.cancelConnection().catch(() => undefined);
       } catch {
         await connectedDevice?.cancelConnection().catch(() => undefined);
@@ -662,6 +726,11 @@ async function scanForBeaconPresenceOnce(expectedBeaconId: string) {
         ) {
           foundExpectedBeaconButReadFailed = true;
         }
+        logPresenceRetryDebug("Candidate connect/read failed in scan fallback", {
+          candidateType,
+          deviceId: device.id,
+          expectedBeaconId,
+        });
       }
     });
   });
@@ -832,6 +901,15 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
 
 async function processPresenceCheck(session: PresenceMonitorSession) {
   const result = await performPresenceCheck(session);
+  const knownDeviceFailed =
+    Boolean(session.deviceId) &&
+    isBeaconWarningReason(result.reason);
+  const nextConsecutiveKnownDeviceFailureCount = knownDeviceFailed
+    ? (session.consecutiveKnownDeviceFailureCount ?? 0) + 1
+    : 0;
+  const shouldClearStoredDeviceId =
+    Boolean(session.deviceId) &&
+    nextConsecutiveKnownDeviceFailureCount >= KNOWN_DEVICE_FAILURES_BEFORE_RESET;
   const nextConsecutiveBeaconWarningCount = isBeaconWarningReason(result.reason)
     ? (session.consecutiveBeaconWarningCount ?? 0) + 1
     : 0;
@@ -856,10 +934,30 @@ async function processPresenceCheck(session: PresenceMonitorSession) {
   });
   const checkedAt = new Date().toISOString();
 
+  if (shouldClearStoredDeviceId) {
+    logPresenceRetryDebug("Clearing stale known beacon device id", {
+      deviceId: session.deviceId ?? null,
+      reservationId: session.reservationId,
+      consecutiveKnownDeviceFailureCount: nextConsecutiveKnownDeviceFailureCount,
+    });
+  }
+
   if (session.consecutiveBeaconWarningCount !== nextConsecutiveBeaconWarningCount) {
     await saveActiveSession({
       ...session,
       consecutiveBeaconWarningCount: nextConsecutiveBeaconWarningCount,
+      consecutiveKnownDeviceFailureCount: nextConsecutiveKnownDeviceFailureCount,
+      deviceId: shouldClearStoredDeviceId ? undefined : session.deviceId,
+    });
+  } else if (
+    session.consecutiveKnownDeviceFailureCount !==
+      nextConsecutiveKnownDeviceFailureCount ||
+    shouldClearStoredDeviceId
+  ) {
+    await saveActiveSession({
+      ...session,
+      consecutiveKnownDeviceFailureCount: nextConsecutiveKnownDeviceFailureCount,
+      deviceId: shouldClearStoredDeviceId ? undefined : session.deviceId,
     });
   }
 
@@ -1027,6 +1125,7 @@ export async function activatePresenceMonitoring(input: {
   await saveActiveSession({
     beaconId: input.beaconId.trim(),
     consecutiveBeaconWarningCount: 0,
+    consecutiveKnownDeviceFailureCount: 0,
     deviceId: input.deviceId?.trim() || undefined,
     lastBackgroundWarningReason: null,
     reservationId: input.reservationId,
@@ -1068,6 +1167,7 @@ export async function syncPresenceMonitoringSession(
     await saveActiveSession({
       beaconId: input.beaconId.trim(),
       consecutiveBeaconWarningCount: 0,
+      consecutiveKnownDeviceFailureCount: 0,
       deviceId: input.deviceId?.trim() || existingSession?.deviceId || undefined,
       lastBackgroundWarningReason: null,
       reservationId: input.reservationId,
