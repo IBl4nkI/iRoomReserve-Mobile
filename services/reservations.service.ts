@@ -1,5 +1,9 @@
 import { apiRequest } from "@/services/api";
-import type { ReservationCampus, ReservationRecord } from "@/types/reservation";
+import type {
+  MobileDashboardPayload,
+  ReservationCampus,
+  ReservationRecord,
+} from "@/types/reservation";
 
 const RESERVATION_QUERY_CACHE_TTL_MS = 15_000;
 
@@ -9,6 +13,13 @@ type ReservationQueryCacheEntry = {
 };
 
 const reservationQueryCache = new Map<string, ReservationQueryCacheEntry>();
+const dashboardQueryCache = new Map<
+  string,
+  {
+    expiresAt: number;
+    value: MobileDashboardPayload;
+  }
+>();
 
 interface ReservationAttachmentPayload {
   approvalDocumentMimeType?: string;
@@ -71,8 +82,33 @@ export interface ReservationPresenceHeartbeatResponse {
   timedOut: boolean;
 }
 
+export async function getMobileDashboardData(options?: {
+  forceRefresh?: boolean;
+}): Promise<MobileDashboardPayload> {
+  const cacheKey = "mobile-dashboard";
+
+  if (!options?.forceRefresh) {
+    const cachedValue = dashboardQueryCache.get(cacheKey);
+    if (cachedValue && cachedValue.expiresAt > Date.now()) {
+      return cachedValue.value;
+    }
+  }
+
+  const payload = await apiRequest<MobileDashboardPayload>("/api/mobile-dashboard", {
+    method: "GET",
+  });
+
+  dashboardQueryCache.set(cacheKey, {
+    expiresAt: Date.now() + RESERVATION_QUERY_CACHE_TTL_MS,
+    value: payload,
+  });
+
+  return payload;
+}
+
 function invalidateReservationQueryCache() {
   reservationQueryCache.clear();
+  dashboardQueryCache.clear();
 }
 
 async function getCachedReservationQuery(

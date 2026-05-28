@@ -19,7 +19,6 @@ import DashboardTopNav from "@/components/dashboard/DashboardTopNav";
 import { useToast } from "@/components/ToastProvider";
 import { dashboardStyles as styles } from "@/components/dashboard/styles";
 import { colors } from "@/constants/theme";
-import { getUserProfile } from "@/lib/auth";
 import { auth } from "@/lib/firebase";
 import {
   activatePresenceMonitoring,
@@ -29,7 +28,6 @@ import {
   onUnreadNotifications,
   shouldHideUtilityStaffInboxNotification,
 } from "@/services/notifications.service";
-import { getRoomsByIds } from "@/services/rooms.service";
 import {
   formatCompactFloorLabel,
   getRoomFloorId,
@@ -39,8 +37,7 @@ import {
   checkInReservation,
   completeReservation,
   confirmFinishedReservation,
-  getReservationsByCampus,
-  getReservationsByUser,
+  getMobileDashboardData,
 } from "@/services/reservations.service";
 import { formatTime12h } from "@/services/schedules.service";
 import type {
@@ -290,16 +287,6 @@ function isCurrentAwaitingStaffReleaseReservation(
   );
 }
 
-function isExpiredAwaitingStaffReleaseReservation(
-  reservation: ReservationRecord,
-  todayDateKey: string
-) {
-  return (
-    isAwaitingStaffReleaseReservation(reservation) &&
-    reservation.date < todayDateKey
-  );
-}
-
 function canStartReservation(
   reservation: ReservationRecord | null,
   todayDateKey: string,
@@ -475,50 +462,6 @@ function filterReservationsByBuildingAndFloor(
   });
 }
 
-function getDashboardRelevantRoomIds(
-  reservations: ReservationRecord[],
-  options: {
-    currentTimeKey: string;
-    isUtilityStaff: boolean;
-    todayDateKey: string;
-  }
-) {
-  const relevantReservations = reservations.filter((reservation) => {
-    if (options.isUtilityStaff) {
-      return (
-        (reservation.status === "approved" &&
-          isCurrentOrFutureReservation(
-            reservation,
-            options.todayDateKey,
-            options.currentTimeKey
-          )) ||
-        isCurrentAwaitingStaffReleaseReservation(
-          reservation,
-          options.todayDateKey
-        )
-      );
-    }
-
-    return (
-      (reservation.status === "pending" &&
-        isCurrentOrFutureReservation(
-          reservation,
-          options.todayDateKey,
-          options.currentTimeKey
-        )) ||
-      (reservation.status === "approved" &&
-        isCurrentOrFutureReservation(
-          reservation,
-          options.todayDateKey,
-          options.currentTimeKey
-        )) ||
-      isAwaitingStaffReleaseReservation(reservation)
-    );
-  });
-
-  return [...new Set(relevantReservations.map((reservation) => reservation.roomId))];
-}
-
 function ReservationRadioGroup({
   options,
   selectedValue,
@@ -680,83 +623,26 @@ export default function DashboardHomeScreen() {
     }
 
     try {
-      const profile = await getUserProfile(currentUser.uid, { forceRefresh });
+      const dashboardData = await getMobileDashboardData({ forceRefresh });
 
       if (!isMountedRef.current) {
         return;
       }
 
-      if (profile?.firstName?.trim()) {
-        setFirstName(profile.firstName.trim());
-      }
+      setFirstName(dashboardData.firstName?.trim() || "My");
 
-      const normalizedRole = profile?.role?.trim() ?? null;
-      const campus = profile?.campus === "main" || profile?.campus === "digi"
-        ? profile.campus
-        : null;
+      const normalizedRole = dashboardData.userRole?.trim() ?? null;
+      const campus = dashboardData.assignedCampus;
       setUserRole(normalizedRole);
       setAssignedCampus(campus);
 
-      const nextReservations =
-        normalizedRole === "Utility Staff" && campus
-          ? await getReservationsByCampus(campus, { forceRefresh })
-          : await getReservationsByUser(currentUser.uid, { forceRefresh });
-      const todayDateKey = getLocalDateKey();
-      const currentTimeKey = getCurrentTimeKey();
-
-      let effectiveReservations = nextReservations;
-
-      if (normalizedRole === "Utility Staff") {
-        const stalePendingFinishReservations = nextReservations.filter(
-          (reservation) =>
-            isExpiredAwaitingStaffReleaseReservation(
-              reservation,
-              todayDateKey
-            )
-        );
-
-        if (stalePendingFinishReservations.length > 0) {
-          try {
-            await Promise.all(
-              stalePendingFinishReservations.map((reservation) =>
-                confirmFinishedReservation(reservation.id, currentUser.uid)
-              )
-            );
-
-            effectiveReservations = campus
-              ? await getReservationsByCampus(campus, { forceRefresh: true })
-              : nextReservations;
-          } catch (cleanupError) {
-            console.warn(
-              "[dashboard] unable to auto-release stale pending-finish reservations",
-              cleanupError
-            );
-          }
-        }
-
-        effectiveReservations = effectiveReservations.filter(
-          (reservation) =>
-            !isExpiredAwaitingStaffReleaseReservation(
-              reservation,
-              todayDateKey
-            )
-        );
-      }
-
-      const roomIds = getDashboardRelevantRoomIds(effectiveReservations, {
-        currentTimeKey,
-        isUtilityStaff: normalizedRole === "Utility Staff",
-        todayDateKey,
-      });
-      const rooms = await getRoomsByIds(roomIds, { forceRefresh });
-
       if (!isMountedRef.current) {
         return;
       }
 
-      setReservations(effectiveReservations.sort(sortReservations));
+      setReservations(dashboardData.reservations.sort(sortReservations));
       setRoomsById(
-        Object.fromEntries(rooms.map((room) => [room.id, room] as const))
+        Object.fromEntries(dashboardData.rooms.map((room) => [room.id, room] as const))
       );
       setError(null);
     } catch (caughtError) {

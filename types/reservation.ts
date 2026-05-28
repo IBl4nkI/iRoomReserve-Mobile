@@ -114,6 +114,14 @@ export interface Room {
   activeReservationId?: string | null;
 }
 
+export interface MobileDashboardPayload {
+  assignedCampus: ReservationCampus | null;
+  firstName: string | null;
+  reservations: ReservationRecord[];
+  rooms: Room[];
+  userRole: string | null;
+}
+
 export interface Schedule {
   id: string;
   roomId: string;
