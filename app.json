@@ -6,10 +6,10 @@
     "scheme": "iroomreserve",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/logo-square.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/logo-square.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -31,19 +31,32 @@
         "android.permission.FOREGROUND_SERVICE"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/android-icon-foreground.png",
-        "backgroundImage": "./assets/android-icon-background.png",
-        "monochromeImage": "./assets/android-icon-monochrome.png"
+        "backgroundColor": "#FFFFFF",
+        "foregroundImage": "./assets/logo-square.png"
       },
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/logo-square.png"
     },
     "plugins": [
       "expo-dev-client",
-      "expo-notifications",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/logo-square.png",
+          "imageWidth": 288,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff"
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/logo-square.png",
+          "color": "#B11B22"
+        }
+      ],
       "expo-web-browser",
       "expo-router",
       "expo-font",
