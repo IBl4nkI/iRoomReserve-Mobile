@@ -1,6 +1,7 @@
 import React from "react";
 import {
   ActivityIndicator,
+  Alert,
   Modal,
   StyleSheet,
   Text,
@@ -9,16 +10,20 @@ import {
 } from "react-native";
 
 import { colors, fonts } from "@/constants/theme";
+import { auth } from "@/lib/firebase";
 import {
+  deactivatePresenceMonitoring,
   retryPresenceMonitoringCheck,
   subscribeToPresenceWarnings,
   type PresenceWarningState,
 } from "@/services/presence-monitor.service";
+import { completeReservation } from "@/services/reservations.service";
 
 export function PresenceMonitorProvider({
   children,
 }: React.PropsWithChildren) {
   const [warning, setWarning] = React.useState<PresenceWarningState | null>(null);
+  const [finishing, setFinishing] = React.useState(false);
   const [retrying, setRetrying] = React.useState(false);
 
   React.useEffect(() => {
@@ -34,6 +39,45 @@ export function PresenceMonitorProvider({
     } finally {
       setRetrying(false);
     }
+  }
+
+  function handleFinishReservation() {
+    const currentWarning = warning;
+    const currentUser = auth.currentUser;
+
+    if (!currentWarning || !currentUser || finishing) {
+      return;
+    }
+
+    Alert.alert(
+      "Finish Reservation?",
+      "Are you sure you want to finish this reservation now?",
+      [
+        {
+          style: "cancel",
+          text: "Cancel",
+        },
+        {
+          style: "destructive",
+          text: "Finish Reservation",
+          onPress: async () => {
+            try {
+              setFinishing(true);
+              await completeReservation(currentWarning.reservationId, currentUser.uid);
+              await deactivatePresenceMonitoring();
+            } catch (error) {
+              console.warn("[presence-monitor] finish reservation failed", error);
+              Alert.alert(
+                "Unable to Finish Reservation",
+                "We couldn't finish this reservation right now. Please try again."
+              );
+            } finally {
+              setFinishing(false);
+            }
+          },
+        },
+      ]
+    );
   }
 
   return (
@@ -66,6 +110,21 @@ export function PresenceMonitorProvider({
                 <ActivityIndicator color={colors.white} size="small" />
               ) : (
                 <Text style={styles.retryButtonText}>Retry Connection</Text>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              disabled={finishing}
+              onPress={handleFinishReservation}
+              style={[
+                styles.finishButton,
+                finishing && styles.finishButtonDisabled,
+              ]}
+            >
+              {finishing ? (
+                <ActivityIndicator color="#b91c1c" size="small" />
+              ) : (
+                <Text style={styles.finishButtonText}>Finish Reservation</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -121,6 +180,26 @@ const styles = StyleSheet.create({
   },
   retryButtonText: {
     color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 14,
+  },
+  finishButton: {
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderColor: "#fca5a5",
+    borderRadius: 14,
+    borderWidth: 1,
+    justifyContent: "center",
+    marginTop: 10,
+    minHeight: 48,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  finishButtonDisabled: {
+    opacity: 0.75,
+  },
+  finishButtonText: {
+    color: "#b91c1c",
     fontFamily: fonts.bold,
     fontSize: 14,
   },
