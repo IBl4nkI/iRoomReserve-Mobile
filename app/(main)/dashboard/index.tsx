@@ -280,6 +280,26 @@ function isAwaitingStaffReleaseReservation(reservation: ReservationRecord) {
   );
 }
 
+function isCurrentAwaitingStaffReleaseReservation(
+  reservation: ReservationRecord,
+  todayDateKey: string
+) {
+  return (
+    isAwaitingStaffReleaseReservation(reservation) &&
+    reservation.date === todayDateKey
+  );
+}
+
+function isExpiredAwaitingStaffReleaseReservation(
+  reservation: ReservationRecord,
+  todayDateKey: string
+) {
+  return (
+    isAwaitingStaffReleaseReservation(reservation) &&
+    reservation.date < todayDateKey
+  );
+}
+
 function canStartReservation(
   reservation: ReservationRecord | null,
   todayDateKey: string,
@@ -472,7 +492,10 @@ function getDashboardRelevantRoomIds(
             options.todayDateKey,
             options.currentTimeKey
           )) ||
-        isAwaitingStaffReleaseReservation(reservation)
+        isCurrentAwaitingStaffReleaseReservation(
+          reservation,
+          options.todayDateKey
+        )
       );
     }
 
@@ -670,10 +693,37 @@ export default function DashboardHomeScreen() {
         normalizedRole === "Utility Staff" && campus
           ? await getReservationsByCampus(campus)
           : await getReservationsByUser(currentUser.uid);
-      const roomIds = getDashboardRelevantRoomIds(nextReservations, {
-        currentTimeKey: getCurrentTimeKey(),
+      const todayDateKey = getLocalDateKey();
+      const currentTimeKey = getCurrentTimeKey();
+
+      let effectiveReservations = nextReservations;
+
+      if (normalizedRole === "Utility Staff") {
+        const stalePendingFinishReservations = nextReservations.filter(
+          (reservation) =>
+            isExpiredAwaitingStaffReleaseReservation(
+              reservation,
+              todayDateKey
+            )
+        );
+
+        if (stalePendingFinishReservations.length > 0) {
+          await Promise.all(
+            stalePendingFinishReservations.map((reservation) =>
+              confirmFinishedReservation(reservation.id, currentUser.uid)
+            )
+          );
+
+          effectiveReservations = campus
+            ? await getReservationsByCampus(campus)
+            : nextReservations;
+        }
+      }
+
+      const roomIds = getDashboardRelevantRoomIds(effectiveReservations, {
+        currentTimeKey,
         isUtilityStaff: normalizedRole === "Utility Staff",
-        todayDateKey: getLocalDateKey(),
+        todayDateKey,
       });
       const rooms = await getRoomsByIds(roomIds);
 
@@ -681,7 +731,7 @@ export default function DashboardHomeScreen() {
         return;
       }
 
-      setReservations(nextReservations.sort(sortReservations));
+      setReservations(effectiveReservations.sort(sortReservations));
       setRoomsById(
         Object.fromEntries(rooms.map((room) => [room.id, room] as const))
       );
@@ -760,7 +810,7 @@ export default function DashboardHomeScreen() {
           (reservation.status === "approved" &&
             Boolean(reservation.checkedInAt) &&
             isOngoingReservation(reservation, todayDateKey, currentTimeKey)) ||
-          isAwaitingStaffReleaseReservation(reservation)
+          isCurrentAwaitingStaffReleaseReservation(reservation, todayDateKey)
       )
     : reservations
         .filter(
