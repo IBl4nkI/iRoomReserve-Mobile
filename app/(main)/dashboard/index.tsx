@@ -981,6 +981,16 @@ export default function DashboardHomeScreen() {
       let lastSeenDeviceSummary = "";
       let lastReadBeaconId = "";
 
+      bleManager.stopDeviceScan();
+      try {
+        const connectedDevices = await bleManager.connectedDevices([BLE_SERVICE_UUID]);
+        await Promise.all(
+          connectedDevices.map((device) => device.cancelConnection().catch(() => undefined))
+        );
+      } catch {
+        // Best-effort cleanup before starting a new scan.
+      }
+
       logBleDebug("Starting beacon scan", {
         expectedBeaconId,
         serviceUuid: BLE_SERVICE_UUID,
@@ -1058,9 +1068,12 @@ export default function DashboardHomeScreen() {
           attemptedDeviceIds.add(device.id);
           attemptedConnectionCount += 1;
 
+          let connectedDevice: Device | null = null;
+
           try {
             logBleDebug("Attempting connection", { id: device.id });
-            const connectedDevice = await bleManager.connectToDevice(device.id, {
+            connectedDevice = await bleManager.connectToDevice(device.id, {
+              autoConnect: false,
               timeout: 10000,
             });
             const discoveredDevice =
@@ -1093,8 +1106,9 @@ export default function DashboardHomeScreen() {
               expectedBeaconId,
               readBeaconId: lastReadBeaconId,
             });
-            await discoveredDevice.cancelConnection().catch(() => undefined);
+            await connectedDevice.cancelConnection().catch(() => undefined);
           } catch (caughtError) {
+            await connectedDevice?.cancelConnection().catch(() => undefined);
             logBleDebug("Connection/read failed", {
               id: device.id,
               message: caughtError instanceof Error ? caughtError.message : String(caughtError),
