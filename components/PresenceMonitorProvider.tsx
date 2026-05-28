@@ -12,7 +12,6 @@ import {
 import { colors, fonts } from "@/constants/theme";
 import { auth } from "@/lib/firebase";
 import {
-  deactivatePresenceMonitoring,
   retryPresenceMonitoringCheck,
   subscribeToPresenceWarnings,
   type PresenceWarningState,
@@ -64,7 +63,6 @@ export function PresenceMonitorProvider({
             try {
               setFinishing(true);
               await completeReservation(currentWarning.reservationId, currentUser.uid);
-              await deactivatePresenceMonitoring();
             } catch (error) {
               console.warn("[presence-monitor] finish reservation failed", error);
               Alert.alert(

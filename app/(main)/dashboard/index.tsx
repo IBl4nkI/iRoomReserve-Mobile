@@ -23,7 +23,6 @@ import { getUserProfile } from "@/lib/auth";
 import { auth } from "@/lib/firebase";
 import {
   activatePresenceMonitoring,
-  deactivatePresenceMonitoring,
   syncPresenceMonitoringSession,
 } from "@/services/presence-monitor.service";
 import {
@@ -39,6 +38,7 @@ import {
 import {
   checkInReservation,
   completeReservation,
+  confirmFinishedReservation,
   getReservationsByCampus,
   getReservationsByUser,
 } from "@/services/reservations.service";
@@ -269,6 +269,14 @@ function isOngoingReservation(
     reservation.date === todayDateKey &&
     reservation.startTime <= currentTimeKey &&
     reservation.endTime > currentTimeKey
+  );
+}
+
+function isAwaitingStaffReleaseReservation(reservation: ReservationRecord) {
+  return (
+    reservation.status === "completed" &&
+    Boolean(reservation.checkedInAt) &&
+    !reservation.occupancyReleasedAt
   );
 }
 
@@ -562,6 +570,7 @@ export default function DashboardHomeScreen() {
   const [error, setError] = React.useState<string | null>(null);
   const [unreadInboxCount, setUnreadInboxCount] = React.useState(0);
   const [reservationActionLoading, setReservationActionLoading] = React.useState(false);
+  const [staffFinishReservationId, setStaffFinishReservationId] = React.useState<string | null>(null);
   const isMountedRef = React.useRef(true);
   const bleManagerRef = React.useRef<BleManager | null>(null);
   const connectedBeaconDeviceRef = React.useRef<Device | null>(null);
@@ -577,8 +586,8 @@ export default function DashboardHomeScreen() {
         reservation.id === reservationId
           ? {
               ...reservation,
-              checkInMethod: null,
               status: "completed",
+              occupancyReleasedAt: null,
             }
           : reservation
       )
@@ -701,17 +710,38 @@ export default function DashboardHomeScreen() {
       isCurrentOrFutureReservation(reservation, todayDateKey, currentTimeKey)
   );
   const ongoingReservations = isUtilityStaff
-    ? approvedReservations.filter(
+    ? reservations.filter(
         (reservation) =>
-          Boolean(reservation.checkedInAt) &&
-          isOngoingReservation(reservation, todayDateKey, currentTimeKey)
+          (reservation.status === "approved" &&
+            Boolean(reservation.checkedInAt) &&
+            isOngoingReservation(reservation, todayDateKey, currentTimeKey)) ||
+          isAwaitingStaffReleaseReservation(reservation)
       )
-    : approvedReservations.filter((reservation) =>
-        isOngoingReservation(reservation, todayDateKey, currentTimeKey)
-      ).slice(0, 1);
+    : reservations
+        .filter(
+          (reservation) =>
+            (reservation.status === "approved" &&
+              isOngoingReservation(reservation, todayDateKey, currentTimeKey)) ||
+            isAwaitingStaffReleaseReservation(reservation)
+        )
+        .slice(0, 1);
   const ongoingReservation = ongoingReservations[0] ?? null;
   const ongoingRoom = ongoingReservation ? roomsById[ongoingReservation.roomId] ?? null : null;
   const ongoingRoomBeaconId = ongoingRoom?.beaconId?.trim() ?? "";
+  const monitorableReservation = !isUtilityStaff
+    ? reservations.find(
+        (reservation) =>
+          (reservation.status === "approved" ||
+            isAwaitingStaffReleaseReservation(reservation)) &&
+          Boolean(reservation.checkedInAt) &&
+          reservation.checkInMethod === "bluetooth" &&
+          !reservation.occupancyReleasedAt
+      ) ?? null
+    : null;
+  const monitorableRoom = monitorableReservation
+    ? roomsById[monitorableReservation.roomId] ?? null
+    : null;
+  const monitorableRoomBeaconId = monitorableRoom?.beaconId?.trim() ?? "";
   const upcomingReservations = approvedReservations
     .filter(
       (reservation) =>
@@ -838,20 +868,27 @@ export default function DashboardHomeScreen() {
   }, [upcomingFloorFilter, upcomingFloorOptions]);
 
   const hasUnreadInbox = unreadInboxCount > 0;
-  const isReservationStarted = !isUtilityStaff && Boolean(ongoingReservation?.checkedInAt);
+  const isReservationStarted =
+    !isUtilityStaff &&
+    ongoingReservation?.status === "approved" &&
+    Boolean(ongoingReservation.checkedInAt);
   const canStartOngoingReservation = canStartReservation(
     ongoingReservation,
     todayDateKey,
     currentTimeKey
   );
+  const isAwaitingStaffRelease =
+    !isUtilityStaff &&
+    Boolean(ongoingReservation) &&
+    isAwaitingStaffReleaseReservation(ongoingReservation);
   const canManageOngoingReservation =
     !isUtilityStaff &&
     (isReservationStarted || canStartOngoingReservation);
   const shouldMonitorOngoingReservation =
     !isUtilityStaff &&
-    Boolean(ongoingReservation?.checkedInAt) &&
-    ongoingReservation?.checkInMethod === "bluetooth" &&
-    Boolean(ongoingRoomBeaconId);
+    Boolean(monitorableReservation?.checkedInAt) &&
+    monitorableReservation?.checkInMethod === "bluetooth" &&
+    Boolean(monitorableRoomBeaconId);
   const getRoomLocationLabel = (reservation: ReservationRecord) => {
     const room = roomsById[reservation.roomId];
     return room?.floor
@@ -892,10 +929,14 @@ export default function DashboardHomeScreen() {
     let cancelled = false;
 
     const syncMonitor = async () => {
-      if (shouldMonitorOngoingReservation && ongoingReservation && ongoingRoomBeaconId) {
+      if (
+        shouldMonitorOngoingReservation &&
+        monitorableReservation &&
+        monitorableRoomBeaconId
+      ) {
         await syncPresenceMonitoringSession({
-          beaconId: ongoingRoomBeaconId,
-          reservationId: ongoingReservation.id,
+          beaconId: monitorableRoomBeaconId,
+          reservationId: monitorableReservation.id,
           userId: currentUser.uid,
         });
         return;
@@ -915,10 +956,36 @@ export default function DashboardHomeScreen() {
     };
   }, [
     loading,
-    ongoingReservation,
-    ongoingRoomBeaconId,
+    monitorableReservation,
+    monitorableRoomBeaconId,
     shouldMonitorOngoingReservation,
   ]);
+
+  const handleStaffFinishConfirmation = React.useCallback(
+    async (reservation: ReservationRecord) => {
+      const currentUser = auth.currentUser;
+      if (!currentUser || staffFinishReservationId) {
+        return;
+      }
+
+      try {
+        setStaffFinishReservationId(reservation.id);
+        await confirmFinishedReservation(reservation.id, currentUser.uid);
+        showToast("Room marked as vacant.");
+        await loadDashboard(false);
+      } catch (caughtError) {
+        Alert.alert(
+          "Finish Confirmation Failed",
+          caughtError instanceof Error
+            ? caughtError.message
+            : "We couldn't confirm this room finish right now."
+        );
+      } finally {
+        setStaffFinishReservationId(null);
+      }
+    },
+    [loadDashboard, showToast, staffFinishReservationId]
+  );
 
   const handleReservationAction = React.useCallback(async () => {
     const currentUser = auth.currentUser;
@@ -1125,12 +1192,11 @@ export default function DashboardHomeScreen() {
       if (isReservationStarted) {
         await completeReservation(ongoingReservation.id, currentUser.uid);
         markReservationCompletedLocally(ongoingReservation.id);
-        await deactivatePresenceMonitoring();
         if (connectedBeaconDeviceRef.current) {
           await connectedBeaconDeviceRef.current.cancelConnection().catch(() => undefined);
           connectedBeaconDeviceRef.current = null;
         }
-        showToast("Reservation finished successfully. Thank you for keeping the room clean.");
+        showToast("Reservation finished. Monitoring will continue until staff confirms the room is vacant.");
       } else if (canStartOngoingReservation) {
         if (ongoingRoomBeaconId) {
           Alert.alert(
@@ -1298,6 +1364,28 @@ export default function DashboardHomeScreen() {
                         compactTitle
                         locationLabel={getRoomLocationLabel(reservation)}
                       />
+                      {isUtilityStaff &&
+                      isAwaitingStaffReleaseReservation(reservation) ? (
+                        <Pressable
+                          style={[
+                            styles.reservationActionButton,
+                            styles.reservationActionButtonFinish,
+                            staffFinishReservationId === reservation.id
+                              ? styles.reservationActionButtonDisabled
+                              : null,
+                          ]}
+                          onPress={() => {
+                            void handleStaffFinishConfirmation(reservation);
+                          }}
+                          disabled={staffFinishReservationId === reservation.id}
+                        >
+                          <Text style={styles.reservationActionButtonText}>
+                            {staffFinishReservationId === reservation.id
+                              ? "Confirming..."
+                              : "Finish Reservation"}
+                          </Text>
+                        </Pressable>
+                      ) : null}
                       {!isUtilityStaff && canManageOngoingReservation ? (
                         <Pressable
                           style={[
@@ -1322,6 +1410,13 @@ export default function DashboardHomeScreen() {
                                 : "Start Reservation"}
                           </Text>
                         </Pressable>
+                      ) : null}
+                      {!isUtilityStaff &&
+                      isAwaitingStaffRelease &&
+                      ongoingReservation?.id === reservation.id ? (
+                        <Text style={[styles.reservationMeta, { color: colors.primary }]}>
+                          Waiting for staff to confirm the room is vacant.
+                        </Text>
                       ) : null}
                     </View>
                   ))

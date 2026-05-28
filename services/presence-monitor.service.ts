@@ -500,7 +500,7 @@ async function processPresenceCheck(session: PresenceMonitorSession) {
     }
   }
 
-  await sendReservationPresenceHeartbeat(session.reservationId, {
+  const heartbeatResult = await sendReservationPresenceHeartbeat(session.reservationId, {
     appState: result.appState,
     beaconId: session.beaconId,
     bluetoothOn: result.bluetoothOn,
@@ -510,7 +510,12 @@ async function processPresenceCheck(session: PresenceMonitorSession) {
     userId: session.userId,
   }).catch((error) => {
     console.warn("[presence-monitor] unable to send heartbeat", error);
+    return null;
   });
+
+  if (heartbeatResult?.status === "stopped") {
+    await syncPresenceMonitoringSession(null);
+  }
 }
 
 async function processPresenceCheckSafely(session: PresenceMonitorSession) {

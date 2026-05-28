@@ -160,6 +160,19 @@ export async function completeReservation(
   });
 }
 
+export async function confirmFinishedReservation(
+  reservationId: string,
+  userId: string
+): Promise<void> {
+  await apiRequest(`/api/reservations/${reservationId}`, {
+    body: {
+      action: "confirm-finish",
+      userId,
+    },
+    method: "PATCH",
+  });
+}
+
 export async function cancelReservation(
   reservationId: string,
   userId: string
