@@ -120,7 +120,7 @@ export function PresenceMonitorProvider({
               ]}
             >
               {finishing ? (
-                <ActivityIndicator color="#b91c1c" size="small" />
+                <ActivityIndicator color={colors.white} size="small" />
               ) : (
                 <Text style={styles.finishButtonText}>Finish Reservation</Text>
               )}
@@ -183,10 +183,8 @@ const styles = StyleSheet.create({
   },
   finishButton: {
     alignItems: "center",
-    backgroundColor: colors.surface,
-    borderColor: "#fca5a5",
+    backgroundColor: "#2563eb",
     borderRadius: 14,
-    borderWidth: 1,
     justifyContent: "center",
     marginTop: 10,
     minHeight: 48,
@@ -197,7 +195,7 @@ const styles = StyleSheet.create({
     opacity: 0.75,
   },
   finishButtonText: {
-    color: "#b91c1c",
+    color: colors.white,
     fontFamily: fonts.bold,
     fontSize: 14,
   },

@@ -1,6 +1,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ReactNativeBackgroundActions from "react-native-background-actions";
-import { AppState, type AppStateStatus } from "react-native";
+import {
+  AppState,
+  PermissionsAndroid,
+  Platform,
+  type AppStateStatus,
+} from "react-native";
 import { BleManager, State, type Device } from "react-native-ble-plx";
 
 import { colors } from "@/constants/theme";
@@ -53,10 +58,6 @@ export interface PresenceWarningState {
 }
 
 const warningListeners = new Set<(warning: PresenceWarningState | null) => void>();
-const bleManager = new BleManager({
-  restoreStateIdentifier: "iRoomReservePresenceMonitor",
-  restoreStateFunction: () => undefined,
-});
 
 let currentAppState: AppStateStatus = AppState.currentState;
 let hasInitializedRuntime = false;
@@ -65,6 +66,14 @@ let hasWarnedAboutBackgroundActionsRuntime = false;
 let latestWarningState: PresenceWarningState | null = null;
 let activePresenceCheckPromise: Promise<void> | null = null;
 let foregroundMonitorInterval: ReturnType<typeof setInterval> | null = null;
+let bleManager = createBleManager();
+
+function createBleManager() {
+  return new BleManager({
+    restoreStateIdentifier: "iRoomReservePresenceMonitor",
+    restoreStateFunction: () => undefined,
+  });
+}
 
 function hasBackgroundActionsRuntime() {
   const runtime = ReactNativeBackgroundActions as {
@@ -99,6 +108,48 @@ function ensureBleConfiguration() {
 
 function sleep(durationMs: number) {
   return new Promise((resolve) => setTimeout(resolve, durationMs));
+}
+
+async function requestBluetoothPermissions() {
+  if (Platform.OS !== "android") {
+    return true;
+  }
+
+  if (Platform.Version >= 31) {
+    const result = await PermissionsAndroid.requestMultiple([
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+    ]);
+
+    return (
+      result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] ===
+        PermissionsAndroid.RESULTS.GRANTED &&
+      result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] ===
+        PermissionsAndroid.RESULTS.GRANTED
+    );
+  }
+
+  const result = await PermissionsAndroid.request(
+    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+  );
+
+  return result === PermissionsAndroid.RESULTS.GRANTED;
+}
+
+async function resetBleManager() {
+  try {
+    bleManager.stopDeviceScan();
+  } catch {
+    // Best-effort cleanup before rebuilding the BLE runtime.
+  }
+
+  try {
+    await bleManager.destroy();
+  } catch {
+    // Some runtimes can already be torn down at this point.
+  }
+
+  bleManager = createBleManager();
 }
 
 function getExpectedBeaconNameState(
@@ -600,6 +651,13 @@ async function ensureBackgroundMonitorRunning() {
   }
 }
 
+function isBluetoothUnauthorizedError(error: unknown) {
+  return (
+    error instanceof Error &&
+    error.message.toLowerCase().includes("not authorized to use bluetooth")
+  );
+}
+
 export async function activatePresenceMonitoring(input: {
   beaconId: string;
   reservationId: string;
@@ -693,7 +751,23 @@ export async function deactivatePresenceMonitoring() {
 
 export async function retryPresenceMonitoringCheck() {
   initializePresenceMonitorRuntime();
-  await syncCurrentWarningState();
+  const permissionGranted = await requestBluetoothPermissions();
+  if (!permissionGranted) {
+    throw new Error("Bluetooth permission is required to retry the room connection.");
+  }
+
+  await resetBleManager();
+
+  try {
+    await syncCurrentWarningState();
+  } catch (error) {
+    if (!isBluetoothUnauthorizedError(error)) {
+      throw error;
+    }
+
+    await resetBleManager();
+    await syncCurrentWarningState();
+  }
 }
 
 export function subscribeToPresenceWarnings(
