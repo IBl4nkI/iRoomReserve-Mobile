@@ -708,16 +708,31 @@ export default function DashboardHomeScreen() {
         );
 
         if (stalePendingFinishReservations.length > 0) {
-          await Promise.all(
-            stalePendingFinishReservations.map((reservation) =>
-              confirmFinishedReservation(reservation.id, currentUser.uid)
-            )
-          );
+          try {
+            await Promise.all(
+              stalePendingFinishReservations.map((reservation) =>
+                confirmFinishedReservation(reservation.id, currentUser.uid)
+              )
+            );
 
-          effectiveReservations = campus
-            ? await getReservationsByCampus(campus)
-            : nextReservations;
+            effectiveReservations = campus
+              ? await getReservationsByCampus(campus)
+              : nextReservations;
+          } catch (cleanupError) {
+            console.warn(
+              "[dashboard] unable to auto-release stale pending-finish reservations",
+              cleanupError
+            );
+          }
         }
+
+        effectiveReservations = effectiveReservations.filter(
+          (reservation) =>
+            !isExpiredAwaitingStaffReleaseReservation(
+              reservation,
+              todayDateKey
+            )
+        );
       }
 
       const roomIds = getDashboardRelevantRoomIds(effectiveReservations, {
