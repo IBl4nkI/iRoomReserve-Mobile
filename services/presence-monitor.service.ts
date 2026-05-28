@@ -22,6 +22,12 @@ const BLE_SERVICE_UUID =
   process.env.EXPO_PUBLIC_ESP32_BLE_SERVICE_UUID?.trim() ?? "";
 const BLE_BEACON_CHAR_UUID =
   process.env.EXPO_PUBLIC_ESP32_BLE_BEACON_CHARACTERISTIC_UUID?.trim() ?? "";
+const parsedRssiThreshold = Number(
+  process.env.EXPO_PUBLIC_ESP32_BLE_RSSI_THRESHOLD?.trim()
+);
+const BLE_RSSI_THRESHOLD = Number.isFinite(parsedRssiThreshold)
+  ? parsedRssiThreshold
+  : -75;
 const REQUIRED_WIFI_SSID = "St Dominic College of Asia";
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const PRESENCE_SCAN_TIMEOUT_MS = 10_000;
@@ -134,6 +140,10 @@ async function getCurrentWifiSsid() {
 async function isConnectedToRequiredWifi() {
   const ssid = await getCurrentWifiSsid();
   return ssid?.trim() === REQUIRED_WIFI_SSID;
+}
+
+function isBeaconRssiWeak(rssi: number | null) {
+  return typeof rssi === "number" && !Number.isNaN(rssi) && rssi <= BLE_RSSI_THRESHOLD;
 }
 
 async function requestBluetoothPermissions() {
@@ -571,6 +581,16 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
       bluetoothOn,
       inRange: false,
       reason: presence.reason,
+      rssi: presence.rssi,
+    };
+  }
+
+  if (isBeaconRssiWeak(presence.rssi)) {
+    return {
+      appState,
+      bluetoothOn,
+      inRange: false,
+      reason: "out_of_range" as const,
       rssi: presence.rssi,
     };
   }
