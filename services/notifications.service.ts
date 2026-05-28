@@ -48,6 +48,10 @@ export function shouldHideUtilityStaffInboxNotification(
   );
 }
 
+export function shouldHideFacultyInboxNotification(notification: AppNotification) {
+  return notification.type === "new_reservation";
+}
+
 function mapNotificationSnapshot(snapshot: QuerySnapshot) {
   return snapshot.docs.map(
     (notificationDoc) =>

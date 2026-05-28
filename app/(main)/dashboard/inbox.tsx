@@ -13,6 +13,7 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
   onAllNotifications,
+  shouldHideFacultyInboxNotification,
   shouldHideUtilityStaffInboxNotification,
   type AppNotification,
 } from '@/services/notifications.service';
@@ -269,6 +270,10 @@ export default function InboxScreen() {
               ? notifications.filter(
                   (notification) => !shouldHideUtilityStaffInboxNotification(notification)
                 )
+              : normalizedRole === "Faculty"
+                ? notifications.filter(
+                    (notification) => !shouldHideFacultyInboxNotification(notification)
+                  )
               : notifications;
 
           if (!active) {
