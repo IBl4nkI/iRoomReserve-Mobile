@@ -45,7 +45,7 @@ const BACKGROUND_TASK_OPTIONS = {
     type: "mipmap",
   },
   taskName: "iRoomReservePresenceMonitor",
-  taskTitle: "iRoomReserve monitoring active",
+  taskTitle: "e-RoomReserve monitoring active",
 } as const;
 const BASE64_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
@@ -458,7 +458,7 @@ function getBackgroundNotificationContent(
         : reason === "wifi_disconnected"
           ? "Connect to St Dominic College of Asia"
         : "Room is out of range",
-    taskTitle: "iRoomReserve: Warning",
+    taskTitle: "e-RoomReserve: Warning",
   };
 }
 

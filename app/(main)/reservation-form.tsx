@@ -1243,7 +1243,7 @@ export default function ReservationFormScreen() {
       );
 
       setEmailStatus("valid");
-      setEmailFeedback("Email found in iRoomReserve.");
+      setEmailFeedback("Email found in e-RoomReserve.");
       return true;
     } catch (error) {
       setEmailStatus("invalid");
@@ -1403,7 +1403,7 @@ export default function ReservationFormScreen() {
       const isFacultyUser =
         normalizedResolvedRole === "faculty professor" ||
         normalizedResolvedRole === "faculty";
-      const userName = `${firstName} ${lastName}`.trim() || currentUser.displayName?.trim() || "iRoomReserve User";
+      const userName = `${firstName} ${lastName}`.trim() || currentUser.displayName?.trim() || "e-RoomReserve User";
       const equipment = Object.fromEntries(
         Object.entries(materials).filter(([, quantity]) => quantity > 0)
       );
@@ -1900,7 +1900,7 @@ export default function ReservationFormScreen() {
             {emailStatus === "checking" ? (
               <View style={styles.emailStatusRow}>
                 <ActivityIndicator color={colors.primary} size="small" />
-                <Text style={styles.emailCheckingText}>Checking iRoomReserve account...</Text>
+                <Text style={styles.emailCheckingText}>Checking e-RoomReserve account...</Text>
               </View>
             ) : emailFeedback ? (
               <Text

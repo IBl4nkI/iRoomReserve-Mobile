@@ -57,7 +57,7 @@ export default function SelectionScreenLayout({
   const cardContent = (
     <View style={styles.card}>
       <>
-        <Text style={styles.appName}>iRoomReserve</Text>
+        <Text style={styles.appName}>e-RoomReserve</Text>
         <Text style={styles.title}>{searchHeaderVisible ? "Available Rooms" : title}</Text>
         {searchHeaderVisible || subtitle ? (
           <Text style={styles.subtitle}>

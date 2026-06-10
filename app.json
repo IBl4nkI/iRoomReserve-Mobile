@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "iRoomReserve",
+    "name": "e-RoomReserve",
     "slug": "iroomreserve-mobile",
     "owner": "iroomreserve.group4",
     "scheme": "iroomreserve",
@@ -17,7 +17,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.iroomreserve.mobile",
       "infoPlist": {
-        "NSBluetoothAlwaysUsageDescription": "Allow iRoomReserve to scan and connect to room beacons for reservation check-in."
+        "NSBluetoothAlwaysUsageDescription": "Allow e-RoomReserve to scan and connect to room beacons for reservation check-in."
       }
     },
     "android": {
@@ -68,7 +68,7 @@
           "modes": [
             "central"
           ],
-          "bluetoothAlwaysPermission": "Allow iRoomReserve to connect to room beacons for reservation check-in."
+          "bluetoothAlwaysPermission": "Allow e-RoomReserve to connect to room beacons for reservation check-in."
         }
       ],
       [

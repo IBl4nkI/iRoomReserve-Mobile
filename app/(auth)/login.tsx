@@ -142,7 +142,7 @@ export default function LoginScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <View style={styles.header}>
-          <Text style={styles.appName}>iRoomReserve</Text>
+          <Text style={styles.appName}>e-RoomReserve</Text>
           <Text style={styles.subtitle}>St. Dominic College of Asia</Text>
         </View>
 
@@ -227,7 +227,7 @@ export default function LoginScreen() {
           </View>
         </View>
 
-        <Text style={styles.footer}>iRoomReserve v1.0 - SDCA Capstone Project</Text>
+        <Text style={styles.footer}>e-RoomReserve v1.0 - SDCA Capstone Project</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );

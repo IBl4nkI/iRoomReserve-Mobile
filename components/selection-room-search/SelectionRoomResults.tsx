@@ -156,7 +156,7 @@ export default function SelectionRoomResults({
     <View style={styles.resultsShell}>
       {resultsHeadingVisible ? (
         <>
-          <Text style={styles.resultsAppName}>iRoomReserve</Text>
+          <Text style={styles.resultsAppName}>e-RoomReserve</Text>
           <Text style={styles.resultsTitle}>Available Rooms</Text>
           {resultsTitle ? (
             <Text style={styles.resultsSubtitle}>{resultsTitle}</Text>

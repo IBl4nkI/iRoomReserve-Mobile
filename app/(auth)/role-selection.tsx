@@ -119,7 +119,7 @@ export default function RoleSelectionScreen() {
       if (selectedRole === "Student") {
         Alert.alert(
           "Account created",
-          "Account created! Welcome to iRoomReserve.",
+          "Account created! Welcome to e-RoomReserve.",
           [{ text: "OK", onPress: () => router.replace("/(main)/campus-select") }]
         );
         return;

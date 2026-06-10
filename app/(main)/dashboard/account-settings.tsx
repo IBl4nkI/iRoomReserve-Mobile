@@ -391,7 +391,7 @@ export default function AccountSettingsScreen() {
           <Text style={styles.screenTitle}>Account Settings</Text>
           <Text style={styles.screenSubtitle}>
             Review and edit details attached to your
-            iRoomReserve account.
+            e-RoomReserve account.
           </Text>
 
           {loadingProfile ? (

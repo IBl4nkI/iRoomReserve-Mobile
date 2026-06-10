@@ -132,7 +132,7 @@ export default function DashboardTopNav() {
   return (
     <View style={[styles.stickyNavWrap, { paddingTop: insets.top + 10 }]}>
       <View style={styles.topBarRow}>
-        <Text style={styles.topBarBrand}>iRoomReserve</Text>
+        <Text style={styles.topBarBrand}>e-RoomReserve</Text>
         <Pressable
           style={styles.userBadgeRow}
           onPress={() => {
