@@ -37,6 +37,7 @@ interface ReservationCreateBaseInput extends ReservationAttachmentPayload {
   equipment?: Record<string, number>;
   programDepartmentOrganization: string;
   purpose: string;
+  isEvent: "Yes" | "No";
   roomId: string;
   roomName: string;
   startTime: string;

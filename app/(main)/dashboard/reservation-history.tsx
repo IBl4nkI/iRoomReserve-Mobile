@@ -489,15 +489,28 @@ export default function ReservationHistoryScreen() {
                         )}
                       </Text>
                     </View>
-                    <View
-                      style={[
-                        styles.reservationHeaderBadge,
-                        ...getDisplayStatusStyle(displayStatus),
-                      ]}
-                    >
-                      <Text style={getDisplayStatusTextStyle(displayStatus)}>
-                        {getDisplayStatusLabel(displayStatus)}
-                      </Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                      {reservation.isEvent === 'Yes' ? (
+                        <View
+                          style={[
+                            styles.reservationHeaderBadge,
+                            styles.chip,
+                            { backgroundColor: '#f3e8ff', borderColor: '#d8b4fe' },
+                          ]}
+                        >
+                          <Text style={[styles.chipText, { color: '#7e22ce' }]}>Event</Text>
+                        </View>
+                      ) : null}
+                      <View
+                        style={[
+                          styles.reservationHeaderBadge,
+                          ...getDisplayStatusStyle(displayStatus),
+                        ]}
+                      >
+                        <Text style={getDisplayStatusTextStyle(displayStatus)}>
+                          {getDisplayStatusLabel(displayStatus)}
+                        </Text>
+                      </View>
                     </View>
                   </View>
                   <View style={styles.reservationRoomNameWrap}>

@@ -37,6 +37,7 @@ export interface ReservationRecord {
   endTime: string;
   programDepartmentOrganization?: string;
   purpose: string;
+  isEvent?: "Yes" | "No";
   approvalDocumentMimeType?: string;
   approvalDocumentName?: string;
   approvalDocumentPath?: string;

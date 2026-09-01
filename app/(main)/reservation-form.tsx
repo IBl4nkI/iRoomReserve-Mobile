@@ -571,6 +571,7 @@ export default function ReservationFormScreen() {
   );
   const [organization, setOrganization] = React.useState("");
   const [purpose, setPurpose] = React.useState("");
+  const [isEventReservation, setIsEventReservation] = React.useState(false);
   const [adviserEmail, setAdviserEmail] = React.useState("");
   const [emailStatus, setEmailStatus] = React.useState<EmailStatus>("idle");
   const [emailFeedback, setEmailFeedback] = React.useState("");
@@ -1434,6 +1435,7 @@ export default function ReservationFormScreen() {
           endTime,
           programDepartmentOrganization: organization.trim(),
           purpose: purpose.trim(),
+          isEvent: isEventReservation ? "Yes" : "No",
           roomId: room.id,
           roomName: room.name,
           startTime,
@@ -1480,6 +1482,7 @@ export default function ReservationFormScreen() {
               endTime: slot.endTime,
               programDepartmentOrganization: organization.trim(),
               purpose: purpose.trim(),
+              isEvent: isEventReservation ? "Yes" : "No",
               roomId: room.id,
               roomName: room.name,
               startTime: slot.startTime,
@@ -1818,6 +1821,7 @@ export default function ReservationFormScreen() {
             />
           </View>
         ) : null}
+
       </View>
 
       <View style={styles.sectionCard}>
@@ -1833,11 +1837,29 @@ export default function ReservationFormScreen() {
         </View>
 
         <View style={styles.inputBlock}>
-          <Text style={styles.inputLabel}>Purpose</Text>
+          <View style={{ alignItems: "center", flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            <Text style={styles.inputLabel}>
+              {isEventReservation ? "Name of the Event" : "Purpose"}
+            </Text>
+            <View style={{ alignItems: "center", flexDirection: "row", gap: 8 }}>
+              <Text style={styles.inputLabel}>Is this reservation for an event?</Text>
+              <Switch
+                accessibilityLabel="Is this reservation for an event?"
+                value={isEventReservation}
+                onValueChange={setIsEventReservation}
+                trackColor={{ false: "#d7cdcd", true: "#d87878" }}
+                thumbColor={isEventReservation ? colors.primary : colors.surface}
+              />
+            </View>
+          </View>
           <TextInput
             multiline
             onChangeText={setPurpose}
-            placeholder="Enter the purpose of this facility reservation"
+            placeholder={
+              isEventReservation
+                ? "Enter the name of the event"
+                : "Enter the purpose of this facility reservation"
+            }
             placeholderTextColor={colors.mutedText}
             style={[styles.textInput, styles.multilineInput]}
             textAlignVertical="top"
