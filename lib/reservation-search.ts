@@ -28,7 +28,7 @@ export interface TimeSlotDefinition {
 
 export interface TimeSlotViewModel extends TimeSlotDefinition {
   description: string;
-  state: "available" | "pending" | "unavailable";
+  state: "available" | "pending" | "reserved" | "unavailable";
   unavailableReason?:
     | "past_time"
     | "schedule_conflict"
@@ -342,7 +342,7 @@ export function buildTimeSlots(
       return {
         ...slot,
         description: "This timeslot is already reserved.",
-        state: "unavailable" as const,
+        state: "reserved" as const,
         unavailableReason: "room_reserved" as const,
       };
     }
@@ -387,8 +387,14 @@ export function buildTimeSlots(
           conflictingUserReservation.status === "approved"
             ? `You already have an approved reservation for this timeslot in ${conflictingUserReservation.roomName}.`
             : `You already have an ongoing reservation request for this timeslot in ${conflictingUserReservation.roomName}.`,
-        state: "unavailable" as const,
-        unavailableReason: "user_conflict" as const,
+        state:
+          conflictingUserReservation.status === "approved"
+            ? ("reserved" as const)
+            : ("pending" as const),
+        unavailableReason:
+          conflictingUserReservation.status === "approved"
+            ? ("user_conflict" as const)
+            : undefined,
       };
     }
 

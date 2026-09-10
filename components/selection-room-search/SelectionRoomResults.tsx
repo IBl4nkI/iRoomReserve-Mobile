@@ -214,17 +214,30 @@ export default function SelectionRoomResults({
                     timeStringToMinutes(slot.endTime) <= timeStringToMinutes(endTime)
                 );
 
-                if (matchingSlots.some((slot) => slot.state === "available")) {
-                  return [entry.dateKey, "success"];
+                const hasUserReservation = userReservations.some(
+                  (reservation) =>
+                    reservation.date === entry.dateKey &&
+                    (reservation.status === "pending" || reservation.status === "approved")
+                );
+
+                if (hasUserReservation) {
+                  return [entry.dateKey, "info"];
                 }
 
-                if (matchingSlots.some((slot) => slot.state === "pending")) {
+                if (
+                  matchingSlots.length === 0 ||
+                  matchingSlots.every((slot) => slot.state !== "available")
+                ) {
+                  return [entry.dateKey, "danger"];
+                }
+
+                if (matchingSlots.some((slot) => slot.state !== "available")) {
                   return [entry.dateKey, "warning"];
                 }
 
-                return [entry.dateKey, "danger"];
+                return [entry.dateKey, "success"];
               })
-            ) as Record<string, "danger" | "success" | "warning">;
+            ) as Record<string, "danger" | "info" | "success" | "warning">;
 
             return (
               <View key={room.id} style={styles.roomCard}>
@@ -276,6 +289,24 @@ export default function SelectionRoomResults({
 
                     <View style={styles.schedulePreviewCard}>
                       <Text style={styles.schedulePreviewTitle}>View Schedules</Text>
+                      <View style={styles.calendarLegendRow}>
+                        <View style={styles.calendarLegendItem}>
+                          <View style={[styles.calendarLegendDot, styles.calendarLegendDotAvailable]} />
+                          <Text style={styles.calendarLegendText}>Available</Text>
+                        </View>
+                        <View style={styles.calendarLegendItem}>
+                          <View style={[styles.calendarLegendDot, styles.calendarLegendDotPartiallyBooked]} />
+                          <Text style={styles.calendarLegendText}>Partially Booked</Text>
+                        </View>
+                        <View style={styles.calendarLegendItem}>
+                          <View style={[styles.calendarLegendDot, styles.calendarLegendDotReserved]} />
+                          <Text style={styles.calendarLegendText}>Reserved</Text>
+                        </View>
+                        <View style={styles.calendarLegendItem}>
+                          <View style={[styles.calendarLegendDot, styles.calendarLegendDotUnavailable]} />
+                          <Text style={styles.calendarLegendText}>Unavailable</Text>
+                        </View>
+                      </View>
                       <AvailabilityCalendar
                         calendarMonthLabel={calendarMonthLabel}
                         calendarWeeks={calendarWeeks}

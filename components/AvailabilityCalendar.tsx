@@ -10,7 +10,7 @@ interface CalendarEntry {
   inMonth: boolean;
 }
 
-type CalendarDateVariant = "danger" | "success" | "warning";
+type CalendarDateVariant = "danger" | "info" | "success" | "warning";
 type CalendarSelectedVariant = "primary" | "success";
 
 interface AvailabilityCalendarProps {
@@ -52,6 +52,13 @@ export default function AvailabilityCalendar({
       return {
         buttonStyle: styles.calendarDateButtonWarning,
         textStyle: styles.calendarDateTextWarning,
+      };
+    }
+
+    if (variant === "info") {
+      return {
+        buttonStyle: styles.calendarDateButtonInfo,
+        textStyle: styles.calendarDateTextInfo,
       };
     }
 
@@ -203,6 +210,10 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff7ed",
     borderColor: "#fdba74",
   },
+  calendarDateButtonInfo: {
+    backgroundColor: "#eff6ff",
+    borderColor: "#93c5fd",
+  },
   calendarDateButtonDanger: {
     backgroundColor: colors.dangerBackground,
     borderColor: colors.dangerBorder,
@@ -228,6 +239,9 @@ const styles = StyleSheet.create({
   },
   calendarDateTextWarning: {
     color: "#c2410c",
+  },
+  calendarDateTextInfo: {
+    color: "#1d4ed8",
   },
   calendarDateTextDanger: {
     color: colors.dangerText,

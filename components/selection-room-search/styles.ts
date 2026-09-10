@@ -635,6 +635,40 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 10,
   },
+  calendarLegendRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 10,
+  },
+  calendarLegendItem: {
+    alignItems: "center",
+    flexDirection: "row",
+    marginBottom: 5,
+    marginRight: 12,
+  },
+  calendarLegendDot: {
+    borderRadius: 5,
+    height: 10,
+    marginRight: 5,
+    width: 10,
+  },
+  calendarLegendDotAvailable: {
+    backgroundColor: colors.successText,
+  },
+  calendarLegendDotPartiallyBooked: {
+    backgroundColor: "#f59e0b",
+  },
+  calendarLegendDotReserved: {
+    backgroundColor: "#1d4ed8",
+  },
+  calendarLegendDotUnavailable: {
+    backgroundColor: colors.dangerText,
+  },
+  calendarLegendText: {
+    color: colors.secondary,
+    fontFamily: fonts.regular,
+    fontSize: 10,
+  },
   weekNavRow: {
     flexDirection: "row",
     alignItems: "center",

@@ -61,6 +61,15 @@ function getStatusStyles(state: TimeSlotViewModel["state"]) {
     };
   }
 
+  if (state === "reserved") {
+    return {
+      backgroundColor: "#eff6ff",
+      borderColor: "#93c5fd",
+      textColor: "#1d4ed8",
+      labelColor: "#1d4ed8",
+    };
+  }
+
   return {
     backgroundColor: colors.dangerBackground,
     borderColor: colors.dangerBorder,
@@ -122,6 +131,10 @@ function formatFullTime(timeString: string) {
 function getStateLabel(state: TimeSlotViewModel["state"]) {
   if (state === "pending") {
     return "Pending";
+  }
+
+  if (state === "reserved") {
+    return "Reserved";
   }
 
   if (state === "unavailable") {
@@ -412,6 +425,10 @@ export default function DayScheduleModal({
                 style={[styles.legendDot, { backgroundColor: "#fdba74" }]}
               />
               <Text style={styles.legendText}>Pending</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: "#1d4ed8" }]} />
+              <Text style={styles.legendText}>Reserved</Text>
             </View>
             <View style={styles.legendItem}>
               <View

@@ -729,7 +729,7 @@ export default function SelectionRoomSearch({
       state: slot.state === "pending" ? "pending" : "available",
     };
 
-    if (slot.state === "unavailable") {
+    if (slot.state === "unavailable" || slot.state === "reserved") {
       if (slot.unavailableReason === "past_time") {
         Alert.alert(
           "Timeslot Unavailable",
