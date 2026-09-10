@@ -1010,7 +1010,7 @@ export default function ReservationFormScreen() {
   function updateMaterialQuantity(key: MaterialKey, nextValue: number) {
     setMaterials((currentValue) => ({
       ...currentValue,
-      [key]: Math.max(0, nextValue),
+      [key]: Math.min(999, Math.max(0, nextValue)),
     }));
   }
 
