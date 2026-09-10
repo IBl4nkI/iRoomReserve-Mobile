@@ -16,6 +16,7 @@ import DashboardTopNav from '@/components/dashboard/DashboardTopNav';
 import { dashboardStyles as styles } from '@/components/dashboard/styles';
 import { colors, fonts } from '@/constants/theme';
 import { auth } from '@/lib/firebase';
+import { getFeedbackByUser } from '@/services/feedback.service';
 import {
   cancelReservation,
   getReservationsByUser,
@@ -217,6 +218,7 @@ function sortReservations(left: ReservationRecord, right: ReservationRecord) {
 export default function ReservationHistoryScreen() {
   const insets = useSafeAreaInsets();
   const [reservations, setReservations] = React.useState<ReservationRecord[]>([]);
+  const [reviewedReservationIds, setReviewedReservationIds] = React.useState<string[]>([]);
   const [activeFilter, setActiveFilter] = React.useState<ReservationFilter>('pending');
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -228,6 +230,7 @@ export default function ReservationHistoryScreen() {
 
     if (!currentUser) {
       setReservations([]);
+      setReviewedReservationIds([]);
       setError(null);
       setLoading(false);
       return;
@@ -238,8 +241,12 @@ export default function ReservationHistoryScreen() {
     }
 
     try {
-      const nextReservations = await getReservationsByUser(currentUser.uid);
+      const [nextReservations, feedback] = await Promise.all([
+        getReservationsByUser(currentUser.uid),
+        getFeedbackByUser(currentUser.uid),
+      ]);
       setReservations(nextReservations.sort(sortReservations));
+      setReviewedReservationIds(feedback.map((item) => item.reservationId));
       setError(null);
     } catch (caughtError) {
       setError(
@@ -343,6 +350,11 @@ export default function ReservationHistoryScreen() {
       (reservation) => getDisplayStatus(reservation) === activeFilter
     );
   }, [activeFilter, reservations]);
+
+  const reviewedReservationIdSet = React.useMemo(
+    () => new Set(reviewedReservationIds),
+    [reviewedReservationIds]
+  );
 
   const counts = React.useMemo(
     () => ({
@@ -569,7 +581,8 @@ export default function ReservationHistoryScreen() {
                       </Text>
                     </Pressable>
                   ) : null}
-                  {reservation.status === 'completed' ? (
+                  {reservation.status === 'completed' &&
+                  !reviewedReservationIdSet.has(reservation.id) ? (
                     <Pressable
                       style={[styles.inlineSecondaryButton, { marginTop: -2, marginBottom: 0 }]}
                       onPress={() =>
