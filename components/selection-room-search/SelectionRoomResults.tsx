@@ -296,7 +296,7 @@ export default function SelectionRoomResults({
                         </View>
                         <View style={styles.calendarLegendItem}>
                           <View style={[styles.calendarLegendDot, styles.calendarLegendDotPartiallyBooked]} />
-                          <Text style={styles.calendarLegendText}>Partially Booked</Text>
+                          <Text style={styles.calendarLegendText}>Partially Booked / Pending</Text>
                         </View>
                         <View style={styles.calendarLegendItem}>
                           <View style={[styles.calendarLegendDot, styles.calendarLegendDotReserved]} />

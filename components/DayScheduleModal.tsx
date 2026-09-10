@@ -410,37 +410,6 @@ export default function DayScheduleModal({
             </TouchableOpacity>
           </View>
 
-          <View style={styles.legendRow}>
-            <View style={styles.legendItem}>
-              <View
-                style={[
-                  styles.legendDot,
-                  { backgroundColor: colors.successText },
-                ]}
-              />
-              <Text style={styles.legendText}>Available</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View
-                style={[styles.legendDot, { backgroundColor: "#fdba74" }]}
-              />
-              <Text style={styles.legendText}>Pending</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: "#1d4ed8" }]} />
-              <Text style={styles.legendText}>Reserved</Text>
-            </View>
-            <View style={styles.legendItem}>
-              <View
-                style={[
-                  styles.legendDot,
-                  { backgroundColor: colors.dangerText },
-                ]}
-              />
-              <Text style={styles.legendText}>Unavailable</Text>
-            </View>
-          </View>
-
           <ScrollView
             style={styles.scrollArea}
             contentContainerStyle={styles.scrollContent}

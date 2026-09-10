@@ -80,7 +80,8 @@ type MaterialKey =
   | "speakersWithMicrophones"
   | "televisions"
   | "chairs"
-  | "tables";
+  | "tables"
+  | "other";
 
 type EmailStatus = "idle" | "checking" | "invalid" | "valid";
 
@@ -581,7 +582,9 @@ export default function ReservationFormScreen() {
     televisions: 0,
     chairs: 0,
     tables: 0,
+    other: 0,
   });
+  const [otherMaterialName, setOtherMaterialName] = React.useState("");
   const [attachment, setAttachment] = React.useState<ReservationAttachment | null>(null);
   const [attachmentError, setAttachmentError] = React.useState("");
   const [submittingReservation, setSubmittingReservation] = React.useState(false);
@@ -1405,9 +1408,14 @@ export default function ReservationFormScreen() {
         normalizedResolvedRole === "faculty professor" ||
         normalizedResolvedRole === "faculty";
       const userName = `${firstName} ${lastName}`.trim() || currentUser.displayName?.trim() || "e-RoomReserve User";
-      const equipment = Object.fromEntries(
-        Object.entries(materials).filter(([, quantity]) => quantity > 0)
-      );
+      const equipment = Object.fromEntries([
+        ...Object.entries(materials).filter(
+          ([key, quantity]) => key !== "other" && quantity > 0
+        ),
+        ...(otherMaterialName.trim() && materials.other > 0
+          ? [[otherMaterialName.trim(), materials.other] as [string, number]]
+          : []),
+      ]);
 
       const uploadedDocument = attachment
         ? await uploadReservationDocument({
@@ -1896,6 +1904,40 @@ export default function ReservationFormScreen() {
               </View>
             </View>
           ))}
+          <View style={styles.materialRow}>
+            <View style={styles.otherMaterialDetails}>
+              <Text style={styles.otherMaterialLabel}>Others:</Text>
+              <TextInput
+                onChangeText={setOtherMaterialName}
+                placeholder="Specify"
+                placeholderTextColor={colors.mutedText}
+                style={styles.otherMaterialInput}
+                value={otherMaterialName}
+              />
+            </View>
+            <View style={styles.quantityControl}>
+              <TouchableOpacity
+                style={styles.quantityButton}
+                onPress={() => updateMaterialQuantity("other", materials.other - 1)}
+              >
+                <Text style={styles.quantityButtonText}>-</Text>
+              </TouchableOpacity>
+              <TextInput
+                keyboardType="number-pad"
+                onChangeText={(value) =>
+                  updateMaterialQuantity("other", Number(value.replace(/\D/g, "")) || 0)
+                }
+                style={styles.quantityInput}
+                value={String(materials.other)}
+              />
+              <TouchableOpacity
+                style={styles.quantityButton}
+                onPress={() => updateMaterialQuantity("other", materials.other + 1)}
+              >
+                <Text style={styles.quantityButtonText}>+</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
         </View>
 
         {isStudentUser && selectedCampus === "main" ? (
@@ -2354,6 +2396,27 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bold,
     fontSize: 13,
     flex: 1,
+  },
+  otherMaterialDetails: {
+    alignItems: "center",
+    flex: 1,
+    flexDirection: "row",
+    gap: 8,
+  },
+  otherMaterialLabel: {
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 13,
+  },
+  otherMaterialInput: {
+    borderBottomWidth: 1,
+    borderColor: colors.border,
+    color: colors.text,
+    flex: 1,
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    minWidth: 0,
+    paddingVertical: 4,
   },
   quantityControl: {
     flexDirection: "row",
