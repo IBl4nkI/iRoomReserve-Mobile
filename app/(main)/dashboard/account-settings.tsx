@@ -5,6 +5,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Switch,
   StyleSheet,
   Text,
   TextInput,
@@ -22,6 +23,7 @@ import {
   getUserProfile,
   updateUserPassword,
   updateUserProfileName,
+  updatePushNotificationsEnabled,
 } from '@/lib/auth';
 import { auth } from '@/lib/firebase';
 import { dashboardStyles as styles } from '@/components/dashboard/styles';
@@ -31,6 +33,7 @@ interface AccountProfile {
   lastName: string;
   email: string;
   role?: string;
+  pushNotificationsEnabled?: boolean;
 }
 
 function AuthMessage({
@@ -176,6 +179,8 @@ export default function AccountSettingsScreen() {
   const [passwordSuccessMessage, setPasswordSuccessMessage] = React.useState('');
   const [deleteErrorMessage, setDeleteErrorMessage] = React.useState('');
   const [deletingAccount, setDeletingAccount] = React.useState(false);
+  const [pushNotificationsEnabled, setPushNotificationsEnabled] = React.useState(true);
+  const [savingPushNotifications, setSavingPushNotifications] = React.useState(false);
 
   const validatePassword = React.useCallback((password: string): string | null => {
     if (password.length < 8) {
@@ -223,11 +228,13 @@ export default function AccountSettingsScreen() {
           lastName: userProfile.lastName ?? '',
           email: userProfile.email ?? currentUser.email ?? '',
           role: userProfile.role,
+          pushNotificationsEnabled: userProfile.pushNotificationsEnabled !== false,
         };
 
         setProfile(nextProfile);
         setFirstName(nextProfile.firstName);
         setLastName(nextProfile.lastName);
+        setPushNotificationsEnabled(nextProfile.pushNotificationsEnabled !== false);
       } finally {
         if (active) {
           setLoadingProfile(false);
@@ -241,6 +248,52 @@ export default function AccountSettingsScreen() {
       active = false;
     };
   }, []);
+
+  const savePushNotificationPreference = React.useCallback(async (enabled: boolean) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      Alert.alert('Unable to Update', 'Please log in again and try once more.');
+      return;
+    }
+
+    try {
+      setSavingPushNotifications(true);
+      await updatePushNotificationsEnabled(currentUser.uid, enabled);
+      setPushNotificationsEnabled(enabled);
+      setProfile((currentProfile) =>
+        currentProfile
+          ? { ...currentProfile, pushNotificationsEnabled: enabled }
+          : currentProfile
+      );
+    } catch {
+      Alert.alert('Unable to Update', 'Your push notification preference could not be saved.');
+    } finally {
+      setSavingPushNotifications(false);
+    }
+  }, []);
+
+  const handlePushNotificationToggle = React.useCallback(
+    (enabled: boolean) => {
+      if (enabled) {
+        void savePushNotificationPreference(true);
+        return;
+      }
+
+      Alert.alert(
+        'Disable Push Notifications',
+        'Are you sure you want to disable push notifications?',
+        [
+          { style: 'cancel', text: 'Cancel' },
+          {
+            style: 'destructive',
+            text: 'Disable',
+            onPress: () => void savePushNotificationPreference(false),
+          },
+        ]
+      );
+    },
+    [savePushNotificationPreference]
+  );
 
   const handleSaveName = React.useCallback(async () => {
     const currentUser = auth.currentUser;
@@ -272,6 +325,7 @@ export default function AccountSettingsScreen() {
         firstName: trimmedFirstName,
         lastName: trimmedLastName,
         role: currentProfile?.role,
+        pushNotificationsEnabled: currentProfile?.pushNotificationsEnabled,
       }));
       setEditingName(false);
       setNameSuccessMessage('Your name has been updated successfully.');
@@ -393,6 +447,22 @@ export default function AccountSettingsScreen() {
             Review and edit details attached to your
             e-RoomReserve account.
           </Text>
+
+          <View style={[styles.listItem, localStyles.pushNotificationRow]}>
+            <View style={localStyles.pushNotificationContent}>
+              <Text style={styles.mutedLabel}>Push Notifications</Text>
+              <Text style={localStyles.pushNotificationDescription}>
+                Receive reservation updates on this device.
+              </Text>
+            </View>
+                <Switch
+                  disabled={savingPushNotifications}
+                  onValueChange={handlePushNotificationToggle}
+                  thumbColor={colors.white}
+                  trackColor={{ false: colors.border, true: colors.primary }}
+                  value={pushNotificationsEnabled}
+                />
+          </View>
 
           {loadingProfile ? (
             <View style={styles.card}>
@@ -707,6 +777,22 @@ const localStyles = StyleSheet.create({
     flexBasis: 160,
     minWidth: '47%',
     marginBottom: 0,
+  },
+  pushNotificationRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  pushNotificationContent: {
+    flex: 1,
+    paddingRight: 16,
+  },
+  pushNotificationDescription: {
+    color: colors.secondary,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 3,
   },
   successBox: {
     backgroundColor: colors.successBackground,

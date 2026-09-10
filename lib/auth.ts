@@ -36,6 +36,7 @@ type UserProfile = {
   lastName: string;
   email: string;
   expoPushTokens?: string[];
+  pushNotificationsEnabled?: boolean;
   role?: string;
   status?: string;
 };
@@ -438,6 +439,18 @@ export async function saveExpoPushToken(uid: string, token: string) {
     },
     { merge: true }
   );
+}
+
+export async function updatePushNotificationsEnabled(uid: string, enabled: boolean) {
+  await setDoc(
+    doc(db, "users", uid),
+    {
+      pushNotificationsEnabled: enabled,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+  invalidateUserProfileCache(uid);
 }
 
 export async function resendVerificationEmail(email: string, password: string) {

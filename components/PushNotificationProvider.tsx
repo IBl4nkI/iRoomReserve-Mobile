@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import React from "react";
 import { Platform } from "react-native";
 
-import { saveExpoPushToken } from "@/lib/auth";
+import { getUserProfile, saveExpoPushToken } from "@/lib/auth";
 import { auth } from "@/lib/firebase";
 
 const RESERVATION_UPDATES_CHANNEL_ID = "reservation-updates";
@@ -84,6 +84,11 @@ export function PushNotificationProvider({
       }
 
       try {
+        const profile = await getUserProfile(currentUser.uid, { forceRefresh: true });
+        if (!active || profile?.pushNotificationsEnabled === false) {
+          return;
+        }
+
         const pushToken = await registerForPushNotificationsAsync();
         if (!active || !pushToken) {
           return;
