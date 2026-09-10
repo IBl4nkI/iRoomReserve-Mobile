@@ -772,6 +772,21 @@ export default function SelectionRoomSearch({
     }
 
     if (slot.state === "pending") {
+      if (slot.isCurrentUserPendingReservation) {
+        Alert.alert(
+          "Pending Reservation",
+          "You already have a pending reservation for this timeslot. Would you like to go and check it out?",
+          [
+            { style: "cancel", text: "No" },
+            {
+              text: "Yes",
+              onPress: () => router.push("/(main)/dashboard/reservation-history"),
+            },
+          ]
+        );
+        return;
+      }
+
       Alert.alert(
         "Pending Reservation",
         "There is already a pending reservation for this timeslot from a different user. Would you still like to reserve this timeslot?",

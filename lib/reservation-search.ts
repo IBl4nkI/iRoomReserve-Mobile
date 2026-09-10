@@ -28,6 +28,7 @@ export interface TimeSlotDefinition {
 
 export interface TimeSlotViewModel extends TimeSlotDefinition {
   description: string;
+  isCurrentUserPendingReservation?: boolean;
   state: "available" | "pending" | "reserved" | "unavailable";
   unavailableReason?:
     | "past_time"
@@ -369,6 +370,9 @@ export function buildTimeSlots(
       return {
         ...slot,
         description: `There is an ongoing reservation request for this timeslot, currently ${waitingLabel}.`,
+        isCurrentUserPendingReservation: userReservations.some(
+          (reservation) => reservation.id === pendingReservation.id
+        ),
         state: "pending" as const,
       };
     }
@@ -395,6 +399,8 @@ export function buildTimeSlots(
           conflictingUserReservation.status === "approved"
             ? ("user_conflict" as const)
             : undefined,
+        isCurrentUserPendingReservation:
+          conflictingUserReservation.status === "pending" || undefined,
       };
     }
 
