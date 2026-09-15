@@ -18,7 +18,6 @@ import { auth, db } from "./firebase";
 import { stopLocalPresenceMonitoring } from "@/services/presence-monitor.service";
 
 const ALLOWED_DOMAIN = "sdca.edu.ph";
-const SUPERADMIN_EMAIL = "johncyrus.agoncillo@sdca.edu.ph";
 const GOOGLE_WEB_CLIENT_ID = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
 const GOOGLE_ANDROID_CLIENT_ID =
   process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID;
@@ -183,18 +182,6 @@ export async function loginWithEmail(email: string, password: string) {
   if (!credential.user.emailVerified) {
     await signOut(auth);
     throw { code: "auth/email-not-verified" };
-  }
-
-  if (credential.user.email?.toLowerCase() === SUPERADMIN_EMAIL.toLowerCase()) {
-    await saveUserProfile(credential.user.uid, {
-      firstName: credential.user.displayName?.split(" ")[0] || "Super",
-      lastName:
-        credential.user.displayName?.split(" ").slice(1).join(" ") || "Admin",
-      email: credential.user.email,
-      role: "Super Admin",
-      status: "approved",
-    });
-    return credential;
   }
 
   const profile = await getUserProfile(credential.user.uid);

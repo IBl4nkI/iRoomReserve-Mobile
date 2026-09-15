@@ -54,7 +54,7 @@ export type SingleReservationCreateInput =
       date: string;
     })
   | (ReservationCreateBaseInput & {
-      buildingAdminEmail: string;
+      buildingAdminEmail?: string;
       campus: "digi";
       date: string;
     });
@@ -66,7 +66,7 @@ export type RecurringReservationCreateInput =
       campus: "main";
     })
   | (ReservationCreateBaseInput & {
-      buildingAdminEmail: string;
+      buildingAdminEmail?: string;
       campus: "digi";
     });
 

@@ -116,7 +116,6 @@ const WEEKDAY_LABELS: Record<(typeof WEEKDAY_OPTIONS)[number], string> = {
   5: "Fri",
   6: "Sat",
 };
-const DIGITAL_CAMPUS_BUILDING_ADMIN_EMAIL = "kenjimwill.baltero@sdca.edu.ph";
 const ALLOWED_ATTACHMENT_MIME_TYPES = new Set([
   "application/pdf",
   "image/jpeg",
@@ -1467,7 +1466,6 @@ export default function ReservationFormScreen() {
           await createRecurringReservation(
             {
               ...recurringReservationBase,
-              buildingAdminEmail: DIGITAL_CAMPUS_BUILDING_ADMIN_EMAIL,
               campus: "digi",
             },
             selectedDays,
@@ -1509,7 +1507,6 @@ export default function ReservationFormScreen() {
 
             return createReservation({
               ...singleReservationBase,
-              buildingAdminEmail: DIGITAL_CAMPUS_BUILDING_ADMIN_EMAIL,
               campus: "digi",
             });
           })
