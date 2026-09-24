@@ -336,7 +336,7 @@ async function tryConnectToKnownBeaconDevice(
   expectedBase64: string
 ) {
   logPresenceRetryDebug("Trying known beacon device", { deviceId });
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     let connectedDevice: Device | null = null;
 
     try {
@@ -380,7 +380,7 @@ async function tryConnectToKnownBeaconDevice(
         deviceId,
       });
 
-      if (attempt < 2) {
+      if (attempt < 1) {
         await sleep(500);
       }
     }
