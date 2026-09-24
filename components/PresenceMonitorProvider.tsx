@@ -14,6 +14,7 @@ import { auth } from "@/lib/firebase";
 import {
   retryPresenceMonitoringCheck,
   subscribeToPresenceWarnings,
+  stopLocalPresenceMonitoring,
   type PresenceWarningState,
 } from "@/services/presence-monitor.service";
 import { completeReservation } from "@/services/reservations.service";
@@ -73,6 +74,7 @@ export function PresenceMonitorProvider({
             try {
               setFinishing(true);
               await completeReservation(currentWarning.reservationId, currentUser.uid);
+              await stopLocalPresenceMonitoring();
             } catch (error) {
               console.warn("[presence-monitor] finish reservation failed", error);
               Alert.alert(
