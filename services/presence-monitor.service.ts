@@ -83,6 +83,7 @@ let latestWarningState: PresenceWarningState | null = null;
 let activePresenceCheckPromise: Promise<void> | null = null;
 let foregroundMonitorInterval: ReturnType<typeof setInterval> | null = null;
 let bleManager = createBleManager();
+let retainedBeaconDevice: Device | null = null;
 
 function createBleManager() {
   return new BleManager({
@@ -360,7 +361,13 @@ async function tryConnectToKnownBeaconDevice(
             ? connectedDevice.rssi
             : null;
 
-      await discoveredDevice.cancelConnection().catch(() => undefined);
+      if (matches) {
+        logPresenceRetryDebug("Keeping verified beacon connection open", {
+          deviceId,
+        });
+      } else {
+        await discoveredDevice.cancelConnection().catch(() => undefined);
+      }
 
       logPresenceRetryDebug("Known device attempt succeeded", {
         attempt: attempt + 1,
@@ -390,6 +397,27 @@ async function tryConnectToKnownBeaconDevice(
 }
 
 async function readConnectedBeaconPresence(expectedBase64: string) {
+  if (retainedBeaconDevice) {
+    try {
+      const { matches } = await readBeaconCharacteristic(
+        retainedBeaconDevice,
+        expectedBase64
+      );
+      if (matches) {
+        logPresenceRetryDebug("Reusing retained beacon connection", {
+          deviceId: retainedBeaconDevice.id,
+        });
+        return true;
+      }
+    } catch {
+      // The retained link may have dropped; fall through to a fresh scan.
+    }
+
+    const disconnectedDevice = retainedBeaconDevice;
+    retainedBeaconDevice = null;
+    await disconnectedDevice.cancelConnection().catch(() => undefined);
+  }
+
   try {
     const connectedDevices = await bleManager.connectedDevices([BLE_SERVICE_UUID]);
 
@@ -415,6 +443,12 @@ async function readConnectedBeaconPresence(expectedBase64: string) {
   }
 
   return false;
+}
+
+async function releaseRetainedBeaconDevice() {
+  const device = retainedBeaconDevice;
+  retainedBeaconDevice = null;
+  await device?.cancelConnection().catch(() => undefined);
 }
 
 function getNormalizedAppState(): ReservationPresenceAppState {
@@ -588,9 +622,13 @@ async function scanForBeaconPresenceOnce(expectedBeaconId: string) {
   await disconnectConnectedBeaconDevices();
 
   const attemptedDeviceIds = new Set<string>();
+  const pendingCandidates = new Map<string, Device>();
+  let isProcessingCandidate = false;
+  let hasStartedCandidateProcessing = false;
   let foundExpectedBeaconAdvertisement = false;
   let foundExpectedBeaconButReadFailed = false;
   let strongestRssi: number | null = null;
+  let scanTimedOut = false;
 
   return await new Promise<{
     inRange: boolean;
@@ -608,8 +646,7 @@ async function scanForBeaconPresenceOnce(expectedBeaconId: string) {
       bleManager.stopDeviceScan();
       callback();
     };
-
-    const timeout = setTimeout(() => {
+    const completeScan = () =>
       finish(() =>
         resolve({
           inRange: false,
@@ -621,10 +658,127 @@ async function scanForBeaconPresenceOnce(expectedBeaconId: string) {
           rssi: strongestRssi,
         })
       );
+
+    const processNextCandidate = async () => {
+      if (settled || isProcessingCandidate || pendingCandidates.size === 0) {
+        return;
+      }
+
+      isProcessingCandidate = true;
+      if (!hasStartedCandidateProcessing) {
+        hasStartedCandidateProcessing = true;
+        await sleep(250);
+      }
+      if (settled || pendingCandidates.size === 0) {
+        isProcessingCandidate = false;
+        if (scanTimedOut) {
+          completeScan();
+        }
+        return;
+      }
+
+      const candidate = [...pendingCandidates.values()].sort((left, right) => {
+        const leftState = getExpectedBeaconNameState(left, expectedBeaconId);
+        const rightState = getExpectedBeaconNameState(right, expectedBeaconId);
+        const statePriority = (state: typeof leftState) =>
+          state === "match" || state === "service_match" ? 1 : 0;
+        const priorityDifference = statePriority(rightState) - statePriority(leftState);
+        if (priorityDifference !== 0) {
+          return priorityDifference;
+        }
+
+        return (right.rssi ?? -Infinity) - (left.rssi ?? -Infinity);
+      })[0];
+      const deviceId = candidate.id;
+      pendingCandidates.delete(deviceId);
+      const beaconNameState = getExpectedBeaconNameState(candidate, expectedBeaconId);
+      const candidateType = getBeaconCandidateType(candidate, expectedBeaconId);
+      let connectedDevice: Device | null = null;
+      let keepConnectionOpen = false;
+      let failureStage = "connect";
+
+      try {
+        connectedDevice = await bleManager.connectToDevice(candidate.id, {
+          autoConnect: false,
+          timeout: 5_000,
+        });
+        failureStage = "service_discovery";
+        const discoveredDevice =
+          await connectedDevice.discoverAllServicesAndCharacteristics();
+        failureStage = "beacon_characteristic_read";
+        const beaconCharacteristic =
+          await discoveredDevice.readCharacteristicForService(
+            BLE_SERVICE_UUID,
+            BLE_BEACON_CHAR_UUID
+          );
+
+        if (beaconCharacteristic.value === expectedBase64) {
+          foundExpectedBeaconAdvertisement = true;
+          keepConnectionOpen = true;
+          logPresenceRetryDebug("Keeping verified beacon connection open", {
+            deviceId: candidate.id,
+            expectedBeaconId,
+          });
+          clearTimeout(timeout);
+          finish(() =>
+            resolve({
+              inRange: true,
+              reason: "out_of_range",
+              rssi:
+                typeof candidate.rssi === "number" && !Number.isNaN(candidate.rssi)
+                  ? candidate.rssi
+                  : strongestRssi,
+            })
+          );
+          return;
+        }
+
+        logPresenceRetryDebug("Candidate read succeeded but beacon value mismatched", {
+          candidateType,
+          deviceId: candidate.id,
+          expectedBeaconId,
+          readValue: beaconCharacteristic.value ?? null,
+          rssi: typeof candidate.rssi === "number" ? candidate.rssi : strongestRssi,
+        });
+      } catch (error) {
+        if (beaconNameState === "match" || beaconNameState === "service_match") {
+          foundExpectedBeaconButReadFailed = true;
+        }
+        logPresenceRetryDebug("Candidate connect/read failed in scan fallback", {
+          candidateType,
+          deviceId: candidate.id,
+          expectedBeaconId,
+          failureStage,
+          errorCode:
+            typeof error === "object" && error !== null && "errorCode" in error
+              ? error.errorCode
+              : null,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        if (!keepConnectionOpen) {
+          await connectedDevice?.cancelConnection().catch(() => undefined);
+        }
+        isProcessingCandidate = false;
+        if (scanTimedOut) {
+          completeScan();
+        } else {
+          void processNextCandidate();
+        }
+      }
+    };
+
+    const timeout = setTimeout(() => {
+      scanTimedOut = true;
+      pendingCandidates.clear();
+      bleManager.stopDeviceScan();
+      if (!isProcessingCandidate) {
+        completeScan();
+      }
     }, PRESENCE_SCAN_TIMEOUT_MS);
 
     bleManager.startDeviceScan(null, null, async (error, device) => {
-      if (settled) {
+      if (settled || scanTimedOut) {
         return;
       }
 
@@ -673,65 +827,20 @@ async function scanForBeaconPresenceOnce(expectedBeaconId: string) {
       }
 
       if (attemptedDeviceIds.has(device.id)) {
+        const queuedCandidate = pendingCandidates.get(device.id);
+        if (
+          queuedCandidate &&
+          typeof device.rssi === "number" &&
+          (typeof queuedCandidate.rssi !== "number" || device.rssi > queuedCandidate.rssi)
+        ) {
+          pendingCandidates.set(device.id, device);
+        }
         return;
       }
 
       attemptedDeviceIds.add(device.id);
-
-      let connectedDevice: Device | null = null;
-
-      try {
-        connectedDevice = await bleManager.connectToDevice(device.id, {
-          autoConnect: false,
-          timeout: 10_000,
-        });
-        const discoveredDevice =
-          await connectedDevice.discoverAllServicesAndCharacteristics();
-        const beaconCharacteristic =
-          await discoveredDevice.readCharacteristicForService(
-            BLE_SERVICE_UUID,
-            BLE_BEACON_CHAR_UUID
-          );
-
-        if (beaconCharacteristic.value === expectedBase64) {
-          foundExpectedBeaconAdvertisement = true;
-          clearTimeout(timeout);
-          finish(() =>
-            resolve({
-              inRange: true,
-              reason: "out_of_range",
-              rssi:
-                typeof device.rssi === "number" && !Number.isNaN(device.rssi)
-                  ? device.rssi
-                  : strongestRssi,
-            })
-          );
-          await connectedDevice.cancelConnection().catch(() => undefined);
-          return;
-        }
-
-        logPresenceRetryDebug("Candidate read succeeded but beacon value mismatched", {
-          candidateType,
-          deviceId: device.id,
-          expectedBeaconId,
-          readValue: beaconCharacteristic.value ?? null,
-          rssi: typeof device.rssi === "number" ? device.rssi : strongestRssi,
-        });
-        await connectedDevice.cancelConnection().catch(() => undefined);
-      } catch {
-        await connectedDevice?.cancelConnection().catch(() => undefined);
-        if (
-          beaconNameState === "match" ||
-          beaconNameState === "service_match"
-        ) {
-          foundExpectedBeaconButReadFailed = true;
-        }
-        logPresenceRetryDebug("Candidate connect/read failed in scan fallback", {
-          candidateType,
-          deviceId: device.id,
-          expectedBeaconId,
-        });
-      }
+      pendingCandidates.set(device.id, device);
+      void processNextCandidate();
     });
   });
 }
@@ -805,6 +914,20 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
       bluetoothOn,
       inRange: false,
       reason: "bluetooth_off" as const,
+      rssi: null,
+    };
+  }
+
+  const existingConnectionMatches = await readConnectedBeaconPresence(
+    encodeAsciiToBase64(session.beaconId)
+  );
+  if (existingConnectionMatches) {
+    const wifiConnected = await isConnectedToRequiredWifi();
+    return {
+      appState,
+      bluetoothOn,
+      inRange: true,
+      reason: wifiConnected ? null : ("wifi_disconnected" as const),
       rssi: null,
     };
   }
@@ -1109,11 +1232,15 @@ function isBluetoothUnauthorizedError(error: unknown) {
 
 export async function activatePresenceMonitoring(input: {
   beaconId: string;
+  connectedDevice?: Device;
   deviceId?: string;
   reservationId: string;
   userId: string;
 }) {
   initializePresenceMonitorRuntime();
+  if (input.connectedDevice) {
+    retainedBeaconDevice = input.connectedDevice;
+  }
   await ensureNotificationsConfigured();
 
   await startReservationPresenceMonitor(
@@ -1151,6 +1278,7 @@ export async function syncPresenceMonitoringSession(
 
   if (!input) {
     emitWarning(null);
+    await releaseRetainedBeaconDevice();
     await clearActiveSession();
     stopForegroundMonitor();
     if (hasBackgroundActionsRuntime() && ReactNativeBackgroundActions.isRunning()) {
@@ -1191,6 +1319,7 @@ export async function deactivatePresenceMonitoring() {
   const session = await loadActiveSession();
 
   emitWarning(null);
+  await releaseRetainedBeaconDevice();
   await clearActiveSession();
   stopForegroundMonitor();
   if (hasBackgroundActionsRuntime() && ReactNativeBackgroundActions.isRunning()) {
@@ -1208,12 +1337,19 @@ export async function deactivatePresenceMonitoring() {
 
 export async function stopLocalPresenceMonitoring() {
   emitWarning(null);
-  await clearActiveSession();
   stopForegroundMonitor();
 
   if (hasBackgroundActionsRuntime() && ReactNativeBackgroundActions.isRunning()) {
     await ReactNativeBackgroundActions.stop();
   }
+
+  if (activePresenceCheckPromise) {
+    await activePresenceCheckPromise.catch(() => undefined);
+  }
+
+  await releaseRetainedBeaconDevice();
+  await clearActiveSession();
+  emitWarning(null);
 }
 
 export async function retryPresenceMonitoringCheck() {
@@ -1223,6 +1359,11 @@ export async function retryPresenceMonitoringCheck() {
   logPresenceRetryDebug("Manual retry permission result", { permissionGranted });
   if (!permissionGranted) {
     throw new Error("Bluetooth permission is required to retry the room connection.");
+  }
+
+  if (activePresenceCheckPromise) {
+    logPresenceRetryDebug("Waiting for active presence check before manual retry");
+    await activePresenceCheckPromise.catch(() => undefined);
   }
 
   await resetBleManager();

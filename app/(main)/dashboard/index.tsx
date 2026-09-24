@@ -22,6 +22,7 @@ import { colors } from "@/constants/theme";
 import { auth } from "@/lib/firebase";
 import {
   activatePresenceMonitoring,
+  stopLocalPresenceMonitoring,
   syncPresenceMonitoringSession,
 } from "@/services/presence-monitor.service";
 import {
@@ -1210,11 +1211,12 @@ export default function DashboardHomeScreen() {
       if (isReservationStarted) {
         await completeReservation(ongoingReservation.id, currentUser.uid);
         markReservationCompletedLocally(ongoingReservation.id);
+        await stopLocalPresenceMonitoring();
         if (connectedBeaconDeviceRef.current) {
           await connectedBeaconDeviceRef.current.cancelConnection().catch(() => undefined);
           connectedBeaconDeviceRef.current = null;
         }
-        showToast("Reservation finished. Monitoring will continue until staff confirms the room is vacant.");
+        showToast("Reservation finished.");
       } else if (canStartOngoingReservation) {
         if (ongoingRoomBeaconId) {
           Alert.alert(
@@ -1248,14 +1250,15 @@ export default function DashboardHomeScreen() {
                       "bluetooth"
                     );
 
-                    await matchedDevice.cancelConnection().catch(() => undefined);
-                    connectedBeaconDeviceRef.current = null;
-                    await activatePresenceMonitoring({
+                    const presenceMonitoringActivation = activatePresenceMonitoring({
                       beaconId: ongoingRoomBeaconId,
+                      connectedDevice: matchedDevice,
                       deviceId: matchedDevice.id,
                       reservationId: ongoingReservation.id,
                       userId: currentUser.uid,
                     });
+                    connectedBeaconDeviceRef.current = null;
+                    await presenceMonitoringActivation;
 
                     showToast("Reservation started with Bluetooth check-in.");
                     await loadDashboard({ forceRefresh: true, showSpinner: false });
