@@ -941,6 +941,8 @@ export default function DashboardHomeScreen() {
       ) {
         await syncPresenceMonitoringSession({
           beaconId: monitorableRoomBeaconId,
+          beaconRssiThreshold:
+            roomsById[monitorableReservation.roomId]?.beaconRssiThreshold,
           reservationId: monitorableReservation.id,
           userId: currentUser.uid,
         });
@@ -1257,6 +1259,7 @@ export default function DashboardHomeScreen() {
 
                     const presenceMonitoringActivation = activatePresenceMonitoring({
                       beaconId: ongoingRoomBeaconId,
+                      beaconRssiThreshold: ongoingRoom?.beaconRssiThreshold,
                       connectedDevice: matchedDevice,
                       deviceId: matchedDevice.id,
                       reservationId: ongoingReservation.id,

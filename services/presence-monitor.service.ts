@@ -25,7 +25,7 @@ const BLE_BEACON_CHAR_UUID =
 const parsedRssiThreshold = Number(
   process.env.EXPO_PUBLIC_ESP32_BLE_RSSI_THRESHOLD?.trim()
 );
-const BLE_RSSI_THRESHOLD = Number.isFinite(parsedRssiThreshold)
+const DEFAULT_BLE_RSSI_THRESHOLD = Number.isFinite(parsedRssiThreshold)
   ? parsedRssiThreshold
   : -75;
 const REQUIRED_WIFI_SSID =
@@ -60,6 +60,7 @@ type PresenceWarningReason =
 
 interface PresenceMonitorSession {
   beaconId: string;
+  beaconRssiThreshold?: number;
   consecutiveBeaconWarningCount?: number;
   deviceId?: string;
   consecutiveKnownDeviceFailureCount?: number;
@@ -204,8 +205,8 @@ async function isConnectedToRequiredWifi() {
   return matches;
 }
 
-function isBeaconRssiWeak(rssi: number | null) {
-  return typeof rssi === "number" && !Number.isNaN(rssi) && rssi <= BLE_RSSI_THRESHOLD;
+function isBeaconRssiWeak(rssi: number | null, threshold = DEFAULT_BLE_RSSI_THRESHOLD) {
+  return typeof rssi === "number" && !Number.isNaN(rssi) && rssi <= threshold;
 }
 
 function isBeaconWarningReason(reason: PresenceWarningReason | null) {
@@ -961,7 +962,7 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
         reservationId: session.reservationId,
         rssi: knownDevicePresence.rssi,
       });
-      if (isBeaconRssiWeak(knownDevicePresence.rssi)) {
+      if (isBeaconRssiWeak(knownDevicePresence.rssi, session.beaconRssiThreshold ?? DEFAULT_BLE_RSSI_THRESHOLD)) {
         return {
           appState,
           bluetoothOn,
@@ -1032,7 +1033,7 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
     };
   }
 
-  if (isBeaconRssiWeak(presence.rssi)) {
+  if (isBeaconRssiWeak(presence.rssi, session.beaconRssiThreshold ?? DEFAULT_BLE_RSSI_THRESHOLD)) {
     return {
       appState,
       bluetoothOn,
@@ -1273,6 +1274,7 @@ function isBluetoothUnauthorizedError(error: unknown) {
 
 export async function activatePresenceMonitoring(input: {
   beaconId: string;
+  beaconRssiThreshold?: number;
   connectedDevice?: Device;
   deviceId?: string;
   reservationId: string;
@@ -1292,6 +1294,7 @@ export async function activatePresenceMonitoring(input: {
 
   await saveActiveSession({
     beaconId: input.beaconId.trim(),
+    beaconRssiThreshold: input.beaconRssiThreshold ?? DEFAULT_BLE_RSSI_THRESHOLD,
     consecutiveBeaconWarningCount: 0,
     consecutiveKnownDeviceFailureCount: 0,
     deviceId: input.deviceId?.trim() || undefined,
@@ -1309,6 +1312,7 @@ export async function syncPresenceMonitoringSession(
   input:
     | {
         beaconId: string;
+        beaconRssiThreshold?: number;
         deviceId?: string;
         reservationId: string;
         userId: string;
@@ -1331,10 +1335,12 @@ export async function syncPresenceMonitoringSession(
   const existingSession = await loadActiveSession();
   if (
     existingSession?.reservationId !== input.reservationId ||
-    existingSession.beaconId !== input.beaconId
+    existingSession.beaconId !== input.beaconId ||
+    existingSession.beaconRssiThreshold !== (input.beaconRssiThreshold ?? DEFAULT_BLE_RSSI_THRESHOLD)
   ) {
     await saveActiveSession({
       beaconId: input.beaconId.trim(),
+      beaconRssiThreshold: input.beaconRssiThreshold ?? DEFAULT_BLE_RSSI_THRESHOLD,
       consecutiveBeaconWarningCount: 0,
       consecutiveKnownDeviceFailureCount: 0,
       deviceId: input.deviceId?.trim() || existingSession?.deviceId || undefined,
