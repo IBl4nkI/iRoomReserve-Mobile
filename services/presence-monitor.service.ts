@@ -39,7 +39,7 @@ const PRESENCE_NOTIFICATION_CHANNEL_ID = "presence-monitoring";
 const BACKGROUND_TASK_OPTIONS = {
   color: colors.primary,
   linkingURI: "iroomreserve://(main)/dashboard",
-  taskDesc: "Monitoring Bluetooth and room beacon proximity.",
+  taskDesc: "Monitoring occupancy",
   taskIcon: {
     name: "ic_launcher",
     type: "mipmap",
@@ -52,6 +52,7 @@ const BASE64_ALPHABET =
 
 type PresenceWarningReason =
   | "bluetooth_off"
+  | "bluetooth_permission_required"
   | "out_of_range"
   | "wifi_disconnected"
   | "beacon_not_detected"
@@ -175,6 +176,9 @@ async function getCurrentWifiSsid() {
     | undefined;
 
   if (typeof wifiInfoModule?.getCurrentSsid !== "function") {
+    logPresenceRetryDebug("Wi-Fi SSID native module is unavailable", {
+      platform: Platform.OS,
+    });
     return null;
   }
 
@@ -471,6 +475,8 @@ function buildWarningState(
     message:
       reason === "bluetooth_off"
         ? "Turn on Bluetooth to keep this reservation active."
+        : reason === "bluetooth_permission_required"
+          ? "Allow Bluetooth and location permissions for e-RoomReserve in Android settings, then retry."
         : reason === "wifi_disconnected"
           ? `Connect to "${REQUIRED_WIFI_SSID}".`
         : reason === "beacon_connection_failed"
@@ -497,8 +503,10 @@ function getBackgroundNotificationContent(
     taskDesc:
       reason === "bluetooth_off"
         ? "Turn bluetooth back on"
+        : reason === "bluetooth_permission_required"
+          ? "Allow Bluetooth permission for e-RoomReserve"
         : reason === "wifi_disconnected"
-          ? "Connect to St Dominic College of Asia"
+          ? `Connect to ${REQUIRED_WIFI_SSID}`
         : "Room is out of range",
     taskTitle: "e-RoomReserve: Warning",
   };
@@ -986,7 +994,26 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
     }
   }
 
-  const presence = await scanForBeaconPresence(session.beaconId);
+  let presence: Awaited<ReturnType<typeof scanForBeaconPresence>>;
+  try {
+    presence = await scanForBeaconPresence(session.beaconId);
+  } catch (error) {
+    if (!isBluetoothUnauthorizedError(error)) {
+      throw error;
+    }
+
+    logPresenceRetryDebug("Bluetooth authorization is required for beacon scanning", {
+      reservationId: session.reservationId,
+    });
+    return {
+      appState,
+      bluetoothOn,
+      inRange: false,
+      wifiConnected,
+      reason: "bluetooth_permission_required" as const,
+      rssi: null,
+    };
+  }
   logPresenceRetryDebug("Scan-based presence result", {
     reservationId: session.reservationId,
     inRange: presence.inRange,
@@ -1101,6 +1128,7 @@ async function processPresenceCheck(session: PresenceMonitorSession) {
 
   if (effectiveResult.reason) {
     const warning = buildWarningState(effectiveResult.reason, session.reservationId);
+    await updateBackgroundNotification(effectiveResult.reason);
 
     if (effectiveResult.appState === "foreground") {
       emitWarning(warning);
@@ -1113,7 +1141,6 @@ async function processPresenceCheck(session: PresenceMonitorSession) {
       }
     } else if (session.lastBackgroundWarningReason !== effectiveResult.reason) {
       await scheduleBackgroundWarningNotification(warning.message);
-      await updateBackgroundNotification(effectiveResult.reason);
       await saveActiveSession({
         ...session,
         consecutiveBeaconWarningCount: nextConsecutiveBeaconWarningCount,
@@ -1122,9 +1149,7 @@ async function processPresenceCheck(session: PresenceMonitorSession) {
     }
   } else {
     emitWarning(null);
-    if (effectiveResult.appState === "background") {
-      await updateBackgroundNotification(null);
-    }
+    await updateBackgroundNotification(null);
     if (session.lastBackgroundWarningReason !== null) {
       await saveActiveSession({
         ...session,

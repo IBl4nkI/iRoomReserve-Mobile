@@ -108,7 +108,7 @@ export function PresenceMonitorProvider({
             <Text style={styles.helper}>
               This warning will stay on screen until Bluetooth is on,
               the room beacon is back in range,
-              and Wi-Fi is connected to "St. Dominic College of Asia".
+              and Wi-Fi is connected to the required network.
             </Text>
             <TouchableOpacity
               activeOpacity={0.9}
