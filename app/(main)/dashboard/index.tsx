@@ -1021,12 +1021,15 @@ export default function DashboardHomeScreen() {
         const result = await PermissionsAndroid.requestMultiple([
           PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
           PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
         ]);
 
         return (
           result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] ===
             PermissionsAndroid.RESULTS.GRANTED &&
           result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] ===
+            PermissionsAndroid.RESULTS.GRANTED &&
+          result[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] ===
             PermissionsAndroid.RESULTS.GRANTED
         );
       }
@@ -1235,7 +1238,9 @@ export default function DashboardHomeScreen() {
 
                     const permissionGranted = await requestBluetoothPermissions();
                     if (!permissionGranted) {
-                      throw new Error("Bluetooth permission is required for beacon check-in.");
+                      throw new Error(
+                        "Bluetooth and location permissions are required for beacon check-in."
+                      );
                     }
 
                     await ensureBluetoothPoweredOn();

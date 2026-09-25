@@ -182,7 +182,12 @@ async function getCurrentWifiSsid() {
 }
 
 async function isConnectedToRequiredWifi() {
-  const ssid = await getCurrentWifiSsid();
+  let ssid: string | null = null;
+  try {
+    ssid = await getCurrentWifiSsid();
+  } catch (error) {
+    console.warn("[presence-monitor] unable to read connected Wi-Fi SSID", error);
+  }
   const normalizedSsid = ssid?.trim() ?? null;
   const matches = normalizedSsid === REQUIRED_WIFI_SSID;
 
@@ -216,12 +221,15 @@ async function requestBluetoothPermissions() {
     const result = await PermissionsAndroid.requestMultiple([
       PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
       PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
     ]);
 
     return (
       result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN] ===
         PermissionsAndroid.RESULTS.GRANTED &&
       result[PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT] ===
+        PermissionsAndroid.RESULTS.GRANTED &&
+      result[PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION] ===
         PermissionsAndroid.RESULTS.GRANTED
     );
   }
@@ -904,6 +912,7 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
   const appState = getNormalizedAppState();
   const bluetoothState = await bleManager.state();
   const bluetoothOn = bluetoothState === State.PoweredOn;
+  const wifiConnected = await isConnectedToRequiredWifi();
 
   if (!bluetoothOn) {
     logPresenceRetryDebug("Presence check failed because bluetooth is off", {
@@ -913,6 +922,7 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
       appState,
       bluetoothOn,
       inRange: false,
+      wifiConnected,
       reason: "bluetooth_off" as const,
       rssi: null,
     };
@@ -922,11 +932,11 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
     encodeAsciiToBase64(session.beaconId)
   );
   if (existingConnectionMatches) {
-    const wifiConnected = await isConnectedToRequiredWifi();
     return {
       appState,
       bluetoothOn,
       inRange: true,
+      wifiConnected,
       reason: wifiConnected ? null : ("wifi_disconnected" as const),
       rssi: null,
     };
@@ -948,17 +958,18 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
           appState,
           bluetoothOn,
           inRange: false,
+          wifiConnected,
           reason: "out_of_range" as const,
           rssi: knownDevicePresence.rssi,
         };
       }
 
-      const wifiConnected = await isConnectedToRequiredWifi();
       if (!wifiConnected) {
         return {
           appState,
           bluetoothOn,
           inRange: true,
+          wifiConnected,
           reason: "wifi_disconnected" as const,
           rssi: knownDevicePresence.rssi,
         };
@@ -968,6 +979,7 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
         appState,
         bluetoothOn,
         inRange: true,
+        wifiConnected,
         reason: null,
         rssi: knownDevicePresence.rssi,
       };
@@ -987,6 +999,7 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
       appState,
       bluetoothOn,
       inRange: false,
+      wifiConnected,
       reason: presence.reason,
       rssi: presence.rssi,
     };
@@ -997,17 +1010,18 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
       appState,
       bluetoothOn,
       inRange: false,
+      wifiConnected,
       reason: "out_of_range" as const,
       rssi: presence.rssi,
     };
   }
 
-  const wifiConnected = await isConnectedToRequiredWifi();
   if (!wifiConnected) {
     return {
       appState,
       bluetoothOn,
       inRange: true,
+      wifiConnected,
       reason: "wifi_disconnected" as const,
       rssi: presence.rssi,
     };
@@ -1017,6 +1031,7 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
     appState,
     bluetoothOn,
     inRange: true,
+    wifiConnected,
     reason: null,
     rssi: presence.rssi,
   };
@@ -1125,6 +1140,7 @@ async function processPresenceCheck(session: PresenceMonitorSession) {
     bluetoothOn: effectiveResult.bluetoothOn,
     checkedAt,
     inRange: effectiveResult.inRange,
+    wifiConnected: effectiveResult.wifiConnected,
     rssi: effectiveResult.rssi,
     userId: session.userId,
   }).catch((error) => {
@@ -1358,7 +1374,9 @@ export async function retryPresenceMonitoringCheck() {
   const permissionGranted = await requestBluetoothPermissions();
   logPresenceRetryDebug("Manual retry permission result", { permissionGranted });
   if (!permissionGranted) {
-    throw new Error("Bluetooth permission is required to retry the room connection.");
+    throw new Error(
+      "Bluetooth and location permissions are required to retry the room connection."
+    );
   }
 
   if (activePresenceCheckPromise) {

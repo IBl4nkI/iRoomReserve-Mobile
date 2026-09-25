@@ -59,6 +59,7 @@
         }
       ],
       "expo-web-browser",
+      "./plugins/with-wifi-info-module",
       "expo-router",
       "expo-font",
       [
