@@ -210,6 +210,12 @@ export async function getReservationsByCampus(
   );
 }
 
+export async function getPendingReservationsForApprover(): Promise<ReservationRecord[]> {
+  return apiRequest<ReservationRecord[]>("/api/reservations/pending-approvals", {
+    method: "GET",
+  });
+}
+
 export async function getReservationsByRoom(
   roomId: string
 ): Promise<ReservationRecord[]> {
@@ -275,6 +281,26 @@ export async function cancelReservation(
       action: "cancel",
       userId,
     },
+    method: "PATCH",
+  });
+  invalidateReservationQueryCache();
+}
+
+export async function approveReservation(reservationId: string, userEmail: string): Promise<void> {
+  await apiRequest(`/api/reservations/${reservationId}`, {
+    body: { action: "approve", userEmail },
+    method: "PATCH",
+  });
+  invalidateReservationQueryCache();
+}
+
+export async function rejectReservation(
+  reservationId: string,
+  userEmail: string,
+  reason: string
+): Promise<void> {
+  await apiRequest(`/api/reservations/${reservationId}`, {
+    body: { action: "reject", userEmail, reason },
     method: "PATCH",
   });
   invalidateReservationQueryCache();

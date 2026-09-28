@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
@@ -13,13 +13,15 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
   onAllNotifications,
-  shouldHideFacultyInboxNotification,
   shouldHideUtilityStaffInboxNotification,
   type AppNotification,
 } from '@/services/notifications.service';
 import {
+  approveReservation,
   getReservationsByCampus,
+  getPendingReservationsForApprover,
   getReservationsByUser,
+  rejectReservation,
 } from '@/services/reservations.service';
 import { formatTime12h } from '@/services/schedules.service';
 import type { ReservationRecord } from '@/types/reservation';
@@ -35,6 +37,9 @@ interface InboxRowItem {
   date: string;
   time: string;
   roomName: string;
+  equipment: string;
+  approvalDocumentName?: string;
+  approvalDocumentUrl?: string;
   sentAtLabel: string;
   status: InboxRowStatus;
   unread: boolean;
@@ -215,14 +220,21 @@ function buildInboxRows(
       reservationStatus: getReservationStatusLabel(notification),
       purpose:
         reservation?.purpose?.trim() ||
-        notification.message?.trim() ||
-        "No purpose provided.",
+        "Unavailable",
       date: reservation?.date ? formatReservationDate(reservation.date) : "Unavailable",
       time:
         reservation?.startTime && reservation?.endTime
           ? `${formatTime12h(reservation.startTime)} - ${formatTime12h(reservation.endTime)}`
           : "Unavailable",
       roomName: reservation?.roomName?.trim() || "Unavailable",
+      equipment: reservation?.equipment
+        ? Object.entries(reservation.equipment)
+            .filter(([, quantity]) => quantity > 0)
+            .map(([name, quantity]) => `${name} (x${quantity})`)
+            .join(', ') || 'No equipment requested'
+        : 'No equipment requested',
+      approvalDocumentName: reservation?.approvalDocumentName,
+      approvalDocumentUrl: reservation?.approvalDocumentUrl,
       sentAtLabel: formatSentDateFromNotification(notification),
       status: getRowStatus(notification),
       unread: !notification.read,
@@ -232,6 +244,8 @@ function buildInboxRows(
 
 export default function InboxScreen() {
   const insets = useSafeAreaInsets();
+  const inboxScrollRef = React.useRef<ScrollView | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = React.useState(0);
   const [items, setItems] = React.useState<InboxRowItem[]>([]);
   const [expandedItemId, setExpandedItemId] = React.useState<string | null>(null);
   const [activeTab, setActiveTab] = React.useState<InboxTab>('Unread');
@@ -239,6 +253,23 @@ export default function InboxScreen() {
   const [error, setError] = React.useState<string | null>(null);
   const [markingReadId, setMarkingReadId] = React.useState<string | null>(null);
   const [bulkActionLoading, setBulkActionLoading] = React.useState(false);
+  const [isFaculty, setIsFaculty] = React.useState(false);
+  const [reviewingReservationId, setReviewingReservationId] = React.useState<string | null>(null);
+  const [rejectingItemId, setRejectingItemId] = React.useState<string | null>(null);
+  const [rejectReason, setRejectReason] = React.useState('');
+  const [rejectReasonError, setRejectReasonError] = React.useState('');
+
+  React.useEffect(() => {
+    const showEvent = Keyboard.addListener('keyboardDidShow', (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+      requestAnimationFrame(() => inboxScrollRef.current?.scrollToEnd({ animated: true }));
+    });
+    const hideEvent = Keyboard.addListener('keyboardDidHide', () => setKeyboardHeight(0));
+    return () => {
+      showEvent.remove();
+      hideEvent.remove();
+    };
+  }, []);
 
   React.useEffect(() => {
     const currentUser = auth.currentUser;
@@ -257,6 +288,8 @@ export default function InboxScreen() {
         try {
           const profile = await getUserProfile(currentUser.uid);
           const normalizedRole = profile?.role?.trim() ?? null;
+          const isFacultyRole = ['faculty', 'faculty professor'].includes(normalizedRole?.toLowerCase() ?? '');
+          setIsFaculty(isFacultyRole);
           const campus =
             profile?.campus === "main" || profile?.campus === "digi"
               ? profile.campus
@@ -265,22 +298,27 @@ export default function InboxScreen() {
             normalizedRole === "Utility Staff" && campus
               ? await getReservationsByCampus(campus)
               : await getReservationsByUser(currentUser.uid);
+          const assignedApprovals = isFacultyRole
+            ? await getPendingReservationsForApprover()
+            : [];
+          const reservationDetails = [
+            ...reservations,
+            ...assignedApprovals.filter(
+              (approval) => !reservations.some((reservation) => reservation.id === approval.id)
+            ),
+          ];
           const visibleNotifications =
             normalizedRole === "Utility Staff"
               ? notifications.filter(
                   (notification) => !shouldHideUtilityStaffInboxNotification(notification)
                 )
-              : normalizedRole === "Faculty"
-                ? notifications.filter(
-                    (notification) => !shouldHideFacultyInboxNotification(notification)
-                  )
               : notifications;
 
           if (!active) {
             return;
           }
 
-          setItems(buildInboxRows(visibleNotifications, reservations));
+          setItems(buildInboxRows(visibleNotifications, reservationDetails));
           setError(null);
         } catch (caughtError) {
           if (!active) {
@@ -339,6 +377,43 @@ export default function InboxScreen() {
     }
   }, [markingReadId]);
 
+  const handleApprove = React.useCallback(async (item: InboxRowItem) => {
+    const email = auth.currentUser?.email;
+    if (!email || reviewingReservationId) return;
+    try {
+      setReviewingReservationId(item.id);
+      await approveReservation(item.reservationId, email);
+      await markNotificationRead(item.id);
+      Alert.alert('Approved', 'The reservation request has been approved.');
+    } catch (caughtError) {
+      Alert.alert('Unable to approve', caughtError instanceof Error ? caughtError.message : 'Please try again.');
+    } finally {
+      setReviewingReservationId(null);
+    }
+  }, [reviewingReservationId]);
+
+  const handleReject = React.useCallback(async (item: InboxRowItem) => {
+    const email = auth.currentUser?.email;
+    if (!email || reviewingReservationId) return;
+    if (!rejectReason.trim()) {
+      setRejectReasonError('Please state a reason for rejection.');
+      return;
+    }
+    try {
+      setReviewingReservationId(item.id);
+      await rejectReservation(item.reservationId, email, rejectReason.trim());
+      await markNotificationRead(item.id);
+      setRejectingItemId(null);
+      setRejectReason('');
+      setRejectReasonError('');
+      Alert.alert('Rejected', 'The reservation request has been rejected.');
+    } catch (caughtError) {
+      Alert.alert('Unable to reject', caughtError instanceof Error ? caughtError.message : 'Please try again.');
+    } finally {
+      setReviewingReservationId(null);
+    }
+  }, [rejectReason, reviewingReservationId]);
+
   const handleMarkAllAsRead = React.useCallback(async () => {
     const currentUser = auth.currentUser;
     if (!currentUser || bulkActionLoading) {
@@ -386,11 +461,13 @@ export default function InboxScreen() {
 
   return (
     <ScrollView
+      ref={inboxScrollRef}
       stickyHeaderIndices={[0]}
+      keyboardShouldPersistTaps="handled"
       contentContainerStyle={[
         styles.container,
         {
-          paddingBottom: Math.max(insets.bottom, 0),
+          paddingBottom: Math.max(insets.bottom, 0) + (keyboardHeight ? keyboardHeight + 120 : 0),
         },
       ]}
     >
@@ -536,15 +613,114 @@ export default function InboxScreen() {
                   {expandedItemId === item.id ? (
                     <View style={styles.inboxNotificationExpanded}>
                       <Text style={styles.inboxNotificationDetailText}>
-                        Room Name: {item.roomName}
+                        Purpose: {item.purpose}
                       </Text>
                       <Text style={styles.inboxNotificationDetailText}>
-                        Date: {item.date}
+                        Requested Equipment: {item.equipment}
                       </Text>
-                      <Text style={styles.inboxNotificationDetailText}>
-                        Time: {item.time}
-                      </Text>
-                      {item.unread ? (
+                      {item.approvalDocumentUrl ? (
+                        <View style={{ marginTop: 6 }}>
+                          <Text style={styles.inboxNotificationDetailText}>
+                            Concept Paper / Approval Letter:
+                          </Text>
+                          <Pressable
+                            onPress={(event) => {
+                              event.stopPropagation();
+                              void Linking.openURL(item.approvalDocumentUrl!);
+                            }}
+                          >
+                            <Text style={[styles.inboxNotificationDetailText, { color: colors.primary, textDecorationLine: 'underline' }]}>
+                              {item.approvalDocumentName || 'Open attachment'}
+                            </Text>
+                          </Pressable>
+                        </View>
+                      ) : null}
+                      {item.unread && isFaculty && item.status === 'Pending' ? (
+                        <View style={{ gap: 10, marginTop: 14 }}>
+                          {rejectingItemId === item.id ? (
+                            <View style={{ gap: 6 }}>
+                              <Text style={{ color: '#292524', fontSize: 13, fontWeight: '700' }}>
+                                Reason for Rejection:
+                              </Text>
+                              <TextInput
+                                value={rejectReason}
+                                onChangeText={(value) => {
+                                  setRejectReason(value);
+                                  if (value.trim()) setRejectReasonError('');
+                                }}
+                                onFocus={() => {
+                                  setTimeout(() => inboxScrollRef.current?.scrollToEnd({ animated: true }), 100);
+                                }}
+                                placeholder="Enter a reason"
+                                multiline
+                                style={{ borderColor: '#d6d3d1', borderRadius: 12, borderWidth: 1, minHeight: 76, padding: 12 }}
+                              />
+                              {rejectReasonError ? (
+                                <Text style={{ color: '#b91c1c', fontSize: 12 }}>
+                                  {rejectReasonError}
+                                </Text>
+                              ) : null}
+                            </View>
+                          ) : null}
+                          <View style={{ flexDirection: 'row', gap: 10, flexWrap: 'wrap' }}>
+                            <Pressable
+                              disabled={reviewingReservationId === item.id}
+                              onPress={(event) => {
+                                event.stopPropagation();
+                                if (rejectingItemId === item.id) {
+                                  void handleReject(item);
+                                } else {
+                                  void handleApprove(item);
+                                }
+                              }}
+                              style={[
+                                styles.inboxNotificationActionButton,
+                                rejectingItemId === item.id
+                                  ? styles.inboxNotificationRejectButton
+                                  : styles.inboxNotificationApproveButton,
+                                reviewingReservationId === item.id ? styles.inboxNotificationActionButtonDisabled : null,
+                              ]}
+                            >
+                              <Text style={[
+                                styles.inboxNotificationActionButtonText,
+                                rejectingItemId === item.id
+                                  ? styles.inboxNotificationRejectButtonText
+                                  : styles.inboxNotificationApproveButtonText,
+                              ]}>
+                                {reviewingReservationId === item.id ? 'Processing...' : rejectingItemId === item.id ? 'Confirm Reject' : 'Approve'}
+                              </Text>
+                            </Pressable>
+                            <Pressable
+                              disabled={reviewingReservationId === item.id}
+                              onPress={(event) => {
+                                event.stopPropagation();
+                                if (rejectingItemId === item.id) {
+                                  setRejectingItemId(null);
+                                  setRejectReason('');
+                                  setRejectReasonError('');
+                                } else {
+                                  setRejectingItemId(item.id);
+                                  setRejectReasonError('');
+                                }
+                              }}
+                              style={[
+                                styles.inboxNotificationActionButton,
+                                rejectingItemId === item.id
+                                  ? styles.inboxNotificationCancelButton
+                                  : styles.inboxNotificationRejectButton,
+                                reviewingReservationId === item.id ? styles.inboxNotificationActionButtonDisabled : null,
+                              ]}
+                            >
+                              <Text style={[
+                                styles.inboxNotificationActionButtonText,
+                                rejectingItemId === item.id
+                                  ? styles.inboxNotificationCancelButtonText
+                                  : styles.inboxNotificationRejectButtonText,
+                              ]}>{rejectingItemId === item.id ? 'Cancel' : 'Reject'}</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      ) : item.unread ? (
                         <Pressable
                           style={[
                             styles.inboxNotificationActionButton,

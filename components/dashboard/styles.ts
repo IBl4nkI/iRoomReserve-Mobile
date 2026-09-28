@@ -784,6 +784,27 @@ export const dashboardStyles = StyleSheet.create({
   inboxNotificationActionButtonDisabled: {
     opacity: 0.6,
   },
+  inboxNotificationApproveButton: {
+    borderColor: '#86efac',
+    backgroundColor: '#dcfce7',
+  },
+  inboxNotificationRejectButton: {
+    borderColor: '#fca5a5',
+    backgroundColor: '#fee2e2',
+  },
+  inboxNotificationCancelButton: {
+    borderColor: '#d6d3d1',
+    backgroundColor: '#e7e5e4',
+  },
+  inboxNotificationApproveButtonText: {
+    color: '#166534',
+  },
+  inboxNotificationRejectButtonText: {
+    color: '#b91c1c',
+  },
+  inboxNotificationCancelButtonText: {
+    color: '#57534e',
+  },
   inboxNotificationActionButtonText: {
     fontSize: 12,
     fontFamily: fonts.bold,
