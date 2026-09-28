@@ -1067,9 +1067,6 @@ export default function DashboardHomeScreen() {
 
       const expectedBase64 = encodeAsciiToBase64(expectedBeaconId);
       const attemptedDeviceIds = new Set<string>();
-      let scannedDeviceCount = 0;
-      let attemptedConnectionCount = 0;
-      let lastSeenDeviceSummary = "";
       let lastReadBeaconId = "";
 
       bleManager.stopDeviceScan();
@@ -1105,7 +1102,7 @@ export default function DashboardHomeScreen() {
           finish(() =>
             reject(
               new Error(
-                `Couldn't find the room beacon for ${expectedBeaconId}. Debug: scanned ${scannedDeviceCount} device(s), attempted ${attemptedConnectionCount} connection(s), last device "${lastSeenDeviceSummary}", last beacon read "${lastReadBeaconId || "none"}".`
+                `Couldn't find the room beacon for ${expectedBeaconId}.`
               )
             )
           );
@@ -1127,8 +1124,6 @@ export default function DashboardHomeScreen() {
             return;
           }
 
-          scannedDeviceCount += 1;
-          lastSeenDeviceSummary = `${device.name ?? "unnamed"} / ${device.id} / RSSI ${device.rssi ?? "n/a"}`;
           logBleDebug("Discovered device", {
             id: device.id,
             name: device.name,
@@ -1157,7 +1152,6 @@ export default function DashboardHomeScreen() {
           }
 
           attemptedDeviceIds.add(device.id);
-          attemptedConnectionCount += 1;
 
           let connectedDevice: Device | null = null;
 
