@@ -28,9 +28,6 @@ const parsedRssiThreshold = Number(
 const DEFAULT_BLE_RSSI_THRESHOLD = Number.isFinite(parsedRssiThreshold)
   ? parsedRssiThreshold
   : -75;
-const REQUIRED_WIFI_SSID =
-  process.env.EXPO_PUBLIC_REQUIRED_WIFI_SSID?.trim() ||
-  "St Dominic College of Asia";
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const PRESENCE_SCAN_TIMEOUT_MS = 10_000;
 const CONSECUTIVE_BEACON_WARNINGS_REQUIRED = 2;
@@ -54,7 +51,6 @@ type PresenceWarningReason =
   | "bluetooth_off"
   | "bluetooth_permission_required"
   | "out_of_range"
-  | "wifi_disconnected"
   | "beacon_not_detected"
   | "beacon_connection_failed";
 
@@ -163,46 +159,6 @@ function getBeaconCandidateType(
   }
 
   return "mismatch" as const;
-}
-
-async function getCurrentWifiSsid() {
-  if (Platform.OS !== "android") {
-    return null;
-  }
-
-  const wifiInfoModule = NativeModules.WifiInfoModule as
-    | {
-        getCurrentSsid?: () => Promise<string | null>;
-      }
-    | undefined;
-
-  if (typeof wifiInfoModule?.getCurrentSsid !== "function") {
-    logPresenceRetryDebug("Wi-Fi SSID native module is unavailable", {
-      platform: Platform.OS,
-    });
-    return null;
-  }
-
-  return await wifiInfoModule.getCurrentSsid();
-}
-
-async function isConnectedToRequiredWifi() {
-  let ssid: string | null = null;
-  try {
-    ssid = await getCurrentWifiSsid();
-  } catch (error) {
-    console.warn("[presence-monitor] unable to read connected Wi-Fi SSID", error);
-  }
-  const normalizedSsid = ssid?.trim() ?? null;
-  const matches = normalizedSsid === REQUIRED_WIFI_SSID;
-
-  logPresenceRetryDebug("Wi-Fi SSID check", {
-    actualSsid: normalizedSsid,
-    expectedSsid: REQUIRED_WIFI_SSID,
-    matches,
-  });
-
-  return matches;
 }
 
 function isBeaconRssiWeak(rssi: number | null, threshold = DEFAULT_BLE_RSSI_THRESHOLD) {
@@ -478,8 +434,6 @@ function buildWarningState(
         ? "Turn on Bluetooth to keep this reservation active."
         : reason === "bluetooth_permission_required"
           ? "Allow Bluetooth and location permissions for e-RoomReserve in Android settings, then retry."
-        : reason === "wifi_disconnected"
-          ? `Connect to "${REQUIRED_WIFI_SSID}".`
         : reason === "beacon_connection_failed"
           ? "We found the room beacon, but couldn't reconnect to it yet. Keep Bluetooth on and retry in a moment."
         : reason === "beacon_not_detected"
@@ -506,8 +460,6 @@ function getBackgroundNotificationContent(
         ? "Turn bluetooth back on"
         : reason === "bluetooth_permission_required"
           ? "Allow Bluetooth permission for e-RoomReserve"
-        : reason === "wifi_disconnected"
-          ? `Connect to ${REQUIRED_WIFI_SSID}`
         : "Room is out of range",
     taskTitle: "e-RoomReserve: Warning",
   };
@@ -921,7 +873,6 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
   const appState = getNormalizedAppState();
   const bluetoothState = await bleManager.state();
   const bluetoothOn = bluetoothState === State.PoweredOn;
-  const wifiConnected = await isConnectedToRequiredWifi();
 
   if (!bluetoothOn) {
     logPresenceRetryDebug("Presence check failed because bluetooth is off", {
@@ -931,7 +882,6 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
       appState,
       bluetoothOn,
       inRange: false,
-      wifiConnected,
       reason: "bluetooth_off" as const,
       rssi: null,
     };
@@ -945,8 +895,7 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
       appState,
       bluetoothOn,
       inRange: true,
-      wifiConnected,
-      reason: wifiConnected ? null : ("wifi_disconnected" as const),
+      reason: null,
       rssi: null,
     };
   }
@@ -967,19 +916,7 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
           appState,
           bluetoothOn,
           inRange: false,
-          wifiConnected,
           reason: "out_of_range" as const,
-          rssi: knownDevicePresence.rssi,
-        };
-      }
-
-      if (!wifiConnected) {
-        return {
-          appState,
-          bluetoothOn,
-          inRange: true,
-          wifiConnected,
-          reason: "wifi_disconnected" as const,
           rssi: knownDevicePresence.rssi,
         };
       }
@@ -988,7 +925,6 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
         appState,
         bluetoothOn,
         inRange: true,
-        wifiConnected,
         reason: null,
         rssi: knownDevicePresence.rssi,
       };
@@ -1010,7 +946,6 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
       appState,
       bluetoothOn,
       inRange: false,
-      wifiConnected,
       reason: "bluetooth_permission_required" as const,
       rssi: null,
     };
@@ -1027,7 +962,6 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
       appState,
       bluetoothOn,
       inRange: false,
-      wifiConnected,
       reason: presence.reason,
       rssi: presence.rssi,
     };
@@ -1038,19 +972,7 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
       appState,
       bluetoothOn,
       inRange: false,
-      wifiConnected,
       reason: "out_of_range" as const,
-      rssi: presence.rssi,
-    };
-  }
-
-  if (!wifiConnected) {
-    return {
-      appState,
-      bluetoothOn,
-      inRange: true,
-      wifiConnected,
-      reason: "wifi_disconnected" as const,
       rssi: presence.rssi,
     };
   }
@@ -1059,7 +981,6 @@ async function performPresenceCheck(session: PresenceMonitorSession) {
     appState,
     bluetoothOn,
     inRange: true,
-    wifiConnected,
     reason: null,
     rssi: presence.rssi,
   };
@@ -1166,7 +1087,6 @@ async function processPresenceCheck(session: PresenceMonitorSession) {
     bluetoothOn: effectiveResult.bluetoothOn,
     checkedAt,
     inRange: effectiveResult.inRange,
-    wifiConnected: effectiveResult.wifiConnected,
     rssi: effectiveResult.rssi,
     userId: session.userId,
   }).catch((error) => {

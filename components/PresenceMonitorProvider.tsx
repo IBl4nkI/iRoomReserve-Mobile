@@ -106,9 +106,8 @@ export function PresenceMonitorProvider({
             <Text style={styles.title}>Action needed to keep this room active</Text>
             <Text style={styles.message}>{warning?.message}</Text>
             <Text style={styles.helper}>
-              This warning will stay on screen until Bluetooth is on,
-              the room beacon is back in range,
-              and Wi-Fi is connected to the required network.
+              This warning will stay on screen until Bluetooth is on and the
+              room beacon is back in range.
             </Text>
             <TouchableOpacity
               activeOpacity={0.9}

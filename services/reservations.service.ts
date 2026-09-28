@@ -318,7 +318,6 @@ export async function sendReservationPresenceHeartbeat(
     bluetoothOn: boolean;
     checkedAt?: string;
     inRange: boolean;
-    wifiConnected?: boolean;
     rssi?: number | null;
     userId: string;
   }
