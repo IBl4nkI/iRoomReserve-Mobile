@@ -112,7 +112,7 @@ function logBleDebug(message: string, extra?: Record<string, unknown>) {
 }
 
 function getExpectedBeaconNameState(
-  device: Pick<Device, "localName" | "name">,
+  device: Pick<Device, "localName" | "name" | "serviceUUIDs">,
   expectedBeaconId: string
 ) {
   const normalizedExpectedBeaconId = expectedBeaconId.trim().toLowerCase();
@@ -123,6 +123,17 @@ function getExpectedBeaconNameState(
   const visibleNames = [device.localName, device.name]
     .map((value) => value?.trim().toLowerCase())
     .filter((value): value is string => Boolean(value));
+  const normalizedServiceUuid = BLE_SERVICE_UUID.toLowerCase();
+  const visibleServiceUuids = (device.serviceUUIDs ?? [])
+    .map((value) => value?.trim().toLowerCase())
+    .filter((value): value is string => Boolean(value));
+
+  if (
+    normalizedServiceUuid &&
+    visibleServiceUuids.includes(normalizedServiceUuid)
+  ) {
+    return "service_match" as const;
+  }
 
   if (visibleNames.length === 0) {
     return "missing" as const;
@@ -1102,7 +1113,7 @@ export default function DashboardHomeScreen() {
           finish(() =>
             reject(
               new Error(
-                `Couldn't find the room beacon for ${expectedBeaconId}.`
+                `Couldn't find room beacon ${expectedBeaconId}.`
               )
             )
           );
@@ -1128,6 +1139,7 @@ export default function DashboardHomeScreen() {
             id: device.id,
             name: device.name,
             localName: device.localName,
+            serviceUUIDs: device.serviceUUIDs ?? [],
             rssi: device.rssi,
           });
 
@@ -1144,11 +1156,12 @@ export default function DashboardHomeScreen() {
           }
 
           if (beaconNameState === "missing") {
-            logBleDebug("Device name unavailable, falling back to characteristic verification", {
+            logBleDebug("Device skipped because beacon name and service UUID are unavailable", {
               expectedBeaconId,
               id: device.id,
               rssi: device.rssi,
             });
+            return;
           }
 
           attemptedDeviceIds.add(device.id);

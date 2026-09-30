@@ -788,6 +788,15 @@ async function scanForBeaconPresenceOnce(expectedBeaconId: string) {
         return;
       }
 
+      if (beaconNameState === "missing") {
+        logPresenceRetryDebug("Candidate skipped because beacon name and service UUID are unavailable", {
+          candidateType,
+          deviceId: device.id,
+          expectedBeaconId,
+        });
+        return;
+      }
+
       if (
         beaconNameState === "match" ||
         beaconNameState === "service_match"
