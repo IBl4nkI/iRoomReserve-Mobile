@@ -29,7 +29,8 @@
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_WIFI_STATE",
         "android.permission.POST_NOTIFICATIONS",
-        "android.permission.FOREGROUND_SERVICE"
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
@@ -61,6 +62,7 @@
       "expo-web-browser",
       "expo-router",
       "expo-font",
+      "./plugins/withBackgroundActionsForegroundService",
       [
         "react-native-ble-plx",
         {

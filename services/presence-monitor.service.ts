@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import ReactNativeBackgroundActions from "react-native-background-actions";
+import type { BackgroundTaskOptions } from "react-native-background-actions";
 import {
   AppState,
   NativeModules,
@@ -35,6 +36,7 @@ const KNOWN_DEVICE_FAILURES_BEFORE_RESET = 2;
 const PRESENCE_NOTIFICATION_CHANNEL_ID = "presence-monitoring";
 const BACKGROUND_TASK_OPTIONS = {
   color: colors.primary,
+  foregroundServiceType: ["connectedDevice"],
   linkingURI: "iroomreserve://(main)/dashboard",
   taskDesc: "Monitoring occupancy",
   taskIcon: {
@@ -43,7 +45,7 @@ const BACKGROUND_TASK_OPTIONS = {
   },
   taskName: "iRoomReservePresenceMonitor",
   taskTitle: "e-RoomReserve monitoring active",
-} as const;
+} satisfies BackgroundTaskOptions;
 const BASE64_ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
@@ -1174,7 +1176,9 @@ async function ensureBackgroundMonitorRunning() {
     return;
   }
 
-  if (currentAppState === "active") {
+  // Start the foreground service while the app is visible. Android 12+ can
+  // reject a foreground-service start initiated only after backgrounding.
+  if (!(await loadActiveSession())) {
     return;
   }
 

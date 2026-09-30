@@ -127,7 +127,8 @@ export function PushNotificationProvider({
       }
     };
 
-    void registerCurrentUser();
+    // onAuthStateChanged immediately reports the current user. Registering
+    // directly as well can open two Android permission prompts at once.
     const authUnsubscribe = auth.onAuthStateChanged(() => {
       void registerCurrentUser();
     });
