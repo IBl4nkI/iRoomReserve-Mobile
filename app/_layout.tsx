@@ -58,6 +58,15 @@ export default function RootLayout() {
         setHasRole(Boolean(profile?.role));
         setProfileRole(profile?.role?.trim() ?? null);
         setProfileStatus(profile?.status ?? null);
+      } catch (error) {
+        // Auth restoration must not reject out of Firebase's state listener. A
+        // temporary Firestore/network failure should leave the app usable.
+        console.warn('[auth] unable to load user profile during startup', error);
+        if (authRequestIdRef.current === requestId) {
+          setHasRole(null);
+          setProfileRole(null);
+          setProfileStatus(null);
+        }
       } finally {
         if (authRequestIdRef.current === requestId) {
           setLoading(false);

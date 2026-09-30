@@ -43,7 +43,18 @@ async function ensureNotificationChannel() {
 
 function routeFromNotificationData(data: Record<string, unknown> | undefined) {
   const candidateRoute = typeof data?.route === "string" ? data.route.trim() : "";
-  return candidateRoute || INBOX_ROUTE;
+  // Notification payloads are external input. Only accept app-local paths.
+  return candidateRoute.startsWith("/") && !candidateRoute.startsWith("//")
+    ? candidateRoute
+    : INBOX_ROUTE;
+}
+
+function openNotificationRoute(route: string) {
+  try {
+    router.push(route as never);
+  } catch (error) {
+    console.warn("[push-notifications] unable to open notification route", error);
+  }
 }
 
 async function registerForPushNotificationsAsync() {
@@ -126,19 +137,23 @@ export function PushNotificationProvider({
         const route = routeFromNotificationData(
           response.notification.request.content.data as Record<string, unknown> | undefined
         );
-        router.push(route as never);
+        openNotificationRoute(route);
       });
 
-    void Notifications.getLastNotificationResponseAsync().then((response) => {
-      if (!active || !response) {
-        return;
-      }
+    void Notifications.getLastNotificationResponseAsync()
+      .then((response) => {
+        if (!active || !response) {
+          return;
+        }
 
-      const route = routeFromNotificationData(
-        response.notification.request.content.data as Record<string, unknown> | undefined
-      );
-      router.push(route as never);
-    });
+        const route = routeFromNotificationData(
+          response.notification.request.content.data as Record<string, unknown> | undefined
+        );
+        openNotificationRoute(route);
+      })
+      .catch((error) => {
+        console.warn("[push-notifications] unable to read launch notification", error);
+      });
 
     return () => {
       active = false;
