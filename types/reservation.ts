@@ -51,6 +51,12 @@ export interface ReservationRecord {
   reason?: string;
   status: ReservationStatus;
   adminUid: string | null;
+  createdAt?: {
+    _nanoseconds?: number;
+    _seconds?: number;
+    seconds?: number;
+    nanoseconds?: number;
+  } | null;
   recurringGroupId?: string;
   dates?: string[];
   groupedReservationIds?: string[];

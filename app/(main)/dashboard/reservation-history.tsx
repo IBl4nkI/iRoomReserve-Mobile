@@ -6,10 +6,12 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
+  StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import DashboardTopNav from '@/components/dashboard/DashboardTopNav';
@@ -31,6 +33,8 @@ type ReservationFilter =
   | 'completed'
   | 'rejected'
   | 'all';
+type ReservationDateRange = 'last7' | 'last30';
+type HistoryDropdown = 'date' | 'type' | null;
 
 type ReservationDisplayStatus = ReservationStatus | 'expired';
 
@@ -208,18 +212,265 @@ function getDisplayStatusTextStyle(status: ReservationDisplayStatus) {
 }
 
 function sortReservations(left: ReservationRecord, right: ReservationRecord) {
+  const createdAtDifference =
+    (getTimestampDate(left.createdAt)?.getTime() ?? 0) -
+    (getTimestampDate(right.createdAt)?.getTime() ?? 0);
+
   return (
+    -createdAtDifference ||
     right.date.localeCompare(left.date) ||
     right.startTime.localeCompare(left.startTime) ||
     right.id.localeCompare(left.id)
   );
 }
 
+function getActivityDate(reservation: ReservationRecord) {
+  return (
+    getTimestampDate(reservation.createdAt) ??
+    (reservation.date ? new Date(`${reservation.date}T00:00:00`) : null)
+  );
+}
+
+function getActivityMonthKey(reservation: ReservationRecord) {
+  const date = getActivityDate(reservation);
+  return date
+    ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
+    : 'unknown';
+}
+
+function getActivityMonthLabel(reservation: ReservationRecord) {
+  const date = getActivityDate(reservation);
+  return date
+    ? date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    : 'Date unavailable';
+}
+
+function isWithinDateRange(
+  reservation: ReservationRecord,
+  range: ReservationDateRange
+) {
+  const activityDate = getActivityDate(reservation);
+  if (!activityDate || Number.isNaN(activityDate.getTime())) {
+    return false;
+  }
+
+  const end = new Date();
+  end.setHours(23, 59, 59, 999);
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - (range === 'last7' ? 6 : 29));
+
+  return activityDate >= start && activityDate <= end;
+}
+
+function getDefaultFilter(reservations: ReservationRecord[]): ReservationFilter {
+  if (reservations.some((reservation) => getDisplayStatus(reservation) === 'pending')) {
+    return 'pending';
+  }
+  if (reservations.some((reservation) => getDisplayStatus(reservation) === 'approved')) {
+    return 'approved';
+  }
+  if (reservations.some((reservation) => reservation.status === 'completed')) {
+    return 'completed';
+  }
+  return 'all';
+}
+
+function DropdownChevron({ direction = 'down' }: { direction?: 'down' | 'right' }) {
+  const path = direction === 'right' ? 'M6 3.5 10.5 8 6 12.5' : 'm3.5 6 4.5 4.5L12.5 6';
+  return (
+    <Svg width={16} height={16} viewBox="0 0 16 16" accessibilityLabel="Open options">
+      <Path
+        d={path}
+        fill="none"
+        stroke={colors.secondary}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+function DropdownCheck() {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 16 16" accessibilityLabel="Selected">
+      <Path
+        d="m3 8.5 3.2 3.2L13 5"
+        fill="none"
+        stroke={colors.primary}
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <Svg width={18} height={18} viewBox="0 0 18 18" accessibilityLabel="Calendar">
+      <Path
+        d="M5 2.5v3M13 2.5v3M3 7h12M4 4h10a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"
+        fill="none"
+        stroke={colors.secondary}
+        strokeWidth={1.3}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+const historyStyles = StyleSheet.create({
+  filtersRow: {
+    flexDirection: 'row',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    marginHorizontal: -16,
+    marginBottom: 14,
+    paddingHorizontal: 10,
+    zIndex: 10,
+    elevation: 10,
+    backgroundColor: colors.background,
+  },
+  filterAnchor: {
+    flex: 1,
+    position: 'relative',
+    zIndex: 20,
+  },
+  dateDropdownMenu: {
+    width: 236,
+    left: 0,
+    right: 'auto',
+  },
+  typeDropdownMenu: {
+    width: 196,
+    left: 'auto',
+    right: 0,
+  },
+  filterButton: {
+    flex: 1,
+    minHeight: 50,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 8,
+  },
+  filterButtonText: {
+    color: colors.text,
+    fontFamily: fonts.regular,
+    fontSize: 14,
+  },
+  dropdownMenu: {
+    position: 'absolute',
+    top: 50,
+    left: 4,
+    right: 4,
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    overflow: 'hidden',
+    shadowColor: '#000000',
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 14,
+    zIndex: 30,
+  },
+  dropdownOption: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  dropdownOptionLast: {
+    borderBottomWidth: 0,
+  },
+  dropdownOptionText: {
+    color: colors.text,
+    fontFamily: fonts.regular,
+    fontSize: 13,
+    flexShrink: 1,
+  },
+  dropdownOptionSelected: {
+    color: colors.primary,
+    fontFamily: fonts.bold,
+  },
+  dropdownDismissArea: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 5,
+  },
+  filterDivider: {
+    width: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border,
+    marginVertical: 10,
+  },
+  monthSummary: {
+    minHeight: 60,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f1f7f1',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginBottom: 12,
+    borderRadius: 8,
+  },
+  monthTitle: {
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 16,
+  },
+  monthTotalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 4,
+    flexShrink: 0,
+  },
+  monthTotalLabel: {
+    color: colors.secondary,
+    fontFamily: fonts.regular,
+    fontSize: 11,
+  },
+  monthTotal: {
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 13,
+  },
+  sectionList: {
+    marginBottom: 18,
+  },
+  dateRangeAction: {
+    minHeight: 76,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    paddingHorizontal: 22,
+    backgroundColor: '#f3f8f3',
+  },
+  dateRangeActionText: {
+    flex: 1,
+    color: colors.text,
+    fontFamily: fonts.regular,
+    fontSize: 16,
+  },
+});
+
 export default function ReservationHistoryScreen() {
   const insets = useSafeAreaInsets();
   const [reservations, setReservations] = React.useState<ReservationRecord[]>([]);
   const [reviewedReservationIds, setReviewedReservationIds] = React.useState<string[]>([]);
-  const [activeFilter, setActiveFilter] = React.useState<ReservationFilter>('pending');
+  const [activeFilter, setActiveFilter] = React.useState<ReservationFilter | null>(null);
+  const [dateRange, setDateRange] = React.useState<ReservationDateRange>('last7');
+  const [activeDropdown, setActiveDropdown] = React.useState<HistoryDropdown>(null);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -328,28 +579,38 @@ export default function ReservationHistoryScreen() {
     [actionLoadingId, loadReservations]
   );
 
+  const dateFilteredReservations = React.useMemo(
+    () => reservations.filter((reservation) => isWithinDateRange(reservation, dateRange)),
+    [dateRange, reservations]
+  );
+
+  const selectedFilter = React.useMemo(
+    () => activeFilter ?? getDefaultFilter(dateFilteredReservations),
+    [activeFilter, dateFilteredReservations]
+  );
+
   const filteredReservations = React.useMemo(() => {
-    if (activeFilter === 'all') {
-      return reservations;
+    if (selectedFilter === 'all') {
+      return dateFilteredReservations;
     }
 
-    if (activeFilter === 'expired') {
-      return reservations.filter(
+    if (selectedFilter === 'expired') {
+      return dateFilteredReservations.filter(
         (reservation) => getDisplayStatus(reservation) === 'expired'
       );
     }
 
-    if (activeFilter === 'rejected') {
-      return reservations.filter(
+    if (selectedFilter === 'rejected') {
+      return dateFilteredReservations.filter(
         (reservation) =>
           reservation.status === 'rejected' || reservation.status === 'cancelled'
       );
     }
 
-    return reservations.filter(
-      (reservation) => getDisplayStatus(reservation) === activeFilter
+    return dateFilteredReservations.filter(
+      (reservation) => getDisplayStatus(reservation) === selectedFilter
     );
-  }, [activeFilter, reservations]);
+  }, [dateFilteredReservations, selectedFilter]);
 
   const reviewedReservationIdSet = React.useMemo(
     () => new Set(reviewedReservationIds),
@@ -358,24 +619,24 @@ export default function ReservationHistoryScreen() {
 
   const counts = React.useMemo(
     () => ({
-      all: reservations.length,
-      approved: reservations.filter(
+      all: dateFilteredReservations.length,
+      approved: dateFilteredReservations.filter(
         (reservation) => getDisplayStatus(reservation) === 'approved'
       ).length,
-      completed: reservations.filter((reservation) => reservation.status === 'completed')
+      completed: dateFilteredReservations.filter((reservation) => reservation.status === 'completed')
         .length,
-      expired: reservations.filter(
+      expired: dateFilteredReservations.filter(
         (reservation) => getDisplayStatus(reservation) === 'expired'
       ).length,
-      pending: reservations.filter(
+      pending: dateFilteredReservations.filter(
         (reservation) => getDisplayStatus(reservation) === 'pending'
       ).length,
-      rejected: reservations.filter(
+      rejected: dateFilteredReservations.filter(
         (reservation) =>
           reservation.status === 'rejected' || reservation.status === 'cancelled'
       ).length,
     }),
-    [reservations]
+    [dateFilteredReservations]
   );
 
   const filters: { key: ReservationFilter; label: string; count: number }[] = [
@@ -384,8 +645,30 @@ export default function ReservationHistoryScreen() {
     { key: 'expired', label: 'Expired', count: counts.expired },
     { key: 'completed', label: 'Completed', count: counts.completed },
     { key: 'rejected', label: 'Rejected/Cancelled', count: counts.rejected },
-    { key: 'all', label: 'All', count: counts.all },
+    { key: 'all', label: 'All Types', count: counts.all },
   ];
+
+  const monthGroups = React.useMemo(() => {
+    const groups = new Map<string, { label: string; total: number; items: ReservationRecord[] }>();
+
+    filteredReservations.forEach((reservation) => {
+      const key = getActivityMonthKey(reservation);
+      const group = groups.get(key) ?? {
+        label: getActivityMonthLabel(reservation),
+        total: dateFilteredReservations.filter((candidate) =>
+          getActivityMonthKey(candidate) === key &&
+          ['pending', 'approved', 'completed'].includes(getDisplayStatus(candidate))
+        ).length,
+        items: [],
+      };
+      group.items.push(reservation);
+      groups.set(key, group);
+    });
+
+    return [...groups.entries()].map(([key, group]) => ({ key, ...group }));
+  }, [dateFilteredReservations, filteredReservations]);
+
+  const dateRangeLabel = dateRange === 'last7' ? 'Last 7 days' : 'Last 30 days';
 
   return (
     <ScrollView
@@ -415,46 +698,108 @@ export default function ReservationHistoryScreen() {
           View and manage all your room reservations.
         </Text>
 
-        <View style={styles.filterTabsRow}>
-          {filters.map((filter) => {
-            const isActive = activeFilter === filter.key;
-
-            return (
+        <View style={{ position: 'relative' }}>
+          {activeDropdown ? (
+            <Pressable
+              style={historyStyles.dropdownDismissArea}
+              onPress={() => setActiveDropdown(null)}
+              accessibilityLabel="Close dropdown"
+            />
+          ) : null}
+          <View style={historyStyles.filtersRow}>
+            <View style={historyStyles.filterAnchor}>
               <Pressable
-                key={filter.key}
-                style={[
-                  styles.filterTabButton,
-                  isActive ? styles.filterTabButtonActive : null,
-                ]}
-                onPress={() => setActiveFilter(filter.key)}
+                style={historyStyles.filterButton}
+                onPress={() => setActiveDropdown(activeDropdown === 'date' ? null : 'date')}
+                accessibilityRole="button"
+                accessibilityLabel={`Date range: ${dateRangeLabel}`}
               >
-                <Text
-                  style={[
-                    styles.filterTabButtonText,
-                    isActive ? styles.filterTabButtonTextActive : null,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {filter.label}
-                </Text>
-                <View
-                  style={[
-                    styles.filterTabBadge,
-                    isActive ? styles.filterTabBadgeActive : null,
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.filterTabBadgeText,
-                      isActive ? styles.filterTabBadgeTextActive : null,
-                    ]}
-                  >
-                    {filter.count}
-                  </Text>
-                </View>
+                <Text style={historyStyles.filterButtonText}>{dateRangeLabel}</Text>
+                <DropdownChevron />
               </Pressable>
-            );
-          })}
+              {activeDropdown === 'date' ? (
+                <View style={[historyStyles.dropdownMenu, historyStyles.dateDropdownMenu]}>
+                  {([
+                    ['last7', 'Last 7 days'],
+                    ['last30', 'Last 30 days'],
+                  ] as const).map(([value, label], index, options) => (
+                    <Pressable
+                      key={value}
+                      style={[
+                        historyStyles.dropdownOption,
+                        index === options.length - 1 ? historyStyles.dropdownOptionLast : null,
+                      ]}
+                      onPress={() => {
+                        setDateRange(value);
+                        setActiveDropdown(null);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          historyStyles.dropdownOptionText,
+                          dateRange === value ? historyStyles.dropdownOptionSelected : null,
+                        ]}
+                      >
+                        {label}
+                      </Text>
+                      {dateRange === value ? <DropdownCheck /> : null}
+                    </Pressable>
+                  ))}
+                  <Pressable
+                    style={historyStyles.dateRangeAction}
+                    onPress={() => undefined}
+                    accessibilityRole="button"
+                    accessibilityLabel="Pick the Date Range"
+                  >
+                    <CalendarIcon />
+                    <Text style={historyStyles.dateRangeActionText}>Pick the Date Range</Text>
+                    <DropdownChevron direction="right" />
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
+          <View style={historyStyles.filterDivider} />
+            <View style={historyStyles.filterAnchor}>
+              <Pressable
+                style={historyStyles.filterButton}
+                onPress={() => setActiveDropdown(activeDropdown === 'type' ? null : 'type')}
+                accessibilityRole="button"
+                accessibilityLabel={`Reservation type: ${filters.find((filter) => filter.key === selectedFilter)?.label}`}
+              >
+                <Text style={historyStyles.filterButtonText} numberOfLines={1}>
+                  {filters.find((filter) => filter.key === selectedFilter)?.label}
+                </Text>
+                <DropdownChevron />
+              </Pressable>
+              {activeDropdown === 'type' ? (
+                <View style={[historyStyles.dropdownMenu, historyStyles.typeDropdownMenu]}>
+                  {filters.map((filter, index) => (
+                    <Pressable
+                      key={filter.key}
+                      style={[
+                        historyStyles.dropdownOption,
+                        index === filters.length - 1 ? historyStyles.dropdownOptionLast : null,
+                      ]}
+                      onPress={() => {
+                        setActiveFilter(filter.key);
+                        setActiveDropdown(null);
+                      }}
+                    >
+                      <Text
+                        style={[
+                          historyStyles.dropdownOptionText,
+                          selectedFilter === filter.key ? historyStyles.dropdownOptionSelected : null,
+                        ]}
+                      >
+                        {filter.label}
+                      </Text>
+                      {selectedFilter === filter.key ? <DropdownCheck /> : null}
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          </View>
         </View>
 
         {loading ? (
@@ -469,16 +814,25 @@ export default function ReservationHistoryScreen() {
           <View style={styles.card}>
             <Text style={styles.emptyText}>
               No{' '}
-              {activeFilter === 'all'
+              {selectedFilter === 'all'
                 ? ''
                 : `${filters
-                    .find((filter) => filter.key === activeFilter)
+                    .find((filter) => filter.key === selectedFilter)
                     ?.label?.toLowerCase()} `}
               reservations found.
             </Text>
           </View>
         ) : (
-          filteredReservations.map((reservation, index) => {
+          monthGroups.map((group) => (
+            <View key={group.key} style={historyStyles.sectionList}>
+              <View style={historyStyles.monthSummary}>
+                <Text style={historyStyles.monthTitle}>{group.label}</Text>
+                <View style={historyStyles.monthTotalRow}>
+                  <Text style={historyStyles.monthTotalLabel}>Total Reservations:</Text>
+                  <Text style={historyStyles.monthTotal}>{group.total}</Text>
+                </View>
+              </View>
+              {group.items.map((reservation, index) => {
             const displayStatus = getDisplayStatus(reservation);
             const isExpired = displayStatus === 'expired';
 
@@ -487,7 +841,7 @@ export default function ReservationHistoryScreen() {
                 key={reservation.id}
                 style={[
                   styles.listItem,
-                  index === filteredReservations.length - 1 ? { marginBottom: 0 } : null,
+                  index === group.items.length - 1 ? { marginBottom: 0 } : null,
                 ]}
               >
                 <View style={styles.reservationContent}>
@@ -597,7 +951,9 @@ export default function ReservationHistoryScreen() {
                 </View>
               </View>
             );
-          })
+              })}
+            </View>
+          ))
         )}
       </View>
 
@@ -607,6 +963,7 @@ export default function ReservationHistoryScreen() {
       >
         <Text style={styles.actionButtonText}>Back to Dashboard</Text>
       </TouchableOpacity>
+
     </ScrollView>
   );
 }
