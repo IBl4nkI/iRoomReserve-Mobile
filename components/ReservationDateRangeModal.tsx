@@ -1,12 +1,14 @@
 import React from 'react';
 import {
   Modal,
+  ActivityIndicator,
+  FlatList,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -16,7 +18,6 @@ import {
   addMonths,
   getCalendarWeeks,
   getMonthLabel,
-  toDateKey,
 } from '@/components/selection-room-search/helpers';
 
 interface ReservationDateRangeModalProps {
@@ -47,10 +48,11 @@ export default function ReservationDateRangeModal({
   visible,
 }: ReservationDateRangeModalProps) {
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const [startDate, setStartDate] = React.useState<string | null>(initialStartDate);
   const [endDate, setEndDate] = React.useState<string | null>(initialEndDate);
-  const scrollRef = React.useRef<ScrollView>(null);
-  const monthOffsets = React.useRef<Record<number, number>>({});
+  const [calendarReady, setCalendarReady] = React.useState(false);
+  const [selectingDate, setSelectingDate] = React.useState(false);
   const firstCalendarYear = 2025;
   const currentYear = new Date().getFullYear();
   const currentMonthIndex = new Date().getMonth();
@@ -67,6 +69,28 @@ export default function ReservationDateRangeModal({
       ),
     [firstCalendarYear, monthsToDisplay]
   );
+  const calendarMonths = React.useMemo(
+    () =>
+      months.map((month) => ({
+        month,
+        weeks: getCalendarWeeks(month).filter((week) =>
+          week.some((entry) => entry.inMonth)
+        ),
+      })),
+    [months]
+  );
+  const listRef = React.useRef<FlatList<(typeof calendarMonths)[number]>>(null);
+  const monthLayouts = React.useMemo(() => {
+    let offset = 12;
+    const cellSize = (screenWidth - 50) * 0.15;
+
+    return calendarMonths.map(({ weeks }) => {
+      const length = 92 + weeks.length * (cellSize + 8);
+      const layout = { length, offset };
+      offset += length;
+      return layout;
+    });
+  }, [calendarMonths, screenWidth]);
 
   React.useEffect(() => {
     if (!visible) {
@@ -75,31 +99,35 @@ export default function ReservationDateRangeModal({
 
     setStartDate(initialStartDate);
     setEndDate(initialEndDate);
+    setCalendarReady(false);
   }, [initialEndDate, initialStartDate, visible]);
 
   function scrollToCurrentMonth() {
+    setCalendarReady(false);
     requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({
-        y: monthOffsets.current[currentCalendarMonthIndex] ?? 0,
+      listRef.current?.scrollToIndex({
+        index: currentCalendarMonthIndex,
         animated: false,
       });
+      requestAnimationFrame(() => setCalendarReady(true));
     });
   }
 
   function handleDatePress(dateKey: string) {
-    if (!startDate || endDate) {
-      setStartDate(dateKey);
-      setEndDate(null);
-      return;
-    }
+    setSelectingDate(true);
+    requestAnimationFrame(() => {
+      if (!startDate || endDate) {
+        setStartDate(dateKey);
+        setEndDate(null);
+      } else if (dateKey < startDate) {
+        setStartDate(dateKey);
+        setEndDate(startDate);
+      } else {
+        setEndDate(dateKey);
+      }
 
-    if (dateKey < startDate) {
-      setStartDate(dateKey);
-      setEndDate(startDate);
-      return;
-    }
-
-    setEndDate(dateKey);
+      requestAnimationFrame(() => setSelectingDate(false));
+    });
   }
 
   const selectedRangeLabel = startDate
@@ -150,21 +178,32 @@ export default function ReservationDateRangeModal({
               </Text>
             ))}
           </View>
-          <ScrollView
-            ref={scrollRef}
+          <FlatList
+            ref={listRef}
+            data={calendarMonths}
+            keyExtractor={({ month }) => `${month.getFullYear()}-${month.getMonth()}`}
+            initialScrollIndex={currentCalendarMonthIndex}
+            getItemLayout={(_, index) => ({ ...monthLayouts[index], index })}
+            initialNumToRender={5}
+            maxToRenderPerBatch={4}
+            windowSize={5}
+            removeClippedSubviews
             style={modalStyles.calendarScroll}
             contentContainerStyle={modalStyles.calendarContent}
             showsVerticalScrollIndicator
-          >
-            {months.map((month, index) => {
+            onScrollToIndexFailed={({ index }) => {
+              requestAnimationFrame(() => listRef.current?.scrollToIndex({ index, animated: false }));
+            }}
+            renderItem={({ item: { month, weeks: calendarWeeks }, index }) => {
               const monthKey = `${month.getFullYear()}-${month.getMonth()}`;
-              const calendarWeeks = getCalendarWeeks(month);
 
               return (
                 <View
                   key={monthKey}
-                  onLayout={(event) => {
-                    monthOffsets.current[index] = event.nativeEvent.layout.y;
+                  onLayout={() => {
+                    if (index === currentCalendarMonthIndex) {
+                      setCalendarReady(true);
+                    }
                   }}
                 >
                   <AvailabilityCalendar
@@ -186,13 +225,19 @@ export default function ReservationDateRangeModal({
                     onPrevMonth={() => undefined}
                     showMonthNavigation={false}
                     showWeekLabels={false}
+                    hideOutsideMonthDays
                     selectedDateVariant="primary"
                   />
                 </View>
               );
-            })}
-          </ScrollView>
+            }}
+          />
         </View>
+        {!calendarReady || selectingDate ? (
+          <View style={modalStyles.loadingOverlay} pointerEvents="none">
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : null}
       </View>
     </Modal>
   );
@@ -255,8 +300,13 @@ const modalStyles = StyleSheet.create({
     width: '15%',
     textAlign: 'center',
     color: colors.secondary,
-    fontFamily: fonts.regular,
+    fontFamily: fonts.bold,
     fontSize: 13,
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   calendarScroll: {
     flex: 1,

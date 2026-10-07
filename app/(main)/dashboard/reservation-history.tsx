@@ -343,24 +343,26 @@ function CalendarIcon() {
 const historyStyles = StyleSheet.create({
   filtersRow: {
     flexDirection: 'row',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
-    marginHorizontal: -16,
+    gap: 10,
     marginBottom: 14,
-    paddingHorizontal: 10,
-    zIndex: 10,
-    elevation: 10,
-    backgroundColor: colors.background,
+    zIndex: 1,
+    elevation: 1,
   },
   filterAnchor: {
     flex: 1,
     position: 'relative',
-    zIndex: 20,
+    zIndex: 2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    backgroundColor: colors.surface,
+  },
+  filterAnchorActive: {
+    borderColor: colors.primary,
   },
   filterButton: {
     flex: 1,
-    minHeight: 50,
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -374,9 +376,9 @@ const historyStyles = StyleSheet.create({
   },
   dropdownMenu: {
     position: 'absolute',
-    top: 50,
-    left: 4,
-    right: 4,
+    top: 48,
+    left: 0,
+    right: 0,
     backgroundColor: colors.surface,
     borderRadius: 10,
     borderWidth: 1,
@@ -386,8 +388,8 @@ const historyStyles = StyleSheet.create({
     shadowOpacity: 0.14,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 5 },
-    elevation: 14,
-    zIndex: 30,
+    elevation: 3,
+    zIndex: 3,
   },
   dropdownOption: {
     minHeight: 46,
@@ -414,11 +416,6 @@ const historyStyles = StyleSheet.create({
   dropdownDismissArea: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 5,
-  },
-  filterDivider: {
-    width: StyleSheet.hairlineWidth,
-    backgroundColor: colors.border,
-    marginVertical: 10,
   },
   monthSummary: {
     minHeight: 60,
@@ -741,7 +738,12 @@ export default function ReservationHistoryScreen() {
             />
           ) : null}
           <View style={historyStyles.filtersRow}>
-            <View style={historyStyles.filterAnchor}>
+            <View
+              style={[
+                historyStyles.filterAnchor,
+                activeDropdown === 'date' ? historyStyles.filterAnchorActive : null,
+              ]}
+            >
               <Pressable
                 style={historyStyles.filterButton}
                 onPress={() => setActiveDropdown(activeDropdown === 'date' ? null : 'date')}
@@ -799,8 +801,12 @@ export default function ReservationHistoryScreen() {
                 </View>
               ) : null}
             </View>
-          <View style={historyStyles.filterDivider} />
-            <View style={historyStyles.filterAnchor}>
+            <View
+              style={[
+                historyStyles.filterAnchor,
+                activeDropdown === 'type' ? historyStyles.filterAnchorActive : null,
+              ]}
+            >
               <Pressable
                 style={historyStyles.filterButton}
                 onPress={() => setActiveDropdown(activeDropdown === 'type' ? null : 'type')}
@@ -978,7 +984,7 @@ export default function ReservationHistoryScreen() {
                   ) : null}
                   {reservation.status === 'completed' &&
                   !reviewedReservationIdSet.has(reservation.id) ? (
-                    <Pressable
+                    <TouchableOpacity
                       style={[styles.inlineSecondaryButton, { marginTop: -2, marginBottom: 0 }]}
                       onPress={() =>
                         router.push({
@@ -987,7 +993,7 @@ export default function ReservationHistoryScreen() {
                         })
                       }>
                       <Text style={styles.inlineSecondaryButtonText}>Leave a Review</Text>
-                    </Pressable>
+                    </TouchableOpacity>
                   ) : null}
                 </View>
               </View>

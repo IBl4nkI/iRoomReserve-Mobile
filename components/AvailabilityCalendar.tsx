@@ -26,6 +26,7 @@ interface AvailabilityCalendarProps {
   selectedDateVariant?: CalendarSelectedVariant;
   showMonthNavigation?: boolean;
   showWeekLabels?: boolean;
+  hideOutsideMonthDays?: boolean;
   showDoneButton?: boolean;
 }
 
@@ -42,6 +43,7 @@ export default function AvailabilityCalendar({
   selectedDateVariant = "primary",
   showMonthNavigation = true,
   showWeekLabels = true,
+  hideOutsideMonthDays = false,
   showDoneButton = false,
 }: AvailabilityCalendarProps) {
   function getVariantStyles(variant?: CalendarDateVariant) {
@@ -117,6 +119,15 @@ export default function AvailabilityCalendar({
       {calendarWeeks.map((week, weekIndex) => (
         <View key={`${calendarMonthLabel}-${weekIndex}`} style={styles.calendarWeekRow}>
           {week.map((entry) => {
+            if (hideOutsideMonthDays && !entry.inMonth) {
+              return (
+                <View
+                  key={entry.dateKey}
+                  style={[styles.calendarDateButton, styles.calendarDateButtonPlaceholder]}
+                />
+              );
+            }
+
             const selected = isCalendarDateSelected(entry.dateKey);
             const disabled = isCalendarDateDisabled(entry.date, entry.dateKey);
             const variantStyles = getVariantStyles(getCalendarDateVariant?.(entry.dateKey));
@@ -219,6 +230,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: colors.subtleBackground,
+  },
+  calendarDateButtonPlaceholder: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
   },
   calendarDateButtonSuccess: {
     backgroundColor: colors.successBackground,

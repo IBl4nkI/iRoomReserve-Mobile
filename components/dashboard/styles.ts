@@ -19,7 +19,8 @@ export const dashboardStyles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     marginBottom: 16,
-    zIndex: 20,
+    zIndex: 100,
+    elevation: 100,
   },
   topBarRow: {
     flexDirection: 'row',
