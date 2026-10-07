@@ -24,6 +24,8 @@ interface AvailabilityCalendarProps {
   onNextMonth: () => void;
   onPrevMonth: () => void;
   selectedDateVariant?: CalendarSelectedVariant;
+  showMonthNavigation?: boolean;
+  showWeekLabels?: boolean;
   showDoneButton?: boolean;
 }
 
@@ -38,6 +40,8 @@ export default function AvailabilityCalendar({
   onNextMonth,
   onPrevMonth,
   selectedDateVariant = "primary",
+  showMonthNavigation = true,
+  showWeekLabels = true,
   showDoneButton = false,
 }: AvailabilityCalendarProps) {
   function getVariantStyles(variant?: CalendarDateVariant) {
@@ -83,22 +87,32 @@ export default function AvailabilityCalendar({
   return (
     <View style={styles.calendarCard}>
       <View style={styles.calendarHeaderRow}>
-        <TouchableOpacity style={styles.calendarNavButton} onPress={onPrevMonth}>
-          <Text style={styles.calendarNavText}>{"<"}</Text>
-        </TouchableOpacity>
+        {showMonthNavigation ? (
+          <TouchableOpacity style={styles.calendarNavButton} onPress={onPrevMonth}>
+            <Text style={styles.calendarNavText}>{"<"}</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.calendarNavPlaceholder} />
+        )}
         <Text style={styles.calendarTitle}>{calendarMonthLabel}</Text>
-        <TouchableOpacity style={styles.calendarNavButton} onPress={onNextMonth}>
-          <Text style={styles.calendarNavText}>{">"}</Text>
-        </TouchableOpacity>
+        {showMonthNavigation ? (
+          <TouchableOpacity style={styles.calendarNavButton} onPress={onNextMonth}>
+            <Text style={styles.calendarNavText}>{">"}</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.calendarNavPlaceholder} />
+        )}
       </View>
 
-      <View style={styles.calendarWeekRow}>
-        {CALENDAR_DAY_LABELS.map((label) => (
-          <Text key={label} style={styles.calendarWeekLabel}>
-            {label}
-          </Text>
-        ))}
-      </View>
+      {showWeekLabels ? (
+        <View style={styles.calendarWeekRow}>
+          {CALENDAR_DAY_LABELS.map((label) => (
+            <Text key={label} style={styles.calendarWeekLabel}>
+              {label}
+            </Text>
+          ))}
+        </View>
+      ) : null}
 
       {calendarWeeks.map((week, weekIndex) => (
         <View key={`${calendarMonthLabel}-${weekIndex}`} style={styles.calendarWeekRow}>
@@ -169,6 +183,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.subtleBackground,
     alignItems: "center",
     justifyContent: "center",
+  },
+  calendarNavPlaceholder: {
+    width: 34,
+    height: 34,
   },
   calendarNavText: {
     color: colors.primary,

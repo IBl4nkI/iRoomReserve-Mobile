@@ -15,6 +15,7 @@ import Svg, { Path } from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import DashboardTopNav from '@/components/dashboard/DashboardTopNav';
+import ReservationDateRangeModal from '@/components/ReservationDateRangeModal';
 import { dashboardStyles as styles } from '@/components/dashboard/styles';
 import { colors, fonts } from '@/constants/theme';
 import { auth } from '@/lib/firebase';
@@ -33,8 +34,9 @@ type ReservationFilter =
   | 'completed'
   | 'rejected'
   | 'all';
-type ReservationDateRange = 'last7' | 'last30';
+type ReservationDateRange = 'last7' | 'last30' | 'custom';
 type HistoryDropdown = 'date' | 'type' | null;
+type CustomDateRange = { startDate: string; endDate: string } | null;
 
 type ReservationDisplayStatus = ReservationStatus | 'expired';
 
@@ -247,11 +249,27 @@ function getActivityMonthLabel(reservation: ReservationRecord) {
 
 function isWithinDateRange(
   reservation: ReservationRecord,
-  range: ReservationDateRange
+  range: ReservationDateRange,
+  customRange: CustomDateRange
 ) {
   const activityDate = getActivityDate(reservation);
   if (!activityDate || Number.isNaN(activityDate.getTime())) {
     return false;
+  }
+
+  if (range === 'custom') {
+    if (!customRange) {
+      return false;
+    }
+    const activityDateKey = [
+      activityDate.getFullYear(),
+      String(activityDate.getMonth() + 1).padStart(2, '0'),
+      String(activityDate.getDate()).padStart(2, '0'),
+    ].join('-');
+    return (
+      activityDateKey >= customRange.startDate &&
+      activityDateKey <= customRange.endDate
+    );
   }
 
   const end = new Date();
@@ -339,16 +357,6 @@ const historyStyles = StyleSheet.create({
     flex: 1,
     position: 'relative',
     zIndex: 20,
-  },
-  dateDropdownMenu: {
-    width: 236,
-    left: 0,
-    right: 'auto',
-  },
-  typeDropdownMenu: {
-    width: 196,
-    left: 'auto',
-    right: 0,
   },
   filterButton: {
     flex: 1,
@@ -449,18 +457,26 @@ const historyStyles = StyleSheet.create({
     marginBottom: 18,
   },
   dateRangeAction: {
-    minHeight: 76,
+    minHeight: 60,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    paddingHorizontal: 22,
+    gap: 0,
+    paddingHorizontal: 8,
     backgroundColor: '#f3f8f3',
+  },
+  dateRangeCalendarWrap: {
+    marginLeft: 4,
+    marginRight: 12,
+  },
+  dateRangeArrowWrap: {
+    marginLeft: 1,
   },
   dateRangeActionText: {
     flex: 1,
+    flexShrink: 1,
     color: colors.text,
     fontFamily: fonts.regular,
-    fontSize: 16,
+    fontSize: 13,
   },
 });
 
@@ -470,6 +486,8 @@ export default function ReservationHistoryScreen() {
   const [reviewedReservationIds, setReviewedReservationIds] = React.useState<string[]>([]);
   const [activeFilter, setActiveFilter] = React.useState<ReservationFilter | null>(null);
   const [dateRange, setDateRange] = React.useState<ReservationDateRange>('last7');
+  const [customDateRange, setCustomDateRange] = React.useState<CustomDateRange>(null);
+  const [dateRangeModalVisible, setDateRangeModalVisible] = React.useState(false);
   const [activeDropdown, setActiveDropdown] = React.useState<HistoryDropdown>(null);
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -580,8 +598,10 @@ export default function ReservationHistoryScreen() {
   );
 
   const dateFilteredReservations = React.useMemo(
-    () => reservations.filter((reservation) => isWithinDateRange(reservation, dateRange)),
-    [dateRange, reservations]
+    () => reservations.filter((reservation) =>
+      isWithinDateRange(reservation, dateRange, customDateRange)
+    ),
+    [customDateRange, dateRange, reservations]
   );
 
   const selectedFilter = React.useMemo(
@@ -668,7 +688,21 @@ export default function ReservationHistoryScreen() {
     return [...groups.entries()].map(([key, group]) => ({ key, ...group }));
   }, [dateFilteredReservations, filteredReservations]);
 
-  const dateRangeLabel = dateRange === 'last7' ? 'Last 7 days' : 'Last 30 days';
+  const dateRangeLabel = React.useMemo(() => {
+    if (dateRange === 'last7') return 'Last 7 days';
+    if (dateRange === 'last30') return 'Last 30 days';
+    if (!customDateRange) return 'Pick dates';
+
+    const startLabel = new Date(`${customDateRange.startDate}T00:00:00`).toLocaleDateString(
+      'en-US',
+      { day: 'numeric', month: 'short' }
+    );
+    const endLabel = new Date(`${customDateRange.endDate}T00:00:00`).toLocaleDateString(
+      'en-US',
+      { day: 'numeric', month: 'short', year: 'numeric' }
+    );
+    return `${startLabel} – ${endLabel}`;
+  }, [customDateRange, dateRange]);
 
   return (
     <ScrollView
@@ -718,7 +752,7 @@ export default function ReservationHistoryScreen() {
                 <DropdownChevron />
               </Pressable>
               {activeDropdown === 'date' ? (
-                <View style={[historyStyles.dropdownMenu, historyStyles.dateDropdownMenu]}>
+                <View style={historyStyles.dropdownMenu}>
                   {([
                     ['last7', 'Last 7 days'],
                     ['last30', 'Last 30 days'],
@@ -747,13 +781,20 @@ export default function ReservationHistoryScreen() {
                   ))}
                   <Pressable
                     style={historyStyles.dateRangeAction}
-                    onPress={() => undefined}
+                    onPress={() => {
+                      setActiveDropdown(null);
+                      setDateRangeModalVisible(true);
+                    }}
                     accessibilityRole="button"
                     accessibilityLabel="Pick the Date Range"
                   >
-                    <CalendarIcon />
+                    <View style={historyStyles.dateRangeCalendarWrap}>
+                      <CalendarIcon />
+                    </View>
                     <Text style={historyStyles.dateRangeActionText}>Pick the Date Range</Text>
-                    <DropdownChevron direction="right" />
+                    <View style={historyStyles.dateRangeArrowWrap}>
+                      <DropdownChevron direction="right" />
+                    </View>
                   </Pressable>
                 </View>
               ) : null}
@@ -772,7 +813,7 @@ export default function ReservationHistoryScreen() {
                 <DropdownChevron />
               </Pressable>
               {activeDropdown === 'type' ? (
-                <View style={[historyStyles.dropdownMenu, historyStyles.typeDropdownMenu]}>
+                <View style={historyStyles.dropdownMenu}>
                   {filters.map((filter, index) => (
                     <Pressable
                       key={filter.key}
@@ -963,6 +1004,17 @@ export default function ReservationHistoryScreen() {
       >
         <Text style={styles.actionButtonText}>Back to Dashboard</Text>
       </TouchableOpacity>
+
+      <ReservationDateRangeModal
+        visible={dateRangeModalVisible}
+        initialStartDate={dateRange === 'custom' ? customDateRange?.startDate ?? null : null}
+        initialEndDate={dateRange === 'custom' ? customDateRange?.endDate ?? null : null}
+        onApply={(startDate, endDate) => {
+          setCustomDateRange({ startDate, endDate });
+          setDateRange('custom');
+        }}
+        onClose={() => setDateRangeModalVisible(false)}
+      />
 
     </ScrollView>
   );
