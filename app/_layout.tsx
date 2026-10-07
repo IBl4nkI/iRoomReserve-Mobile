@@ -1,5 +1,5 @@
 import { Slot, useRouter, useSegments } from 'expo-router';
-import { View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useFonts } from 'expo-font';
@@ -107,7 +107,19 @@ export default function RootLayout() {
   }, [user, loading, hasRole, profileRole, profileStatus, segments, fontsLoaded, router]);
 
   if (!fontsLoaded || loading) {
-    return <View style={{ flex: 1, backgroundColor: colors.background }} />;
+    return (
+      <View
+        style={{
+          flex: 1,
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: colors.background,
+        }}
+      >
+        <StatusBar style="dark" backgroundColor={colors.background} />
+        <ActivityIndicator size="large" color={colors.primary} accessibilityLabel="Loading app" />
+      </View>
+    );
   }
 
   return (
