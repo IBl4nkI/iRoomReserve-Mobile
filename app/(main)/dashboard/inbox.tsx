@@ -1,4 +1,6 @@
 import React from 'react';
+import { router } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { ActivityIndicator, Alert, Keyboard, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
@@ -47,6 +49,9 @@ interface InboxRowItem {
   unread: boolean;
   message?: AppMessage;
   createdAt?: AppNotification['createdAt'];
+  reservationFilter?: 'pending' | 'approved' | 'expired' | 'completed' | 'rejected' | 'all';
+  reservationActivityDate?: string;
+  isOwnReservation?: boolean;
 }
 
 type InboxDateRange = 'last7' | 'last30' | 'custom';
@@ -130,11 +135,11 @@ function RejectedIcon() {
   );
 }
 
-function ChevronIcon({ expanded }: { expanded: boolean }) {
+function ChevronIcon({ expanded, navigate = false }: { expanded: boolean; navigate?: boolean }) {
   return (
     <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
       <Path
-        d={expanded ? 'M7 14L12 9L17 14' : 'M7 10L12 15L17 10'}
+        d={navigate ? 'M9 5L16 12L9 19' : expanded ? 'M7 14L12 9L17 14' : 'M7 10L12 15L17 10'}
         stroke="#625f5f"
         strokeWidth={2}
         strokeLinecap="round"
@@ -206,6 +211,39 @@ function formatSentDateFromNotification(notification: AppNotification) {
   });
 }
 
+function getReservationActivityDate(reservation: ReservationRecord) {
+  const timestamp = reservation.status === 'completed'
+    ? reservation.completedAt ?? reservation.createdAt
+    : reservation.createdAt;
+  const seconds = typeof timestamp?.seconds === 'number'
+    ? timestamp.seconds
+    : typeof timestamp?._seconds === 'number'
+      ? timestamp._seconds
+      : null;
+  const date = seconds === null ? null : new Date(seconds * 1000);
+  if (!date || Number.isNaN(date.getTime())) return reservation.date || null;
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, '0'), String(date.getDate()).padStart(2, '0')].join('-');
+}
+
+function getReservationFilter(reservation: ReservationRecord) {
+  const today = new Date();
+  const todayKey = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
+  const reservationDates = reservation.dates?.length ? reservation.dates : [reservation.date];
+  if (reservation.status === 'approved' && reservationDates.every((date) => date < todayKey)) return 'expired' as const;
+  if (reservation.status === 'cancelled' || reservation.status === 'rejected') return 'rejected' as const;
+  return reservation.status;
+}
+
+function getActivityDateRange(dateKey: string) {
+  const activityDate = new Date(`${dateKey}T00:00:00`);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const daysAgo = Math.floor((today.getTime() - activityDate.getTime()) / 86400000);
+  if (daysAgo >= 0 && daysAgo <= 6) return { dateRange: 'last7' as const };
+  if (daysAgo >= 0 && daysAgo <= 29) return { dateRange: 'last30' as const };
+  return { dateRange: 'custom' as const, startDate: dateKey, endDate: dateKey };
+}
+
 function getRowStatus(notification: AppNotification): InboxRowStatus {
   switch (notification.type) {
     case "reservation_rejected":
@@ -272,12 +310,16 @@ function buildInboxRows(
       status: getRowStatus(notification),
       unread: !notification.read,
       createdAt: notification.createdAt,
+      reservationFilter: reservation ? getReservationFilter(reservation) : undefined,
+      reservationActivityDate: reservation ? getReservationActivityDate(reservation) ?? undefined : undefined,
+      isOwnReservation: Boolean(reservation && reservation.userId === auth.currentUser?.uid),
     };
   });
 }
 
 export default function InboxScreen() {
   const insets = useSafeAreaInsets();
+  const isFocused = useIsFocused();
   const inboxScrollRef = React.useRef<ScrollView | null>(null);
   const [keyboardHeight, setKeyboardHeight] = React.useState(0);
   const [items, setItems] = React.useState<InboxRowItem[]>([]);
@@ -295,6 +337,7 @@ export default function InboxScreen() {
   const [sending, setSending] = React.useState(false);
   const [senderProfile, setSenderProfile] = React.useState<{ name: string; role: string; campus?: string }>({ name: '', role: '' });
   const [expandedItemId, setExpandedItemId] = React.useState<string | null>(null);
+  const [openingReservationId, setOpeningReservationId] = React.useState<string | null>(null);
   const [activeTab, setActiveTab] = React.useState<InboxTab>('Unread');
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
@@ -305,6 +348,10 @@ export default function InboxScreen() {
   const [rejectingItemId, setRejectingItemId] = React.useState<string | null>(null);
   const [rejectReason, setRejectReason] = React.useState('');
   const [rejectReasonError, setRejectReasonError] = React.useState('');
+
+  React.useEffect(() => {
+    if (isFocused) setOpeningReservationId(null);
+  }, [isFocused]);
 
   React.useEffect(() => {
     const showEvent = Keyboard.addListener('keyboardDidShow', (event) => {
@@ -416,7 +463,7 @@ export default function InboxScreen() {
   };
   const unreadCount = items.filter((item) => item.unread).length + appMessages.filter((item) => !item.isRead).length;
   const readCount = items.filter((item) => !item.unread).length + appMessages.filter((item) => item.isRead).length;
-  const visibleItems = React.useMemo(() => {
+  const visibleItems = React.useMemo<InboxRowItem[]>(() => {
     if (activeTab === 'Sent' || activeTab === 'Closed') {
       return sentMessages.filter((message) => isInRange(message.createdAt) && (activeTab === 'Sent' ? !message.closedBySender : message.closedBySender)).map((message) => ({ id: message.id, reservationId: '', reservationStatus: activeTab === 'Closed' ? 'Closed' : `To ${message.receiverName}`, purpose: message.subject, date: '', time: '', roomName: '', equipment: '', approvalDocumentName: undefined, approvalDocumentUrl: undefined, sentAtLabel: message.createdAt?.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? 'Recent', status: 'Approved' as InboxRowStatus, unread: false, message }));
     }
@@ -618,12 +665,28 @@ export default function InboxScreen() {
             {visibleItems.map((item, index) => (
               <Pressable
                 key={item.id}
-                onPress={() =>
-                    setExpandedItemId((current) => {
+                onPress={() => {
+                  if (!item.message && item.isOwnReservation && item.reservationFilter && item.reservationActivityDate) {
+                    const targetRange = getActivityDateRange(item.reservationActivityDate);
+                    setOpeningReservationId(item.id);
+                    requestAnimationFrame(() => {
+                      router.push({
+                        pathname: '/(main)/dashboard/reservation-history',
+                        params: {
+                          filter: item.reservationFilter,
+                          reservationId: item.reservationId,
+                          navigationToken: String(Date.now()),
+                          ...targetRange,
+                        },
+                      });
+                    });
+                    return;
+                  }
+                  setExpandedItemId((current) => {
                       if (current !== item.id && item.message && !item.message.isRead && activeTab !== 'Sent' && activeTab !== 'Closed') void markAppMessageRead(item.id);
                       return current === item.id ? null : item.id;
-                    })
-                }
+                  });
+                }}
                 style={[
                   styles.inboxNotificationRow,
                   item.unread ? styles.inboxNotificationRowUnread : null,
@@ -654,7 +717,14 @@ export default function InboxScreen() {
 
                   <View style={styles.inboxNotificationArrowRow}>
                     <View style={styles.inboxNotificationArrowSpacer} />
-                    <ChevronIcon expanded={expandedItemId === item.id} />
+                    {openingReservationId === item.id ? (
+                      <ActivityIndicator size="small" color={colors.primary} />
+                    ) : (
+                      <ChevronIcon
+                        expanded={expandedItemId === item.id}
+                        navigate={!item.message && Boolean(item.isOwnReservation)}
+                      />
+                    )}
                   </View>
 
                   {expandedItemId === item.id ? (

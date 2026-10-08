@@ -1,7 +1,8 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import React from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Alert,
   Pressable,
   RefreshControl,
@@ -228,7 +229,7 @@ function sortReservations(left: ReservationRecord, right: ReservationRecord) {
 
 function getActivityDate(reservation: ReservationRecord) {
   return (
-    getTimestampDate(reservation.createdAt) ??
+    getTimestampDate(reservation.status === 'completed' ? reservation.completedAt ?? reservation.createdAt : reservation.createdAt) ??
     (reservation.date ? new Date(`${reservation.date}T00:00:00`) : null)
   );
 }
@@ -478,6 +479,14 @@ const historyStyles = StyleSheet.create({
 });
 
 export default function ReservationHistoryScreen() {
+  const routeParams = useLocalSearchParams<{
+    filter?: string;
+    dateRange?: string;
+    startDate?: string;
+    endDate?: string;
+    reservationId?: string;
+    navigationToken?: string;
+  }>();
   const insets = useSafeAreaInsets();
   const [reservations, setReservations] = React.useState<ReservationRecord[]>([]);
   const [reviewedReservationIds, setReviewedReservationIds] = React.useState<string[]>([]);
@@ -490,6 +499,51 @@ export default function ReservationHistoryScreen() {
   const [refreshing, setRefreshing] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = React.useState<string | null>(null);
+  const [highlightedReservationId, setHighlightedReservationId] = React.useState<string | null>(null);
+  const reservationHighlight = React.useRef(new Animated.Value(0)).current;
+
+  React.useEffect(() => {
+    const allowedFilters: ReservationFilter[] = ['pending', 'approved', 'expired', 'completed', 'rejected', 'all'];
+    if (routeParams.filter && allowedFilters.includes(routeParams.filter as ReservationFilter)) {
+      setActiveFilter(routeParams.filter as ReservationFilter);
+    }
+    if (routeParams.dateRange === 'last7' || routeParams.dateRange === 'last30') {
+      setDateRange(routeParams.dateRange);
+      setCustomDateRange(null);
+    } else if (
+      routeParams.dateRange === 'custom' &&
+      routeParams.startDate &&
+      routeParams.endDate
+    ) {
+      setDateRange('custom');
+      setCustomDateRange({ startDate: routeParams.startDate, endDate: routeParams.endDate });
+    }
+  }, [routeParams.dateRange, routeParams.endDate, routeParams.filter, routeParams.startDate]);
+
+  React.useEffect(() => {
+    const reservationId = routeParams.reservationId;
+    if (!reservationId || !reservations.some((reservation) => reservation.id === reservationId)) {
+      return;
+    }
+
+    setHighlightedReservationId(reservationId);
+    reservationHighlight.setValue(0);
+    Animated.sequence([
+      Animated.timing(reservationHighlight, {
+        toValue: 1,
+        duration: 250,
+        useNativeDriver: false,
+      }),
+      Animated.delay(1100),
+      Animated.timing(reservationHighlight, {
+        toValue: 0,
+        duration: 850,
+        useNativeDriver: false,
+      }),
+    ]).start(({ finished }) => {
+      if (finished) setHighlightedReservationId(null);
+    });
+  }, [reservationHighlight, reservations, routeParams.reservationId]);
 
   const loadReservations = React.useCallback(async (showSpinner = true, forceRefresh = false) => {
     const currentUser = auth.currentUser;
@@ -533,7 +587,7 @@ export default function ReservationHistoryScreen() {
         if (!active) {
           return;
         }
-        await loadReservations();
+        await loadReservations(true, Boolean(routeParams.navigationToken));
       } catch {
         // loadReservations handles screen state.
       }
@@ -544,7 +598,7 @@ export default function ReservationHistoryScreen() {
     return () => {
       active = false;
     };
-  }, [loadReservations]);
+  }, [loadReservations, routeParams.navigationToken]);
 
   const handleRefresh = React.useCallback(async () => {
     setRefreshing(true);
@@ -884,10 +938,19 @@ export default function ReservationHistoryScreen() {
             const isExpired = displayStatus === 'expired';
 
             return (
-              <View
+              <Animated.View
                 key={reservation.id}
                 style={[
                   styles.listItem,
+                  highlightedReservationId === reservation.id
+                    ? {
+                        borderColor: reservationHighlight.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [colors.border, colors.primary],
+                        }),
+                        borderWidth: 2,
+                      }
+                    : null,
                   index === group.items.length - 1 ? { marginBottom: 0 } : null,
                 ]}
               >
@@ -996,7 +1059,7 @@ export default function ReservationHistoryScreen() {
                     </TouchableOpacity>
                   ) : null}
                 </View>
-              </View>
+              </Animated.View>
             );
               })}
             </View>
