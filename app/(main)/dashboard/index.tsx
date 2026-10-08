@@ -310,7 +310,7 @@ function canStartReservation(
 
   return (
     reservation.status === "approved" &&
-    !reservation.checkedInAt &&
+    (!reservation.checkedInAt || Boolean(reservation.occupancyReleasedAt)) &&
     reservation.date === todayDateKey &&
     reservation.startTime <= currentTimeKey &&
     reservation.endTime > currentTimeKey
@@ -377,7 +377,7 @@ function getPendingStageLabel(reservation: ReservationRecord) {
 }
 
 function getDisplayStatus(reservation: ReservationRecord) {
-  if (reservation.checkedInAt) {
+  if (reservation.checkedInAt && !reservation.occupancyReleasedAt) {
     return "Occupied" as const;
   }
 
@@ -730,6 +730,7 @@ export default function DashboardHomeScreen() {
         (reservation) =>
           (reservation.status === "approved" &&
             Boolean(reservation.checkedInAt) &&
+            !reservation.occupancyReleasedAt &&
             isOngoingReservation(reservation, todayDateKey, currentTimeKey)) ||
           isCurrentAwaitingStaffReleaseReservation(reservation, todayDateKey)
       )
@@ -887,7 +888,8 @@ export default function DashboardHomeScreen() {
   const isReservationStarted =
     !isUtilityStaff &&
     ongoingReservation?.status === "approved" &&
-    Boolean(ongoingReservation.checkedInAt);
+    Boolean(ongoingReservation.checkedInAt) &&
+    !ongoingReservation.occupancyReleasedAt;
   const canStartOngoingReservation = canStartReservation(
     ongoingReservation,
     todayDateKey,

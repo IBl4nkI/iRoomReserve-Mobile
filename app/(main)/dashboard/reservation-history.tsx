@@ -491,7 +491,7 @@ export default function ReservationHistoryScreen() {
   const [error, setError] = React.useState<string | null>(null);
   const [actionLoadingId, setActionLoadingId] = React.useState<string | null>(null);
 
-  const loadReservations = React.useCallback(async (showSpinner = true) => {
+  const loadReservations = React.useCallback(async (showSpinner = true, forceRefresh = false) => {
     const currentUser = auth.currentUser;
 
     if (!currentUser) {
@@ -508,7 +508,7 @@ export default function ReservationHistoryScreen() {
 
     try {
       const [nextReservations, feedback] = await Promise.all([
-        getReservationsByUser(currentUser.uid),
+        getReservationsByUser(currentUser.uid, { forceRefresh }),
         getFeedbackByUser(currentUser.uid),
       ]);
       setReservations(nextReservations.sort(sortReservations));
@@ -549,7 +549,7 @@ export default function ReservationHistoryScreen() {
   const handleRefresh = React.useCallback(async () => {
     setRefreshing(true);
     try {
-      await loadReservations(false);
+      await loadReservations(false, true);
     } finally {
       setRefreshing(false);
     }

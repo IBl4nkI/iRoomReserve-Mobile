@@ -28,6 +28,58 @@ interface ReservationDateRangeModalProps {
   visible: boolean;
 }
 
+type CalendarMonthItem = {
+  month: Date;
+  weeks: ReturnType<typeof getCalendarWeeks>;
+};
+
+interface DateRangeCalendarMonthProps {
+  item: CalendarMonthItem;
+  isCurrentMonth: boolean;
+  startDate: string | null;
+  endDate: string | null;
+  onDatePress: (dateKey: string) => void;
+  onCurrentMonthLayout: () => void;
+}
+
+const DateRangeCalendarMonth = React.memo(function DateRangeCalendarMonth({
+  item: { month, weeks },
+  isCurrentMonth,
+  startDate,
+  endDate,
+  onDatePress,
+  onCurrentMonthLayout,
+}: DateRangeCalendarMonthProps) {
+  const isDateDisabled = React.useCallback(
+    (date: Date) => date.getDay() === 0 || date.getMonth() !== month.getMonth(),
+    [month],
+  );
+  const isDateSelected = React.useCallback(
+    (dateKey: string) =>
+      (Boolean(startDate && endDate && dateKey >= startDate && dateKey <= endDate)) ||
+      dateKey === startDate,
+    [endDate, startDate],
+  );
+
+  return (
+    <View onLayout={isCurrentMonth ? onCurrentMonthLayout : undefined}>
+      <AvailabilityCalendar
+        calendarMonthLabel={getMonthLabel(month)}
+        calendarWeeks={weeks}
+        isCalendarDateDisabled={isDateDisabled}
+        isCalendarDateSelected={isDateSelected}
+        onCalendarDateSelect={onDatePress}
+        onNextMonth={() => undefined}
+        onPrevMonth={() => undefined}
+        showMonthNavigation={false}
+        showWeekLabels={false}
+        hideOutsideMonthDays
+        selectedDateVariant="primary"
+      />
+    </View>
+  );
+});
+
 function formatDate(dateKey: string | null) {
   if (!dateKey) {
     return null;
@@ -102,7 +154,7 @@ export default function ReservationDateRangeModal({
     setCalendarReady(false);
   }, [initialEndDate, initialStartDate, visible]);
 
-  function scrollToCurrentMonth() {
+  const scrollToCurrentMonth = React.useCallback(() => {
     setCalendarReady(false);
     requestAnimationFrame(() => {
       listRef.current?.scrollToIndex({
@@ -111,9 +163,9 @@ export default function ReservationDateRangeModal({
       });
       requestAnimationFrame(() => setCalendarReady(true));
     });
-  }
+  }, [currentCalendarMonthIndex]);
 
-  function handleDatePress(dateKey: string) {
+  const handleDatePress = React.useCallback((dateKey: string) => {
     setSelectingDate(true);
     requestAnimationFrame(() => {
       if (!startDate || endDate) {
@@ -128,7 +180,22 @@ export default function ReservationDateRangeModal({
 
       requestAnimationFrame(() => setSelectingDate(false));
     });
-  }
+  }, [endDate, startDate]);
+
+  const handleCurrentMonthLayout = React.useCallback(() => setCalendarReady(true), []);
+  const renderMonth = React.useCallback(
+    ({ item, index }: { item: CalendarMonthItem; index: number }) => (
+      <DateRangeCalendarMonth
+        item={item}
+        isCurrentMonth={index === currentCalendarMonthIndex}
+        startDate={startDate}
+        endDate={endDate}
+        onDatePress={handleDatePress}
+        onCurrentMonthLayout={handleCurrentMonthLayout}
+      />
+    ),
+    [currentCalendarMonthIndex, endDate, handleCurrentMonthLayout, handleDatePress, startDate],
+  );
 
   const selectedRangeLabel = startDate
     ? endDate
@@ -184,9 +251,10 @@ export default function ReservationDateRangeModal({
             keyExtractor={({ month }) => `${month.getFullYear()}-${month.getMonth()}`}
             initialScrollIndex={currentCalendarMonthIndex}
             getItemLayout={(_, index) => ({ ...monthLayouts[index], index })}
-            initialNumToRender={5}
-            maxToRenderPerBatch={4}
-            windowSize={5}
+            initialNumToRender={2}
+            maxToRenderPerBatch={2}
+            updateCellsBatchingPeriod={50}
+            windowSize={3}
             removeClippedSubviews
             style={modalStyles.calendarScroll}
             contentContainerStyle={modalStyles.calendarContent}
@@ -194,43 +262,7 @@ export default function ReservationDateRangeModal({
             onScrollToIndexFailed={({ index }) => {
               requestAnimationFrame(() => listRef.current?.scrollToIndex({ index, animated: false }));
             }}
-            renderItem={({ item: { month, weeks: calendarWeeks }, index }) => {
-              const monthKey = `${month.getFullYear()}-${month.getMonth()}`;
-
-              return (
-                <View
-                  key={monthKey}
-                  onLayout={() => {
-                    if (index === currentCalendarMonthIndex) {
-                      setCalendarReady(true);
-                    }
-                  }}
-                >
-                  <AvailabilityCalendar
-                    calendarMonthLabel={getMonthLabel(month)}
-                    calendarWeeks={calendarWeeks}
-                    isCalendarDateDisabled={(date) =>
-                      date.getDay() === 0 || date.getMonth() !== month.getMonth()
-                    }
-                    isCalendarDateSelected={(dateKey) =>
-                      Boolean(
-                        startDate &&
-                          endDate &&
-                          dateKey >= startDate &&
-                          dateKey <= endDate
-                      ) || dateKey === startDate
-                    }
-                    onCalendarDateSelect={handleDatePress}
-                    onNextMonth={() => undefined}
-                    onPrevMonth={() => undefined}
-                    showMonthNavigation={false}
-                    showWeekLabels={false}
-                    hideOutsideMonthDays
-                    selectedDateVariant="primary"
-                  />
-                </View>
-              );
-            }}
+            renderItem={renderMonth}
           />
         </View>
         {!calendarReady || selectingDate ? (
