@@ -70,6 +70,14 @@ export interface ReservationRecord {
         seconds?: number;
       }
     | null;
+  reservationStartedAt?:
+    | {
+        _nanoseconds?: number;
+        _seconds?: number;
+        nanoseconds?: number;
+        seconds?: number;
+      }
+    | null;
   completedAt?:
     | {
         _nanoseconds?: number;

@@ -952,10 +952,10 @@ export default function ReservationHistoryScreen() {
                       {reservation.reason}
                     </Text>
                   ) : null}
-                  {reservation.checkedInAt || reservation.completedAt ? (
+                  {reservation.reservationStartedAt || reservation.checkedInAt || reservation.completedAt ? (
                     <Text style={styles.reservationMeta}>
                       <Text style={{ fontFamily: fonts.regular }}>Time Used:</Text>{' '}
-                      {formatTimestampTimeOnly(reservation.checkedInAt)} -{' '}
+                      {formatTimestampTimeOnly(reservation.reservationStartedAt ?? reservation.checkedInAt)} -{' '}
                       {formatTimestampTimeOnly(reservation.completedAt)}
                     </Text>
                   ) : null}
