@@ -251,10 +251,10 @@ export default function ReservationDateRangeModal({
             keyExtractor={({ month }) => `${month.getFullYear()}-${month.getMonth()}`}
             initialScrollIndex={currentCalendarMonthIndex}
             getItemLayout={(_, index) => ({ ...monthLayouts[index], index })}
-            initialNumToRender={2}
-            maxToRenderPerBatch={2}
-            updateCellsBatchingPeriod={50}
-            windowSize={3}
+            initialNumToRender={1}
+            maxToRenderPerBatch={1}
+            updateCellsBatchingPeriod={75}
+            windowSize={2}
             removeClippedSubviews
             style={modalStyles.calendarScroll}
             contentContainerStyle={modalStyles.calendarContent}
