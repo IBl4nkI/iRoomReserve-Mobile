@@ -9,6 +9,7 @@ import {
   RefreshControl,
   ScrollView,
   Text,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { BleManager, type Device, State } from "react-native-ble-plx";
@@ -1349,13 +1350,13 @@ export default function DashboardHomeScreen() {
       <View style={styles.screenContent}>
         <View style={styles.screenTitleRow}>
           <Text style={styles.screenTitleCentered}>{`${firstName}'s Dashboard`}</Text>
-          <Pressable
+          <TouchableOpacity
             style={styles.inboxShortcutButton}
             onPress={() => router.push("/(main)/dashboard/inbox")}
           >
             <MailIcon />
             {hasUnreadInbox ? <View style={styles.inboxShortcutDot} /> : null}
-          </Pressable>
+          </TouchableOpacity>
         </View>
 
         {loading ? (

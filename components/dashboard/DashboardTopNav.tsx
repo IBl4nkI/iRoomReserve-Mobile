@@ -1,6 +1,6 @@
 import { router, usePathname } from 'expo-router';
 import React from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getUserProfile, logout } from '@/lib/auth';
@@ -133,7 +133,7 @@ export default function DashboardTopNav() {
     <View style={[styles.stickyNavWrap, { paddingTop: insets.top + 10 }]}>
       <View style={styles.topBarRow}>
         <Text style={styles.topBarBrand}>e-RoomReserve</Text>
-        <Pressable
+        <TouchableOpacity
           style={styles.userBadgeRow}
           onPress={() => {
             if (pathname !== '/dashboard/account-settings') {
@@ -147,27 +147,27 @@ export default function DashboardTopNav() {
           <View style={styles.userRolePill}>
             <Text style={styles.userRoleText}>{userRole}</Text>
           </View>
-        </Pressable>
-        <Pressable
+        </TouchableOpacity>
+        <TouchableOpacity
           style={[styles.burgerButton, menuOpen ? styles.burgerButtonActive : null]}
           onPress={() => setMenuOpen((current) => !current)}
         >
           <View style={styles.burgerLine} />
           <View style={styles.burgerLine} />
           <View style={styles.burgerLine} />
-        </Pressable>
+        </TouchableOpacity>
       </View>
 
       {menuOpen ? (
         <View style={styles.menuOverlayWrap}>
-          <Pressable style={styles.menuBackdrop} onPress={() => setMenuOpen(false)} />
+          <TouchableOpacity style={styles.menuBackdrop} onPress={() => setMenuOpen(false)} />
           <View style={styles.dropdownMenu}>
             {navItems.map((item) => {
               const itemPath = normalizeRoutePath(item.route);
               const isActive = currentPath === itemPath;
 
             return (
-              <Pressable
+              <TouchableOpacity
                 key={item.label}
                 style={[styles.menuRowButton, isActive ? styles.menuRowButtonActive : null]}
                 onPress={() => {
@@ -182,14 +182,14 @@ export default function DashboardTopNav() {
                 <Text style={[styles.menuRowText, isActive ? styles.menuRowTextActive : styles.menuRowTextInactive]}>
                   {item.label}
                 </Text>
-                </Pressable>
+                </TouchableOpacity>
               );
             })}
-            <Pressable style={[styles.menuRowButton, styles.menuRowButtonLogout]} onPress={handleLogout}>
+            <TouchableOpacity style={[styles.menuRowButton, styles.menuRowButtonLogout]} onPress={handleLogout}>
               <Text style={[styles.menuRowText, styles.menuRowTextLogout]}>
                 {loggingOut ? 'Logging out...' : 'Log out'}
               </Text>
-            </Pressable>
+            </TouchableOpacity>
           </View>
         </View>
       ) : null}

@@ -808,7 +808,7 @@ export default function ReservationHistoryScreen() {
                 activeDropdown === 'date' ? historyStyles.filterAnchorActive : null,
               ]}
             >
-              <Pressable
+              <TouchableOpacity
                 style={historyStyles.filterButton}
                 onPress={() => setActiveDropdown(activeDropdown === 'date' ? null : 'date')}
                 accessibilityRole="button"
@@ -816,14 +816,14 @@ export default function ReservationHistoryScreen() {
               >
                 <Text style={historyStyles.filterButtonText}>{dateRangeLabel}</Text>
                 <DropdownChevron />
-              </Pressable>
+              </TouchableOpacity>
               {activeDropdown === 'date' ? (
                 <View style={historyStyles.dropdownMenu}>
                   {([
                     ['last7', 'Last 7 days'],
                     ['last30', 'Last 30 days'],
                   ] as const).map(([value, label], index, options) => (
-                    <Pressable
+                    <TouchableOpacity
                       key={value}
                       style={[
                         historyStyles.dropdownOption,
@@ -843,9 +843,9 @@ export default function ReservationHistoryScreen() {
                         {label}
                       </Text>
                       {dateRange === value ? <DropdownCheck /> : null}
-                    </Pressable>
+                    </TouchableOpacity>
                   ))}
-                  <Pressable
+                  <TouchableOpacity
                     style={historyStyles.dateRangeAction}
                     onPress={() => {
                       setActiveDropdown(null);
@@ -861,7 +861,7 @@ export default function ReservationHistoryScreen() {
                     <View style={historyStyles.dateRangeArrowWrap}>
                       <DropdownChevron direction="right" />
                     </View>
-                  </Pressable>
+                  </TouchableOpacity>
                 </View>
               ) : null}
             </View>
@@ -871,7 +871,7 @@ export default function ReservationHistoryScreen() {
                 activeDropdown === 'type' ? historyStyles.filterAnchorActive : null,
               ]}
             >
-              <Pressable
+              <TouchableOpacity
                 style={historyStyles.filterButton}
                 onPress={() => setActiveDropdown(activeDropdown === 'type' ? null : 'type')}
                 accessibilityRole="button"
@@ -881,11 +881,11 @@ export default function ReservationHistoryScreen() {
                   {filters.find((filter) => filter.key === selectedFilter)?.label}
                 </Text>
                 <DropdownChevron />
-              </Pressable>
+              </TouchableOpacity>
               {activeDropdown === 'type' ? (
                 <View style={historyStyles.dropdownMenu}>
                   {filters.map((filter, index) => (
-                    <Pressable
+                    <TouchableOpacity
                       key={filter.key}
                       style={[
                         historyStyles.dropdownOption,
@@ -905,7 +905,7 @@ export default function ReservationHistoryScreen() {
                         {filter.label}
                       </Text>
                       {selectedFilter === filter.key ? <DropdownCheck /> : null}
-                    </Pressable>
+                    </TouchableOpacity>
                   ))}
                 </View>
               ) : null}

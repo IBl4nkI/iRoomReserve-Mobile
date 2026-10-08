@@ -479,12 +479,14 @@ export default function InboxScreen() {
   const readCount = items.filter((item) => !item.unread).length + appMessages.filter((item) => item.isRead).length;
   const visibleItems = React.useMemo<InboxRowItem[]>(() => {
     if (activeTab === 'Sent' || activeTab === 'Closed') {
-      return sentMessages.filter((message) => isInRange(message.createdAt) && (activeTab === 'Sent' ? !message.closedBySender : message.closedBySender)).map((message) => ({ id: message.id, reservationId: '', reservationStatus: activeTab === 'Closed' ? 'Closed' : `To ${message.receiverName}`, purpose: message.subject, date: '', time: '', roomName: '', equipment: '', approvalDocumentName: undefined, approvalDocumentUrl: undefined, sentAtLabel: message.createdAt?.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? 'Recent', status: 'Approved' as InboxRowStatus, unread: false, message }));
+      return sentMessages.filter((message) => isInRange(message.createdAt) && (activeTab === 'Sent' ? !message.closedBySender : message.closedBySender)).map((message) => ({ id: message.id, reservationId: '', reservationStatus: activeTab === 'Closed' ? 'Closed' : `To ${message.receiverName}`, purpose: message.subject, date: '', time: '', roomName: '', equipment: '', approvalDocumentName: undefined, approvalDocumentUrl: undefined, sentAtLabel: message.createdAt?.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? 'Recent', createdAt: message.createdAt, status: 'Approved' as InboxRowStatus, unread: false, message })).sort((a, b) => (b.createdAt?.toDate().getTime() ?? 0) - (a.createdAt?.toDate().getTime() ?? 0));
     }
     const notificationRows = items.filter((item) => isInRange(item.createdAt));
-    const messageRows = appMessages.filter((message) => isInRange(message.createdAt) && (activeTab === 'Unread' ? !message.isRead : activeTab === 'Read' ? message.isRead : true)).map((message) => ({ id: message.id, reservationId: '', reservationStatus: `From ${message.senderName}`, purpose: message.subject, date: '', time: '', roomName: '', equipment: '', approvalDocumentName: undefined, approvalDocumentUrl: undefined, sentAtLabel: message.createdAt?.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? 'Recent', status: 'Approved' as InboxRowStatus, unread: !message.isRead, message }));
+    const messageRows = appMessages.filter((message) => isInRange(message.createdAt) && (activeTab === 'Unread' ? !message.isRead : activeTab === 'Read' ? message.isRead : true)).map((message) => ({ id: message.id, reservationId: '', reservationStatus: `From ${message.senderName}`, purpose: message.subject, date: '', time: '', roomName: '', equipment: '', approvalDocumentName: undefined, approvalDocumentUrl: undefined, sentAtLabel: message.createdAt?.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? 'Recent', createdAt: message.createdAt, status: 'Approved' as InboxRowStatus, unread: !message.isRead, message }));
     const notificationFiltered = notificationRows.filter((item) => activeTab === 'Unread' ? item.unread : activeTab === 'Read' ? !item.unread : true);
-    return [...notificationFiltered, ...messageRows];
+    return [...notificationFiltered, ...messageRows].sort(
+      (a, b) => (b.createdAt?.toDate().getTime() ?? 0) - (a.createdAt?.toDate().getTime() ?? 0)
+    );
   // isInRange relies on the selected filter state.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, appMessages, dateRangeStart, customRange, dateRange, items, sentMessages]);
@@ -609,7 +611,7 @@ export default function InboxScreen() {
       <View style={styles.screenContent}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 12 }}>
           <Text style={styles.screenTitle}>Inbox</Text>
-          <Pressable onPress={async () => {
+          <TouchableOpacity onPress={async () => {
             const user = auth.currentUser;
             if (!user) return;
             const people = await getMessageRecipients(user.uid);
@@ -623,27 +625,27 @@ export default function InboxScreen() {
             }]}>
               <Text style={[styles.filterTabButtonTextActive,
                 { fontSize: 12 }]}>+ Compose</Text>
-          </Pressable>
+          </TouchableOpacity>
         </View>
         <Text style={styles.screenSubtitle}>Messages and reservation updates in one place.</Text>
         <View style={{ position: 'relative', marginBottom: 0 }}>
           {activeDropdown ? <Pressable style={inboxFilterStyles.dismiss} onPress={() => setActiveDropdown(null)} accessibilityLabel="Close filter dropdown" /> : null}
           <View style={inboxFilterStyles.controls}>
             <View style={[inboxFilterStyles.anchor, activeDropdown === 'date' ? inboxFilterStyles.anchorActive : null]}>
-              <Pressable style={inboxFilterStyles.button} onPress={() => setActiveDropdown(activeDropdown === 'date' ? null : 'date')} accessibilityRole="button" accessibilityLabel="Choose message date range">
+              <TouchableOpacity style={inboxFilterStyles.button} onPress={() => setActiveDropdown(activeDropdown === 'date' ? null : 'date')} accessibilityRole="button" accessibilityLabel="Choose message date range">
                 <Text style={inboxFilterStyles.buttonText} numberOfLines={1}>{dateRange === 'last7' ? 'Last 7 days' : dateRange === 'last30' ? 'Last 30 days' : customRange ? `${customRange.startDate} - ${customRange.endDate}` : 'Pick dates'}</Text><Text style={inboxFilterStyles.buttonText}>v</Text>
-              </Pressable>
+              </TouchableOpacity>
               {activeDropdown === 'date' ? <View style={inboxFilterStyles.menu}>
-                {([['last7', 'Last 7 days'], ['last30', 'Last 30 days']] as const).map(([value, label], index) => <Pressable key={value} style={[inboxFilterStyles.option, index === 1 ? inboxFilterStyles.optionLast : null]} onPress={() => { setDateRange(value); setActiveDropdown(null); }}><Text style={[inboxFilterStyles.optionText, dateRange === value ? inboxFilterStyles.optionSelected : null]}>{label}</Text>{dateRange === value ? <FilterCheck /> : null}</Pressable>)}
-                <Pressable style={inboxFilterStyles.dateAction} onPress={() => { setActiveDropdown(null); setCalendarOpen(true); }} accessibilityRole="button" accessibilityLabel="Pick the Date Range"><View style={inboxFilterStyles.calendarWrap}><CalendarIcon /></View><Text style={inboxFilterStyles.dateActionText}>Pick the Date Range</Text><View style={inboxFilterStyles.dateActionArrow}><Text style={inboxFilterStyles.optionText}>&gt;</Text></View></Pressable>
+                {([['last7', 'Last 7 days'], ['last30', 'Last 30 days']] as const).map(([value, label], index) => <TouchableOpacity key={value} style={[inboxFilterStyles.option, index === 1 ? inboxFilterStyles.optionLast : null]} onPress={() => { setDateRange(value); setActiveDropdown(null); }}><Text style={[inboxFilterStyles.optionText, dateRange === value ? inboxFilterStyles.optionSelected : null]}>{label}</Text>{dateRange === value ? <FilterCheck /> : null}</TouchableOpacity>)}
+                <TouchableOpacity style={inboxFilterStyles.dateAction} onPress={() => { setActiveDropdown(null); setCalendarOpen(true); }} accessibilityRole="button" accessibilityLabel="Pick the Date Range"><View style={inboxFilterStyles.calendarWrap}><CalendarIcon /></View><Text style={inboxFilterStyles.dateActionText}>Pick the Date Range</Text><View style={inboxFilterStyles.dateActionArrow}><Text style={inboxFilterStyles.optionText}>&gt;</Text></View></TouchableOpacity>
               </View> : null}
             </View>
             <View style={[inboxFilterStyles.anchor, activeDropdown === 'messages' ? inboxFilterStyles.anchorActive : null]}>
-              <Pressable style={inboxFilterStyles.button} onPress={() => setActiveDropdown(activeDropdown === 'messages' ? null : 'messages')} accessibilityRole="button" accessibilityLabel={`Message filter: ${activeTab}`}>
+              <TouchableOpacity style={inboxFilterStyles.button} onPress={() => setActiveDropdown(activeDropdown === 'messages' ? null : 'messages')} accessibilityRole="button" accessibilityLabel={`Message filter: ${activeTab}`}>
                 <Text style={inboxFilterStyles.buttonText} numberOfLines={1}>{activeTab}</Text><Text style={inboxFilterStyles.buttonText}>v</Text>
-              </Pressable>
+              </TouchableOpacity>
               {activeDropdown === 'messages' ? <View style={inboxFilterStyles.menu}>
-                {(['Unread', 'Read', 'Sent', 'Closed', 'All Messages'] as InboxTab[]).map((tab, index, options) => <Pressable key={tab} style={[inboxFilterStyles.option, index === options.length - 1 ? inboxFilterStyles.optionLast : null]} onPress={() => { setActiveTab(tab); setActiveDropdown(null); }}><Text style={[inboxFilterStyles.optionText, activeTab === tab ? inboxFilterStyles.optionSelected : null]}>{tab}</Text>{activeTab === tab ? <FilterCheck /> : null}</Pressable>)}
+                {(['Unread', 'Read', 'Sent', 'Closed', 'All Messages'] as InboxTab[]).map((tab, index, options) => <TouchableOpacity key={tab} style={[inboxFilterStyles.option, index === options.length - 1 ? inboxFilterStyles.optionLast : null]} onPress={() => { setActiveTab(tab); setActiveDropdown(null); }}><Text style={[inboxFilterStyles.optionText, activeTab === tab ? inboxFilterStyles.optionSelected : null]}>{tab}</Text>{activeTab === tab ? <FilterCheck /> : null}</TouchableOpacity>)}
               </View> : null}
             </View>
           </View>
@@ -663,9 +665,9 @@ export default function InboxScreen() {
 
         {showMarkAllAsRead ? (
           <View style={{ alignItems: 'flex-end', marginBottom: 18 }}>
-            <Pressable disabled={bulkActionLoading} onPress={() => void handleMarkAllAsRead()}>
+            <TouchableOpacity disabled={bulkActionLoading} onPress={() => void handleMarkAllAsRead()}>
               <Text style={styles.textLink}>{bulkActionLoading ? 'Marking...' : 'Mark All Read'}</Text>
-            </Pressable>
+            </TouchableOpacity>
           </View>
         ) : null}
 
@@ -676,8 +678,14 @@ export default function InboxScreen() {
         ) : showList ? (
           <View style={styles.inboxListFullWidth}>
             <View style={styles.inboxList}>
-            {visibleItems.map((item, index) => (
-              <Pressable
+            {visibleItems.map((item, index) => {
+              const InboxItemPressable =
+                !item.message && item.isOwnReservation && item.reservationFilter && item.reservationActivityDate
+                  ? TouchableOpacity
+                  : Pressable;
+
+              return (
+              <InboxItemPressable
                 key={item.id}
                 onPress={() => {
                   if (!item.message && item.isOwnReservation && item.reservationFilter && item.reservationActivityDate) {
@@ -879,8 +887,9 @@ export default function InboxScreen() {
                     </View>
                   ) : null}
                 </View>
-              </Pressable>
-            ))}
+              </InboxItemPressable>
+              );
+            })}
             </View>
           </View>
         ) : null}
