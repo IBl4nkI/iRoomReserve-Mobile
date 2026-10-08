@@ -1,7 +1,7 @@
 import React from 'react';
 import { router } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
-import { ActivityIndicator, Alert, Keyboard, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
@@ -244,6 +244,13 @@ function getActivityDateRange(dateKey: string) {
   return { dateRange: 'custom' as const, startDate: dateKey, endDate: dateKey };
 }
 
+function getRecipientRoleLabel(role: string) {
+  const normalized = role.trim().toLowerCase().replaceAll('_', ' ');
+  return ['admin', 'administrator', 'building admin', 'building administrator'].includes(normalized)
+    ? 'Building Administrator'
+    : role;
+}
+
 function getRowStatus(notification: AppNotification): InboxRowStatus {
   switch (notification.type) {
     case "reservation_rejected":
@@ -321,6 +328,7 @@ export default function InboxScreen() {
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
   const inboxScrollRef = React.useRef<ScrollView | null>(null);
+  const composeScrollRef = React.useRef<ScrollView | null>(null);
   const [keyboardHeight, setKeyboardHeight] = React.useState(0);
   const [items, setItems] = React.useState<InboxRowItem[]>([]);
   const [appMessages, setAppMessages] = React.useState<AppMessage[]>([]);
@@ -331,6 +339,9 @@ export default function InboxScreen() {
   const [calendarOpen, setCalendarOpen] = React.useState(false);
   const [composeOpen, setComposeOpen] = React.useState(false);
   const [recipients, setRecipients] = React.useState<MessageRecipient[]>([]);
+  const [recipientDropdownOpen, setRecipientDropdownOpen] = React.useState(false);
+  const recipientDropdownHeight = 320;
+  const [recipientDropdownTop, setRecipientDropdownTop] = React.useState(160);
   const [recipientId, setRecipientId] = React.useState('');
   const [subject, setSubject] = React.useState('');
   const [body, setBody] = React.useState('');
@@ -599,13 +610,13 @@ export default function InboxScreen() {
             const user = auth.currentUser;
             if (!user) return;
             const people = await getMessageRecipients(user.uid);
-            setRecipients(people); setRecipientId('');
+            setRecipients(people); setRecipientId(''); setRecipientDropdownOpen(false);
             setSubject(''); setBody(''); setComposeOpen(true);
             }} style={[
               styles.filterTabButton,
               styles.filterTabButtonActive,
               { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 5,
-              transform: [{ translateY: 6 }]
+              transform: [{ translateY: 8 }]
             }]}>
               <Text style={[styles.filterTabButtonTextActive,
                 { fontSize: 12 }]}>+ Compose</Text>
@@ -872,22 +883,109 @@ export default function InboxScreen() {
         ) : null}
       </View>
       <Modal visible={composeOpen} transparent animationType="slide" onRequestClose={() => setComposeOpen(false)}>
-        <View style={{ flex: 1, justifyContent: 'center', padding: 20, backgroundColor: 'rgba(0,0,0,0.45)' }}>
-          <View style={[styles.card, { gap: 12, maxHeight: '85%' }]}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1, justifyContent: 'center', padding: 20, backgroundColor: 'rgba(0,0,0,0.45)' }}
+        >
+          <View style={[styles.card, { maxHeight: '85%', flexShrink: 1, marginBottom: 0, position: 'relative', zIndex: 1 }]}>
+            <ScrollView
+              ref={composeScrollRef}
+              scrollEnabled={!recipientDropdownOpen}
+              keyboardShouldPersistTaps="handled"
+              style={{ maxHeight: '100%', flexGrow: 0, flexShrink: 1 }}
+              contentContainerStyle={{ gap: 12, flexGrow: 0 }}
+            >
             <Text style={styles.screenTitle}>New Message</Text>
             <Text style={styles.screenSubtitle}>From {senderProfile.name} · {senderProfile.role}{senderProfile.campus ? ` · ${senderProfile.campus === 'digi' ? 'Digital Campus' : 'Main Campus'}` : ''}</Text>
-            <Text style={styles.mutedLabel}>To</Text>
-            <ScrollView style={{ maxHeight: 160 }}>
-              {recipients.map((person) => <Pressable key={person.uid} onPress={() => setRecipientId(person.uid)} style={{ padding: 10, borderRadius: 10, backgroundColor: recipientId === person.uid ? '#f3e8e8' : '#f8f8f8', marginBottom: 5 }}><Text>{person.name} — {person.role}{person.campus ? ` · ${person.campus === 'digi' ? 'Digital Campus' : 'Main Campus'}` : ''}</Text></Pressable>)}
-            </ScrollView>
-            <TextInput value={subject} onChangeText={setSubject} placeholder="Subject" style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12 }} />
-            <TextInput value={body} onChangeText={setBody} placeholder="Write your message..." multiline style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, minHeight: 110, textAlignVertical: 'top' }} />
-            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 18 }}>
-              <Pressable onPress={() => setComposeOpen(false)}><Text style={styles.textLink}>Cancel</Text></Pressable>
-              <Pressable disabled={sending} onPress={async () => { const user = auth.currentUser; const recipient = recipients.find((entry) => entry.uid === recipientId); if (!user || !recipient || !subject.trim() || !body.trim()) { Alert.alert('Complete the message', 'Choose a recipient and enter a subject and message.'); return; } try { setSending(true); await sendAppMessage({ senderId: user.uid, senderName: senderProfile.name, senderRole: senderProfile.role, senderCampus: senderProfile.campus, receiverId: recipient.uid, receiverName: recipient.name, receiverRole: recipient.role, receiverCampus: recipient.campus, subject, body }); setComposeOpen(false); Alert.alert('Message sent', `Your message was sent to ${recipient.name}.`); } catch (error) { Alert.alert('Unable to send', error instanceof Error ? error.message : 'Please try again.'); } finally { setSending(false); } }}><Text style={styles.textLink}>{sending ? 'Sending...' : 'Send'}</Text></Pressable>
+            <View
+              onLayout={({ nativeEvent }) => setRecipientDropdownTop(26 + nativeEvent.layout.y + nativeEvent.layout.height)}
+              style={{ position: 'relative', zIndex: recipientDropdownOpen ? 20 : 1, elevation: recipientDropdownOpen ? 20 : 1, gap: 6 }}
+            >
+              <Text style={styles.mutedLabel}>To</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={recipients.find((person) => person.uid === recipientId)?.name ?? 'Select a recipient'}
+                onPress={() => setRecipientDropdownOpen((open) => !open)}
+                style={{ minHeight: 48, borderWidth: 1, borderColor: recipientDropdownOpen ? colors.primary : '#ddd', borderRadius: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff' }}
+              >
+                <Text style={{ color: recipientId ? colors.text : colors.secondary }}>
+                  {(() => {
+                    const recipient = recipients.find((person) => person.uid === recipientId);
+                    return recipient
+                      ? `${recipient.name} — ${getRecipientRoleLabel(recipient.role)}${recipient.campus ? ` · ${recipient.campus === 'digi' ? 'Digital Campus' : 'Main Campus'}` : ''}`
+                      : 'Select a recipient';
+                  })()}
+                </Text>
+                <Text style={{ color: colors.secondary }}>{recipientDropdownOpen ? '⌃' : '⌄'}</Text>
+              </Pressable>
             </View>
+            <Text style={styles.mutedLabel}>Subject</Text>
+            <TextInput value={subject} onChangeText={setSubject} placeholder="Add a clear subject" style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 12, padding: 12 }} />
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Text style={styles.mutedLabel}>Message</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                {body.length >= 451 ? (
+                  <Svg width={13} height={13} viewBox="0 0 24 24">
+                    <Path d="M12 3 22 21H2L12 3Z" fill="none" stroke={body.length >= 500 ? colors.dangerText : '#e0c34a'} strokeWidth={1.8} strokeLinejoin="round" />
+                    <Path d="M12 9v5m0 3h.01" fill="none" stroke={body.length >= 500 ? colors.dangerText : '#e0c34a'} strokeWidth={2} strokeLinecap="round" />
+                  </Svg>
+                ) : null}
+                <Text style={{ color: body.length >= 500 ? colors.dangerText : body.length >= 451 ? '#d2b43b' : colors.secondary, fontFamily: fonts.regular, fontSize: 11 }}>{body.length}/500</Text>
+              </View>
+            </View>
+            <TextInput
+              value={body}
+              onChangeText={setBody}
+              onFocus={() => setTimeout(() => composeScrollRef.current?.scrollToEnd({ animated: true }), 150)}
+              placeholder="Write your message..."
+              maxLength={500}
+              multiline
+              style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 12, padding: 12, minHeight: 120, textAlignVertical: 'top' }}
+            />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 8, marginTop: 2 }}>
+              <TouchableOpacity
+                accessibilityRole="button"
+                onPress={() => setComposeOpen(false)}
+                style={{ minHeight: 34, minWidth: 76, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.border, borderRadius: 8, backgroundColor: colors.surface }}
+              >
+                <Svg width={13} height={13} viewBox="0 0 16 16">
+                  <Path d="m4 4 8 8M12 4l-8 8" fill="none" stroke={colors.text} strokeWidth={1.8} strokeLinecap="round" />
+                </Svg>
+                <Text style={{ color: colors.text, fontFamily: fonts.bold, fontSize: 12 }}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                accessibilityRole="button"
+                disabled={sending}
+                onPress={async () => { const user = auth.currentUser; const recipient = recipients.find((entry) => entry.uid === recipientId); if (!user || !recipient || !subject.trim() || !body.trim()) { Alert.alert('Complete the message', 'Choose a recipient and enter a subject and message.'); return; } try { setSending(true); await sendAppMessage({ senderId: user.uid, senderName: senderProfile.name, senderRole: senderProfile.role, senderCampus: senderProfile.campus, receiverId: recipient.uid, receiverName: recipient.name, receiverRole: recipient.role, receiverCampus: recipient.campus, subject, body }); setComposeOpen(false); Alert.alert('Message sent', `Your message was sent to ${recipient.name}.`); } catch (error) { Alert.alert('Unable to send', error instanceof Error ? error.message : 'Please try again.'); } finally { setSending(false); } }}
+                style={{ minHeight: 34, minWidth: 76, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 10, borderRadius: 8, backgroundColor: sending ? colors.secondary : colors.primary, opacity: sending ? 0.7 : 1 }}
+              >
+                <Svg width={13} height={13} viewBox="0 0 24 24">
+                  <Path d="m22 2-7 20-4-9-9-4 20-7ZM22 2 11 13" fill="none" stroke={colors.white} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+                </Svg>
+                <Text style={{ color: colors.white, fontFamily: fonts.bold, fontSize: 12 }}>{sending ? 'Sending...' : 'Send'}</Text>
+              </TouchableOpacity>
+            </View>
+            </ScrollView>
+            {recipientDropdownOpen ? (
+              <ScrollView
+                style={{ position: 'absolute', top: recipientDropdownTop, left: 20, right: 20, height: recipientDropdownHeight, borderWidth: 1, borderColor: '#ddd', borderRadius: 12, padding: 6, backgroundColor: '#fff', zIndex: 30, elevation: 30 }}
+                scrollEnabled
+                keyboardShouldPersistTaps="always"
+                showsVerticalScrollIndicator
+              >
+                {recipients.map((person) => (
+                  <TouchableOpacity
+                    key={person.uid}
+                    onPress={() => { setRecipientId(person.uid); setRecipientDropdownOpen(false); }}
+                    style={{ padding: 10, borderRadius: 10, backgroundColor: recipientId === person.uid ? '#f3e8e8' : '#fff', marginBottom: 5 }}
+                  >
+                    <Text>{person.name} — {getRecipientRoleLabel(person.role)}{person.campus ? ` · ${person.campus === 'digi' ? 'Digital Campus' : 'Main Campus'}` : ''}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            ) : null}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
       <ReservationDateRangeModal visible={calendarOpen} initialStartDate={customRange?.startDate ?? null} initialEndDate={customRange?.endDate ?? null} onApply={(startDate, endDate) => { setCustomRange({ startDate, endDate }); setDateRange('custom'); }} onClose={() => setCalendarOpen(false)} />
     </ScrollView>
