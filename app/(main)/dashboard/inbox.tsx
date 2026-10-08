@@ -1,11 +1,12 @@
 import React from 'react';
-import { ActivityIndicator, Alert, Keyboard, Linking, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
 import DashboardTopNav from '@/components/dashboard/DashboardTopNav';
+import ReservationDateRangeModal from '@/components/ReservationDateRangeModal';
 import { dashboardStyles as styles } from '@/components/dashboard/styles';
-import { colors } from '@/constants/theme';
+import { colors, fonts } from '@/constants/theme';
 import { getUserProfile } from '@/lib/auth';
 import { auth } from '@/lib/firebase';
 import {
@@ -25,8 +26,9 @@ import {
 } from '@/services/reservations.service';
 import { formatTime12h } from '@/services/schedules.service';
 import type { ReservationRecord } from '@/types/reservation';
+import { closeAppMessage, getMessageRecipients, markAppMessageRead, onInboxMessages, onSentMessages, sendAppMessage, type AppMessage, type MessageRecipient } from '@/services/messages.service';
 
-type InboxTab = 'Unread' | 'Read' | 'All Mail';
+type InboxTab = 'Unread' | 'Read' | 'Sent' | 'Closed' | 'All Messages';
 type InboxRowStatus = 'Approved' | 'Rejected' | 'Pending';
 
 interface InboxRowItem {
@@ -43,7 +45,38 @@ interface InboxRowItem {
   sentAtLabel: string;
   status: InboxRowStatus;
   unread: boolean;
+  message?: AppMessage;
+  createdAt?: AppNotification['createdAt'];
 }
+
+type InboxDateRange = 'last7' | 'last30' | 'custom';
+type InboxDropdown = 'date' | 'messages' | null;
+
+function FilterCheck() {
+  return <Svg width={16} height={16} viewBox="0 0 16 16" accessibilityLabel="Selected"><Path d="m3 8.5 3.2 3.2L13 5" fill="none" stroke={colors.primary} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></Svg>;
+}
+
+function CalendarIcon() {
+  return <Svg width={18} height={18} viewBox="0 0 18 18" accessibilityLabel="Calendar"><Path d="M5 2.5v3M13 2.5v3M3 7h12M4 4h10a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z" fill="none" stroke={colors.secondary} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" /></Svg>;
+}
+
+const inboxFilterStyles = StyleSheet.create({
+  controls: { position: 'relative', zIndex: 2, flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
+  anchor: { flex: 1, position: 'relative', zIndex: 2, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface },
+  anchorActive: { borderColor: colors.primary },
+  button: { minHeight: 48, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 8 },
+  buttonText: { flexShrink: 1, color: colors.text, fontFamily: fonts.regular, fontSize: 14 },
+  menu: { position: 'absolute', top: 48, left: 0, right: 0, backgroundColor: colors.surface, borderRadius: 10, borderWidth: 1, borderColor: colors.border, overflow: 'hidden', shadowColor: '#000', shadowOpacity: 0.14, shadowRadius: 10, shadowOffset: { width: 0, height: 5 }, elevation: 4, zIndex: 4 },
+  option: { minHeight: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  optionLast: { borderBottomWidth: 0 },
+  optionText: { flexShrink: 1, color: colors.text, fontFamily: fonts.regular, fontSize: 13 },
+  optionSelected: { color: colors.primary, fontFamily: fonts.bold },
+  dateAction: { minHeight: 60, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, backgroundColor: '#f3f8f3' },
+  calendarWrap: { marginLeft: 4, marginRight: 12 },
+  dateActionText: { flex: 1, flexShrink: 1, color: colors.text, fontFamily: fonts.regular, fontSize: 13 },
+  dateActionArrow: { marginLeft: 1 },
+  dismiss: { ...StyleSheet.absoluteFillObject, zIndex: 1 },
+});
 
 function CheckIcon() {
   return (
@@ -238,6 +271,7 @@ function buildInboxRows(
       sentAtLabel: formatSentDateFromNotification(notification),
       status: getRowStatus(notification),
       unread: !notification.read,
+      createdAt: notification.createdAt,
     };
   });
 }
@@ -247,6 +281,19 @@ export default function InboxScreen() {
   const inboxScrollRef = React.useRef<ScrollView | null>(null);
   const [keyboardHeight, setKeyboardHeight] = React.useState(0);
   const [items, setItems] = React.useState<InboxRowItem[]>([]);
+  const [appMessages, setAppMessages] = React.useState<AppMessage[]>([]);
+  const [sentMessages, setSentMessages] = React.useState<AppMessage[]>([]);
+  const [dateRange, setDateRange] = React.useState<InboxDateRange>('last7');
+  const [activeDropdown, setActiveDropdown] = React.useState<InboxDropdown>(null);
+  const [customRange, setCustomRange] = React.useState<{ startDate: string; endDate: string } | null>(null);
+  const [calendarOpen, setCalendarOpen] = React.useState(false);
+  const [composeOpen, setComposeOpen] = React.useState(false);
+  const [recipients, setRecipients] = React.useState<MessageRecipient[]>([]);
+  const [recipientId, setRecipientId] = React.useState('');
+  const [subject, setSubject] = React.useState('');
+  const [body, setBody] = React.useState('');
+  const [sending, setSending] = React.useState(false);
+  const [senderProfile, setSenderProfile] = React.useState<{ name: string; role: string; campus?: string }>({ name: '', role: '' });
   const [expandedItemId, setExpandedItemId] = React.useState<string | null>(null);
   const [activeTab, setActiveTab] = React.useState<InboxTab>('Unread');
   const [loading, setLoading] = React.useState(true);
@@ -338,31 +385,53 @@ export default function InboxScreen() {
         }
       })();
     });
+    const stopInboxMessages = onInboxMessages(currentUser.uid, setAppMessages);
+    const stopSentMessages = onSentMessages(currentUser.uid, setSentMessages);
+    void getUserProfile(currentUser.uid).then((profile) => {
+      if (!profile) return;
+      const user = profile as typeof profile & { firstName?: string; lastName?: string; name?: string };
+      setSenderProfile({ name: user.name || [user.firstName, user.lastName].filter(Boolean).join(' ') || currentUser.displayName || '', role: user.role ?? '', campus: user.campus ?? undefined });
+    });
 
     return () => {
       active = false;
       unsubscribe();
+      stopInboxMessages();
+      stopSentMessages();
     };
   }, []);
 
-  const unreadCount = items.filter((item) => item.unread).length;
-  const readCount = items.length - unreadCount;
-  const visibleItems = items.filter((item) => {
-    if (activeTab === 'Unread') {
-      return item.unread;
+  const dateRangeStart = React.useMemo(() => {
+    if (dateRange === 'custom' && customRange) return new Date(`${customRange.startDate}T00:00:00`).getTime();
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (dateRange === 'last30' ? 29 : 6));
+    return start.getTime();
+  }, [customRange, dateRange]);
+  const isInRange = (createdAt?: { toDate?: () => Date }) => {
+    const timestamp = createdAt?.toDate?.().getTime();
+    if (timestamp === undefined) return true;
+    if (dateRange === 'custom' && customRange) return timestamp <= new Date(`${customRange.endDate}T23:59:59`).getTime() && timestamp >= dateRangeStart;
+    return timestamp >= dateRangeStart;
+  };
+  const unreadCount = items.filter((item) => item.unread).length + appMessages.filter((item) => !item.isRead).length;
+  const readCount = items.filter((item) => !item.unread).length + appMessages.filter((item) => item.isRead).length;
+  const visibleItems = React.useMemo(() => {
+    if (activeTab === 'Sent' || activeTab === 'Closed') {
+      return sentMessages.filter((message) => isInRange(message.createdAt) && (activeTab === 'Sent' ? !message.closedBySender : message.closedBySender)).map((message) => ({ id: message.id, reservationId: '', reservationStatus: activeTab === 'Closed' ? 'Closed' : `To ${message.receiverName}`, purpose: message.subject, date: '', time: '', roomName: '', equipment: '', approvalDocumentName: undefined, approvalDocumentUrl: undefined, sentAtLabel: message.createdAt?.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? 'Recent', status: 'Approved' as InboxRowStatus, unread: false, message }));
     }
-
-    if (activeTab === 'Read') {
-      return !item.unread;
-    }
-
-    return true;
-  });
+    const notificationRows = items.filter((item) => isInRange(item.createdAt));
+    const messageRows = appMessages.filter((message) => isInRange(message.createdAt) && (activeTab === 'Unread' ? !message.isRead : activeTab === 'Read' ? message.isRead : true)).map((message) => ({ id: message.id, reservationId: '', reservationStatus: `From ${message.senderName}`, purpose: message.subject, date: '', time: '', roomName: '', equipment: '', approvalDocumentName: undefined, approvalDocumentUrl: undefined, sentAtLabel: message.createdAt?.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) ?? 'Recent', status: 'Approved' as InboxRowStatus, unread: !message.isRead, message }));
+    const notificationFiltered = notificationRows.filter((item) => activeTab === 'Unread' ? item.unread : activeTab === 'Read' ? !item.unread : true);
+    return [...notificationFiltered, ...messageRows];
+  // isInRange relies on the selected filter state.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, appMessages, dateRangeStart, customRange, dateRange, items, sentMessages]);
   const showTabs = !loading && (items.length > 0 || !error);
   const showEmptyState = !loading && !error && visibleItems.length === 0;
   const showList = !loading && visibleItems.length > 0;
   const showMarkAllAsRead = activeTab === 'Unread' && unreadCount > 0;
-  const showDeleteAllMail = activeTab === 'Read' && readCount > 0;
+  const showDeleteAllMail = false;
 
   const handleMarkAsRead = React.useCallback(async (notificationId: string) => {
     if (markingReadId) {
@@ -422,11 +491,14 @@ export default function InboxScreen() {
 
     try {
       setBulkActionLoading(true);
-      await markAllNotificationsRead(currentUser.uid);
+      await Promise.all([
+        markAllNotificationsRead(currentUser.uid),
+        ...appMessages.filter((message) => !message.isRead).map((message) => markAppMessageRead(message.id)),
+      ]);
     } finally {
       setBulkActionLoading(false);
     }
-  }, [bulkActionLoading]);
+  }, [appMessages, bulkActionLoading]);
 
   const handleDeleteAllMail = React.useCallback(() => {
     const currentUser = auth.currentUser;
@@ -474,10 +546,47 @@ export default function InboxScreen() {
       <DashboardTopNav />
 
       <View style={styles.screenContent}>
-        <Text style={styles.screenTitle}>Inbox</Text>
-        <Text style={styles.screenSubtitle}>
-          Reservation updates appear here first while push notifications are not yet enabled.
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 12 }}>
+          <Text style={styles.screenTitle}>Inbox</Text>
+          <Pressable onPress={async () => {
+            const user = auth.currentUser;
+            if (!user) return;
+            const people = await getMessageRecipients(user.uid);
+            setRecipients(people); setRecipientId('');
+            setSubject(''); setBody(''); setComposeOpen(true);
+            }} style={[
+              styles.filterTabButton,
+              styles.filterTabButtonActive,
+              { borderRadius: 8, paddingHorizontal: 7, paddingVertical: 5,
+              transform: [{ translateY: 6 }]
+            }]}>
+              <Text style={[styles.filterTabButtonTextActive,
+                { fontSize: 12 }]}>+ Compose</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.screenSubtitle}>Messages and reservation updates in one place.</Text>
+        <View style={{ position: 'relative', marginBottom: 0 }}>
+          {activeDropdown ? <Pressable style={inboxFilterStyles.dismiss} onPress={() => setActiveDropdown(null)} accessibilityLabel="Close filter dropdown" /> : null}
+          <View style={inboxFilterStyles.controls}>
+            <View style={[inboxFilterStyles.anchor, activeDropdown === 'date' ? inboxFilterStyles.anchorActive : null]}>
+              <Pressable style={inboxFilterStyles.button} onPress={() => setActiveDropdown(activeDropdown === 'date' ? null : 'date')} accessibilityRole="button" accessibilityLabel="Choose message date range">
+                <Text style={inboxFilterStyles.buttonText} numberOfLines={1}>{dateRange === 'last7' ? 'Last 7 days' : dateRange === 'last30' ? 'Last 30 days' : customRange ? `${customRange.startDate} - ${customRange.endDate}` : 'Pick dates'}</Text><Text style={inboxFilterStyles.buttonText}>v</Text>
+              </Pressable>
+              {activeDropdown === 'date' ? <View style={inboxFilterStyles.menu}>
+                {([['last7', 'Last 7 days'], ['last30', 'Last 30 days']] as const).map(([value, label], index) => <Pressable key={value} style={[inboxFilterStyles.option, index === 1 ? inboxFilterStyles.optionLast : null]} onPress={() => { setDateRange(value); setActiveDropdown(null); }}><Text style={[inboxFilterStyles.optionText, dateRange === value ? inboxFilterStyles.optionSelected : null]}>{label}</Text>{dateRange === value ? <FilterCheck /> : null}</Pressable>)}
+                <Pressable style={inboxFilterStyles.dateAction} onPress={() => { setActiveDropdown(null); setCalendarOpen(true); }} accessibilityRole="button" accessibilityLabel="Pick the Date Range"><View style={inboxFilterStyles.calendarWrap}><CalendarIcon /></View><Text style={inboxFilterStyles.dateActionText}>Pick the Date Range</Text><View style={inboxFilterStyles.dateActionArrow}><Text style={inboxFilterStyles.optionText}>&gt;</Text></View></Pressable>
+              </View> : null}
+            </View>
+            <View style={[inboxFilterStyles.anchor, activeDropdown === 'messages' ? inboxFilterStyles.anchorActive : null]}>
+              <Pressable style={inboxFilterStyles.button} onPress={() => setActiveDropdown(activeDropdown === 'messages' ? null : 'messages')} accessibilityRole="button" accessibilityLabel={`Message filter: ${activeTab}`}>
+                <Text style={inboxFilterStyles.buttonText} numberOfLines={1}>{activeTab}</Text><Text style={inboxFilterStyles.buttonText}>v</Text>
+              </Pressable>
+              {activeDropdown === 'messages' ? <View style={inboxFilterStyles.menu}>
+                {(['Unread', 'Read', 'Sent', 'Closed', 'All Messages'] as InboxTab[]).map((tab, index, options) => <Pressable key={tab} style={[inboxFilterStyles.option, index === options.length - 1 ? inboxFilterStyles.optionLast : null]} onPress={() => { setActiveTab(tab); setActiveDropdown(null); }}><Text style={[inboxFilterStyles.optionText, activeTab === tab ? inboxFilterStyles.optionSelected : null]}>{tab}</Text>{activeTab === tab ? <FilterCheck /> : null}</Pressable>)}
+              </View> : null}
+            </View>
+          </View>
+        </View>
 
         {loading ? (
           <View style={styles.card}>
@@ -491,77 +600,12 @@ export default function InboxScreen() {
           </View>
         ) : null}
 
-        {showTabs ? (
-        <View style={{ marginBottom: 18 }}>
-          <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
-            <View style={[styles.filterTabsRow, { flex: 1, marginBottom: 0 }]}>
-              {(['Unread', 'Read', 'All Mail'] as InboxTab[]).map((tab) => {
-                const isActive = activeTab === tab;
-                const count =
-                  tab === 'Unread' ? unreadCount : tab === 'Read' ? readCount : items.length;
-
-                return (
-                  <Pressable
-                    key={tab}
-                    style={[
-                      styles.filterTabButton,
-                      isActive ? styles.filterTabButtonActive : null,
-                    ]}
-                    onPress={() => setActiveTab(tab)}
-                  >
-                    <Text
-                      style={[
-                        styles.filterTabButtonText,
-                        isActive ? styles.filterTabButtonTextActive : null,
-                      ]}
-                    >
-                      {tab}
-                    </Text>
-                    <View
-                      style={[
-                        styles.filterTabBadge,
-                        isActive ? styles.filterTabBadgeActive : null,
-                      ]}
-                    >
-                      <Text
-                        style={[
-                          styles.filterTabBadgeText,
-                          isActive ? styles.filterTabBadgeTextActive : null,
-                        ]}
-                      >
-                        {count}
-                      </Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {showMarkAllAsRead ? (
-              <Pressable
-                disabled={bulkActionLoading}
-                onPress={() => {
-                  void handleMarkAllAsRead();
-                }}
-              >
-                <Text style={styles.textLink}>
-                  {bulkActionLoading ? 'Marking...' : 'Mark All Read'}
-                </Text>
-              </Pressable>
-            ) : null}
-
-            {showDeleteAllMail ? (
-              <Pressable
-                disabled={bulkActionLoading}
-                onPress={handleDeleteAllMail}
-              >
-                <Text style={styles.textLink}>
-                  {bulkActionLoading ? 'Deleting...' : 'Delete All Mail'}
-                </Text>
-              </Pressable>
-            ) : null}
+        {showMarkAllAsRead ? (
+          <View style={{ alignItems: 'flex-end', marginBottom: 18 }}>
+            <Pressable disabled={bulkActionLoading} onPress={() => void handleMarkAllAsRead()}>
+              <Text style={styles.textLink}>{bulkActionLoading ? 'Marking...' : 'Mark All Read'}</Text>
+            </Pressable>
           </View>
-        </View>
         ) : null}
 
         {showEmptyState ? (
@@ -575,7 +619,10 @@ export default function InboxScreen() {
               <Pressable
                 key={item.id}
                 onPress={() =>
-                  setExpandedItemId((current) => (current === item.id ? null : item.id))
+                    setExpandedItemId((current) => {
+                      if (current !== item.id && item.message && !item.message.isRead && activeTab !== 'Sent' && activeTab !== 'Closed') void markAppMessageRead(item.id);
+                      return current === item.id ? null : item.id;
+                    })
                 }
                 style={[
                   styles.inboxNotificationRow,
@@ -612,12 +659,18 @@ export default function InboxScreen() {
 
                   {expandedItemId === item.id ? (
                     <View style={styles.inboxNotificationExpanded}>
-                      <Text style={styles.inboxNotificationDetailText}>
+                      {item.message ? <>
+                        <Text style={styles.inboxNotificationDetailText}>Subject: {item.message.subject}</Text>
+                        <Text style={styles.inboxNotificationDetailText}>{item.message.body}</Text>
+                        <Text style={styles.inboxNotificationDetailText}>{activeTab === 'Sent' || activeTab === 'Closed' ? `To: ${item.message.receiverName} · ${item.message.receiverRole}${item.message.receiverCampus ? ` · ${item.message.receiverCampus === 'digi' ? 'Digital Campus' : 'Main Campus'}` : ''}` : `From: ${item.message.senderName} · ${item.message.senderRole}${item.message.senderCampus ? ` · ${item.message.senderCampus === 'digi' ? 'Digital Campus' : 'Main Campus'}` : ''}`}</Text>
+                        {activeTab === 'Sent' && !item.message.closedBySender ? <Pressable style={[styles.inboxNotificationActionButton, { marginTop: 10 }]} onPress={() => void closeAppMessage(item.id)}><Text style={styles.inboxNotificationActionButtonText}>Close message</Text></Pressable> : null}
+                      </> : null}
+                      {!item.message ? <Text style={styles.inboxNotificationDetailText}>
                         Purpose: {item.purpose}
-                      </Text>
-                      <Text style={styles.inboxNotificationDetailText}>
+                      </Text> : null}
+                      {!item.message ? <Text style={styles.inboxNotificationDetailText}>
                         Requested Equipment: {item.equipment}
-                      </Text>
+                      </Text> : null}
                       {item.approvalDocumentUrl ? (
                         <View style={{ marginTop: 6 }}>
                           <Text style={styles.inboxNotificationDetailText}>
@@ -730,7 +783,8 @@ export default function InboxScreen() {
                           ]}
                           disabled={markingReadId === item.id}
                           onPress={() => {
-                            void handleMarkAsRead(item.id);
+                            if (item.message) void markAppMessageRead(item.id);
+                            else void handleMarkAsRead(item.id);
                           }}
                         >
                           <Text style={styles.inboxNotificationActionButtonText}>
@@ -747,6 +801,25 @@ export default function InboxScreen() {
           </View>
         ) : null}
       </View>
+      <Modal visible={composeOpen} transparent animationType="slide" onRequestClose={() => setComposeOpen(false)}>
+        <View style={{ flex: 1, justifyContent: 'center', padding: 20, backgroundColor: 'rgba(0,0,0,0.45)' }}>
+          <View style={[styles.card, { gap: 12, maxHeight: '85%' }]}>
+            <Text style={styles.screenTitle}>New Message</Text>
+            <Text style={styles.screenSubtitle}>From {senderProfile.name} · {senderProfile.role}{senderProfile.campus ? ` · ${senderProfile.campus === 'digi' ? 'Digital Campus' : 'Main Campus'}` : ''}</Text>
+            <Text style={styles.mutedLabel}>To</Text>
+            <ScrollView style={{ maxHeight: 160 }}>
+              {recipients.map((person) => <Pressable key={person.uid} onPress={() => setRecipientId(person.uid)} style={{ padding: 10, borderRadius: 10, backgroundColor: recipientId === person.uid ? '#f3e8e8' : '#f8f8f8', marginBottom: 5 }}><Text>{person.name} — {person.role}{person.campus ? ` · ${person.campus === 'digi' ? 'Digital Campus' : 'Main Campus'}` : ''}</Text></Pressable>)}
+            </ScrollView>
+            <TextInput value={subject} onChangeText={setSubject} placeholder="Subject" style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12 }} />
+            <TextInput value={body} onChangeText={setBody} placeholder="Write your message..." multiline style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, minHeight: 110, textAlignVertical: 'top' }} />
+            <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 18 }}>
+              <Pressable onPress={() => setComposeOpen(false)}><Text style={styles.textLink}>Cancel</Text></Pressable>
+              <Pressable disabled={sending} onPress={async () => { const user = auth.currentUser; const recipient = recipients.find((entry) => entry.uid === recipientId); if (!user || !recipient || !subject.trim() || !body.trim()) { Alert.alert('Complete the message', 'Choose a recipient and enter a subject and message.'); return; } try { setSending(true); await sendAppMessage({ senderId: user.uid, senderName: senderProfile.name, senderRole: senderProfile.role, senderCampus: senderProfile.campus, receiverId: recipient.uid, receiverName: recipient.name, receiverRole: recipient.role, receiverCampus: recipient.campus, subject, body }); setComposeOpen(false); Alert.alert('Message sent', `Your message was sent to ${recipient.name}.`); } catch (error) { Alert.alert('Unable to send', error instanceof Error ? error.message : 'Please try again.'); } finally { setSending(false); } }}><Text style={styles.textLink}>{sending ? 'Sending...' : 'Send'}</Text></Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <ReservationDateRangeModal visible={calendarOpen} initialStartDate={customRange?.startDate ?? null} initialEndDate={customRange?.endDate ?? null} onApply={(startDate, endDate) => { setCustomRange({ startDate, endDate }); setDateRange('custom'); }} onClose={() => setCalendarOpen(false)} />
     </ScrollView>
   );
 }
