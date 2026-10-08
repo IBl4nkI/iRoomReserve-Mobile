@@ -182,7 +182,7 @@ export async function getReservationsByUser(
       apiRequest<ReservationRecord[]>("/api/reservations", {
         method: "GET",
         params: {
-          statuses: "pending,approved,rejected,completed,cancelled",
+          statuses: "pending,approved,expired,rejected,completed,cancelled",
           userId,
         },
       }),

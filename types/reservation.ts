@@ -3,6 +3,7 @@ export type ReservationApprovalRole = "advisor" | "building_admin";
 export type ReservationStatus =
   | "pending"
   | "approved"
+  | "expired"
   | "rejected"
   | "completed"
   | "cancelled";
@@ -52,6 +53,12 @@ export interface ReservationRecord {
   status: ReservationStatus;
   adminUid: string | null;
   createdAt?: {
+    _nanoseconds?: number;
+    _seconds?: number;
+    seconds?: number;
+    nanoseconds?: number;
+  } | null;
+  expiredAt?: {
     _nanoseconds?: number;
     _seconds?: number;
     seconds?: number;

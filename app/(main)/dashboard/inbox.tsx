@@ -214,7 +214,9 @@ function formatSentDateFromNotification(notification: AppNotification) {
 function getReservationActivityDate(reservation: ReservationRecord) {
   const timestamp = reservation.status === 'completed'
     ? reservation.completedAt ?? reservation.createdAt
-    : reservation.createdAt;
+    : reservation.status === 'expired'
+      ? reservation.expiredAt ?? reservation.createdAt
+      : reservation.createdAt;
   const seconds = typeof timestamp?.seconds === 'number'
     ? timestamp.seconds
     : typeof timestamp?._seconds === 'number'
@@ -226,6 +228,7 @@ function getReservationActivityDate(reservation: ReservationRecord) {
 }
 
 function getReservationFilter(reservation: ReservationRecord) {
+  if (reservation.status === 'expired') return 'expired' as const;
   const today = new Date();
   const todayKey = [today.getFullYear(), String(today.getMonth() + 1).padStart(2, '0'), String(today.getDate()).padStart(2, '0')].join('-');
   const reservationDates = reservation.dates?.length ? reservation.dates : [reservation.date];

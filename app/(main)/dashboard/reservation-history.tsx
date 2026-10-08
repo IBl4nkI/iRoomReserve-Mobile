@@ -144,6 +144,10 @@ function getReservationDates(reservation: ReservationRecord) {
 }
 
 function isExpiredReservation(reservation: ReservationRecord) {
+  if (reservation.status === 'expired') {
+    return true;
+  }
+
   if (reservation.status !== 'pending' && reservation.status !== 'approved') {
     return false;
   }
@@ -229,7 +233,13 @@ function sortReservations(left: ReservationRecord, right: ReservationRecord) {
 
 function getActivityDate(reservation: ReservationRecord) {
   return (
-    getTimestampDate(reservation.status === 'completed' ? reservation.completedAt ?? reservation.createdAt : reservation.createdAt) ??
+    getTimestampDate(
+      reservation.status === 'completed'
+        ? reservation.completedAt ?? reservation.createdAt
+        : reservation.status === 'expired'
+          ? reservation.expiredAt ?? reservation.createdAt
+          : reservation.createdAt
+    ) ??
     (reservation.date ? new Date(`${reservation.date}T00:00:00`) : null)
   );
 }
