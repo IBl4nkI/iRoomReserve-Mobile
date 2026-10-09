@@ -3,6 +3,9 @@ import React from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -21,7 +24,7 @@ import { auth } from '@/lib/firebase';
 import { createFeedback, getFeedbackByUser } from '@/services/feedback.service';
 import { getReservationsByUser } from '@/services/reservations.service';
 import { formatTime12h } from '@/services/schedules.service';
-import type { FeedbackRecord } from '@/types/feedback';
+import type { FeedbackCategoryRatingKey, FeedbackCategoryRatings, FeedbackRecord } from '@/types/feedback';
 import type { ReservationRecord } from '@/types/reservation';
 
 type FirestoreTimestampLike = {
@@ -112,11 +115,38 @@ function sortReservations(left: ReservationRecord, right: ReservationRecord) {
 }
 
 function getStarLabel(rating: number) {
-  if (rating <= 1) return 'Poor';
-  if (rating === 2) return 'Fair';
-  if (rating === 3) return 'Good';
-  if (rating === 4) return 'Very Good';
+  if (rating <= 1.9) return 'Poor';
+  if (rating <= 3) return 'Fair';
+  if (rating <= 4) return 'Good';
   return 'Excellent';
+}
+
+const FEEDBACK_CATEGORIES: { key: FeedbackCategoryRatingKey; label: string }[] = [
+  { key: 'cleanliness', label: 'Cleanliness' },
+  { key: 'comfort', label: 'Comfort' },
+  { key: 'air_conditioning', label: 'Air Conditioning' },
+  { key: 'equipment_projector', label: 'Equipment/Projector' },
+  { key: 'internet_connectivity', label: 'Internet Connectivity' },
+];
+
+const EMPTY_CATEGORY_RATINGS: FeedbackCategoryRatings = {
+  cleanliness: 0, comfort: 0, air_conditioning: 0,
+  equipment_projector: 0, internet_connectivity: 0,
+};
+
+function getOverallRating(ratings: FeedbackCategoryRatings) {
+  const ratedValues = Object.values(ratings).filter((value) => value > 0);
+  return ratedValues.length > 0
+    ? Number((ratedValues.reduce((sum, value) => sum + value, 0) / ratedValues.length).toFixed(1))
+    : 0;
+}
+
+function hasCompleteCategoryRatings(ratings: FeedbackCategoryRatings) {
+  return Object.values(ratings).every((value) => value >= 1 && value <= 5);
+}
+
+function formatOverallRating(rating: number) {
+  return Number.isInteger(rating) ? String(rating) : rating.toFixed(1);
 }
 
 function renderStaticStars(rating: number) {
@@ -143,10 +173,18 @@ export default function FeedbackScreen() {
   const [expandedSubmittedRoomId, setExpandedSubmittedRoomId] = React.useState<string | null>(
     null
   );
-  const [rating, setRating] = React.useState(0);
+  const [categoryRatings, setCategoryRatings] = React.useState<FeedbackCategoryRatings>(EMPTY_CATEGORY_RATINGS);
+  const [postAnonymously, setPostAnonymously] = React.useState(true);
   const [comment, setComment] = React.useState('');
+  const [missingCategoryRatings, setMissingCategoryRatings] = React.useState<FeedbackCategoryRatingKey[]>([]);
+  const [missingComment, setMissingComment] = React.useState(false);
+  const validationHighlight = React.useRef(new Animated.Value(0)).current;
+  const scrollViewRef = React.useRef<ScrollView>(null);
+  const feedbackFormRef = React.useRef<View | null>(null);
+  const categoryContainerRefs = React.useRef<Partial<Record<FeedbackCategoryRatingKey, View | null>>>({});
+  const feedbackCommentRef = React.useRef<View | null>(null);
   const feedbackDraftsRef = React.useRef<
-    Record<string, { rating: number; comment: string }>
+    Record<string, { categoryRatings: FeedbackCategoryRatings; comment: string; postAnonymously: boolean }>
   >({});
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
@@ -250,39 +288,68 @@ export default function FeedbackScreen() {
   }, [params.reservationId, pendingFeedbackReservations]);
 
   const saveDraftForReservation = React.useCallback(
-    (reservationId: string | null, nextRating: number, nextComment: string) => {
+    (reservationId: string | null, nextRating: FeedbackCategoryRatings, nextComment: string, nextAnonymous: boolean) => {
       if (!reservationId) {
         return;
       }
 
-      if (nextRating === 0 && nextComment.length === 0) {
+      if (Object.values(nextRating).every((value) => value === 0) && nextComment.length === 0 && nextAnonymous) {
         delete feedbackDraftsRef.current[reservationId];
         return;
       }
 
       feedbackDraftsRef.current[reservationId] = {
-        rating: nextRating,
+        categoryRatings: nextRating,
         comment: nextComment,
+        postAnonymously: nextAnonymous,
       };
     },
     []
   );
 
   React.useEffect(() => {
+    validationHighlight.stopAnimation();
+    validationHighlight.setValue(0);
+    setMissingCategoryRatings([]);
+    setMissingComment(false);
+
     if (!selectedReservationId) {
-      setRating(0);
+      setCategoryRatings(EMPTY_CATEGORY_RATINGS);
       setComment('');
+      setPostAnonymously(true);
       return;
     }
 
     const draft = feedbackDraftsRef.current[selectedReservationId];
-    setRating(draft?.rating ?? 0);
+    setCategoryRatings(draft?.categoryRatings ?? EMPTY_CATEGORY_RATINGS);
     setComment(draft?.comment ?? '');
-  }, [selectedReservationId]);
+    setPostAnonymously(draft?.postAnonymously ?? true);
+  }, [selectedReservationId, validationHighlight]);
+
+  React.useEffect(() => {
+    if (!showForm || !selectedReservationId) return;
+
+    const frame = requestAnimationFrame(() => {
+      const form = feedbackFormRef.current;
+      const scrollView = scrollViewRef.current;
+      if (!form || !scrollView) return;
+
+      const scrollContent = scrollView.getNativeScrollRef();
+      if (!scrollContent) return;
+      form.measureLayout(
+        scrollContent,
+        (_formX, formY) => scrollView.scrollTo({ y: Math.max(0, formY - 100), animated: true }),
+        () => undefined
+      );
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [selectedReservationId, showForm]);
 
   const selectedReservation =
     pendingFeedbackReservations.find((reservation) => reservation.id === selectedReservationId) ??
     null;
+  const rating = getOverallRating(categoryRatings);
 
   const otherPendingReservations = React.useMemo(
     () =>
@@ -353,7 +420,7 @@ export default function FeedbackScreen() {
     async (reservation: ReservationRecord, options?: { showSuccessAlert?: boolean }) => {
       const currentUser = auth.currentUser;
 
-      if (!currentUser || rating === 0 || !comment.trim()) {
+      if (!currentUser || !hasCompleteCategoryRatings(categoryRatings) || !comment.trim()) {
         return false;
       }
 
@@ -368,8 +435,10 @@ export default function FeedbackScreen() {
           reservationId: reservation.id,
           userId: currentUser.uid,
           userName: currentUser.displayName?.trim() || 'User',
+          showSubmitterName: !postAnonymously,
           message: comment.trim(),
           rating,
+          categoryRatings: { ...categoryRatings },
         });
 
         await loadFeedbackData(false);
@@ -392,64 +461,43 @@ export default function FeedbackScreen() {
         setSubmitting(false);
       }
     },
-    [comment, loadFeedbackData, rating]
+    [categoryRatings, comment, loadFeedbackData, postAnonymously, rating]
   );
 
   const handleRatingChange = React.useCallback(
-    (nextRating: number) => {
-      setRating(nextRating);
-      saveDraftForReservation(selectedReservationId, nextRating, comment);
+    (key: FeedbackCategoryRatingKey | number, nextRating?: number) => {
+      if (typeof key === 'number' || nextRating === undefined) return;
+      const nextRatings = { ...categoryRatings, [key]: nextRating };
+      setCategoryRatings(nextRatings);
+      setMissingCategoryRatings((current) => current.filter((missingKey) => missingKey !== key));
+      saveDraftForReservation(selectedReservationId, nextRatings, comment, postAnonymously);
     },
-    [comment, saveDraftForReservation, selectedReservationId]
+    [categoryRatings, comment, postAnonymously, saveDraftForReservation, selectedReservationId]
   );
 
   const handleCommentChange = React.useCallback(
     (nextComment: string) => {
       setComment(nextComment);
-      saveDraftForReservation(selectedReservationId, rating, nextComment);
+      if (nextComment.trim()) setMissingComment(false);
+      saveDraftForReservation(selectedReservationId, categoryRatings, nextComment, postAnonymously);
     },
-    [rating, saveDraftForReservation, selectedReservationId]
+    [categoryRatings, postAnonymously, saveDraftForReservation, selectedReservationId]
   );
 
   const handleSelectReservation = React.useCallback((reservationId: string) => {
-    const switchReservation = () => {
-      setShowForm(true);
-      setSelectedReservationId(reservationId);
-    };
-
     if (submitting || reservationId === selectedReservationId) {
       return;
     }
 
-    saveDraftForReservation(selectedReservationId, rating, comment);
-
-    if (
-      showForm &&
-      selectedReservation &&
-      rating > 0 &&
-      Boolean(comment.trim())
-    ) {
-      void (async () => {
-        const didSubmit = await submitFeedbackForReservation(selectedReservation, {
-          showSuccessAlert: false,
-        });
-
-        if (didSubmit) {
-          switchReservation();
-        }
-      })();
-      return;
-    }
-
-    switchReservation();
+    saveDraftForReservation(selectedReservationId, categoryRatings, comment, postAnonymously);
+    setShowForm(true);
+    setSelectedReservationId(reservationId);
   }, [
+    categoryRatings,
     comment,
-    rating,
+    postAnonymously,
     saveDraftForReservation,
-    selectedReservation,
     selectedReservationId,
-    showForm,
-    submitFeedbackForReservation,
     submitting,
   ]);
 
@@ -460,15 +508,64 @@ export default function FeedbackScreen() {
   const handleSubmitFeedback = React.useCallback(async () => {
     const currentUser = auth.currentUser;
 
-    if (!currentUser || !selectedReservation || rating === 0 || !comment.trim()) {
+    if (!currentUser || !selectedReservation) {
+      return;
+    }
+
+    const missingRatings = FEEDBACK_CATEGORIES
+      .filter(({ key }) => !categoryRatings[key])
+      .map(({ key }) => key);
+    const commentIsMissing = !comment.trim();
+    if (missingRatings.length || commentIsMissing) {
+      validationHighlight.stopAnimation();
+      validationHighlight.setValue(0);
+      setMissingCategoryRatings(missingRatings);
+      setMissingComment(commentIsMissing);
+      Animated.sequence([
+        Animated.timing(validationHighlight, {
+          toValue: 1,
+          duration: 250,
+          useNativeDriver: false,
+        }),
+        Animated.delay(1100),
+        Animated.timing(validationHighlight, {
+          toValue: 0,
+          duration: 850,
+          useNativeDriver: false,
+        }),
+      ]).start(({ finished }) => {
+        if (finished) {
+          setMissingCategoryRatings([]);
+          setMissingComment(false);
+        }
+      });
+      const target = missingRatings.length
+        ? categoryContainerRefs.current[missingRatings[0]]
+        : feedbackCommentRef.current;
+      if (target && scrollViewRef.current) {
+        const scrollView = scrollViewRef.current;
+        const scrollContent = scrollView.getNativeScrollRef();
+        if (!scrollContent) return;
+        target.measureLayout(
+          scrollContent,
+          (_targetX, targetY) => scrollView.scrollTo({ y: Math.max(0, targetY - 150), animated: true }),
+          () => undefined
+        );
+      }
       return;
     }
 
     await submitFeedbackForReservation(selectedReservation);
-  }, [comment, rating, selectedReservation, submitFeedbackForReservation]);
+  }, [categoryRatings, comment, selectedReservation, submitFeedbackForReservation]);
 
   return (
+    <KeyboardAvoidingView
+      style={localStyles.keyboardAvoidingContainer}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+    >
     <ScrollView
+      ref={scrollViewRef}
+      keyboardShouldPersistTaps="handled"
       stickyHeaderIndices={[0]}
       refreshControl={
         <RefreshControl
@@ -506,7 +603,7 @@ export default function FeedbackScreen() {
         ) : (
           <>
             {showForm ? (
-            <View style={[styles.card, localStyles.feedbackFormCard]}>
+            <View ref={feedbackFormRef} style={[styles.card, localStyles.feedbackFormCard]}>
               <Text style={localStyles.feedbackCardTitle}>Rate Your Experience</Text>
               {selectedReservation ? (
                 <>
@@ -534,7 +631,7 @@ export default function FeedbackScreen() {
                     </Text>
                   </View>
 
-                  <Text style={localStyles.feedbackSectionLabel}>Rating</Text>
+                  <Text style={localStyles.feedbackSectionLabel}>Overall Rating: {formatOverallRating(rating)}/5</Text>
                   <View style={localStyles.starRow}>
                     {[1, 2, 3, 4, 5].map((star) => {
                       const isActive = star <= rating;
@@ -543,6 +640,7 @@ export default function FeedbackScreen() {
                         <Pressable
                           key={star}
                           onPress={() => handleRatingChange(star)}
+                          disabled
                           style={localStyles.starButton}
                         >
                           <Text
@@ -558,32 +656,95 @@ export default function FeedbackScreen() {
                     })}
                   </View>
                   {rating > 0 ? (
-                    <Text style={localStyles.ratingHint}>{getStarLabel(rating)}</Text>
+                    <Text style={localStyles.ratingHint}>{getStarLabel(Math.round(rating))}</Text>
                   ) : null}
 
-                  <Text style={localStyles.feedbackSectionLabel}>Comments</Text>
-                  <TextInput
-                    value={comment}
-                    onChangeText={handleCommentChange}
-                    multiline
-                    placeholder="Share your experience with this room..."
-                    placeholderTextColor={colors.mutedText}
-                    style={localStyles.feedbackInput}
-                    textAlignVertical="top"
-                  />
+                  <View style={localStyles.categoryPanel}>
+                    <Text style={localStyles.feedbackSectionLabel}>Category Ratings</Text>
+                    {FEEDBACK_CATEGORIES.map(({ key, label }) => (
+                      <View
+                        key={key}
+                        ref={(node) => { categoryContainerRefs.current[key] = node; }}
+                        style={localStyles.categoryRow}
+                      >
+                        <View style={localStyles.categoryLabelRow}>
+                          <Text style={localStyles.categoryLabel}>{label}</Text>
+                        </View>
+                        <View style={localStyles.categoryStarRow}>
+                          {[1, 2, 3, 4, 5].map((star) => <Pressable key={star} onPress={() => handleRatingChange(key, star)} style={localStyles.starButton}><Text style={[localStyles.categoryStar, star <= categoryRatings[key] ? localStyles.starFilled : localStyles.starEmpty]}>★</Text></Pressable>)}
+                        </View>
+                        {!categoryRatings[key] ? <Text style={localStyles.requiredAsterisk}>*</Text> : null}
+                        {missingCategoryRatings.includes(key) ? (
+                          <Animated.View
+                            pointerEvents="none"
+                            style={[
+                              localStyles.categoryHighlight,
+                              {
+                                borderColor: validationHighlight.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [colors.border, '#dc2626'],
+                                }),
+                                borderWidth: validationHighlight.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [1, 2],
+                                }),
+                              },
+                            ]}
+                          />
+                        ) : null}
+                      </View>
+                    ))}
+                  </View>
+
+                  <Text style={localStyles.feedbackSectionLabel}>Required Feedback</Text>
+                  <View ref={feedbackCommentRef} style={localStyles.commentContainer}>
+                    <TextInput
+                      value={comment}
+                      onChangeText={handleCommentChange}
+                      multiline
+                      maxLength={500}
+                      placeholder="Mention what worked, what failed, and which room areas need attention..."
+                      placeholderTextColor={colors.mutedText}
+                      style={localStyles.feedbackInput}
+                      textAlignVertical="top"
+                    />
+                    {missingComment ? (
+                      <Animated.View
+                        pointerEvents="none"
+                        style={[
+                          localStyles.feedbackInputHighlight,
+                          {
+                            borderColor: validationHighlight.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [colors.border, '#dc2626'],
+                            }),
+                            borderWidth: validationHighlight.interpolate({
+                              inputRange: [0, 1],
+                              outputRange: [1, 2],
+                            }),
+                          },
+                        ]}
+                      />
+                    ) : null}
+                  </View>
+                  <Text style={localStyles.characterCount}>{comment.length}/500 characters</Text>
+                  <Pressable style={localStyles.anonymousToggle} onPress={() => { const next = !postAnonymously; setPostAnonymously(next); saveDraftForReservation(selectedReservationId, categoryRatings, comment, next); }} accessibilityRole="checkbox" accessibilityState={{ checked: postAnonymously }}>
+                    <Text style={localStyles.checkbox}>{postAnonymously ? '☑' : '□'}</Text>
+                    <View style={localStyles.anonymousCopy}><Text style={localStyles.categoryLabel}>Review anonymously</Text><Text style={localStyles.anonymousHint}>Your name will be hidden from administrators unless you clear this option.</Text></View>
+                  </Pressable>
 
                   <TouchableOpacity
                     style={[
                       styles.actionButton,
                       localStyles.feedbackSubmitButton,
-                      submitting || rating === 0 || !comment.trim()
+                      submitting
                         ? localStyles.feedbackSubmitButtonDisabled
                         : null,
                     ]}
                     onPress={() => {
                       void handleSubmitFeedback();
                     }}
-                    disabled={submitting || rating === 0 || !comment.trim()}
+                    disabled={submitting}
                   >
                     {submitting ? (
                       <ActivityIndicator color={colors.white} />
@@ -753,10 +914,14 @@ export default function FeedbackScreen() {
         <Text style={styles.actionButtonText}>Back to Dashboard</Text>
       </TouchableOpacity>
     </ScrollView>
+    </KeyboardAvoidingView>
   );
 }
 
 const localStyles = StyleSheet.create({
+  keyboardAvoidingContainer: {
+    flex: 1,
+  },
   feedbackFormCard: {
     marginBottom: 16,
   },
@@ -837,6 +1002,123 @@ const localStyles = StyleSheet.create({
     fontFamily: fonts.regular,
     color: colors.text,
     marginBottom: 18,
+  },
+  feedbackInputHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 18,
+    borderRadius: 18,
+  },
+  commentContainer: {
+    borderRadius: 20,
+  },
+  ratingSummary: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 14,
+    marginBottom: 14,
+  },
+  categoryPanel: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    padding: 14,
+    marginBottom: 18,
+    gap: 10,
+  },
+  categoryRow: {
+    position: 'relative',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 10,
+  },
+  categoryHighlight: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 12,
+  },
+  categoryLabelRow: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  categoryLabel: {
+    flexShrink: 1,
+    fontSize: 13,
+    fontFamily: fonts.bold,
+    color: colors.text,
+  },
+  categoryValue: {
+    fontSize: 12,
+    fontFamily: fonts.regular,
+    color: colors.secondary,
+  },
+  categoryStar: {
+    fontSize: 23,
+    lineHeight: 28,
+  },
+  categoryStarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    marginRight: 5,
+  },
+  requiredAsterisk: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    color: '#dc2626',
+    fontSize: 16,
+    lineHeight: 18,
+    fontFamily: fonts.bold,
+  },
+  characterCount: {
+    alignSelf: 'flex-end',
+    marginTop: -12,
+    marginBottom: 14,
+    fontSize: 11,
+    fontFamily: fonts.regular,
+    color: colors.secondary,
+  },
+  anonymousToggle: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+    padding: 14,
+    marginBottom: 16,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.subtleBackground,
+  },
+  checkbox: {
+    fontSize: 20,
+    color: colors.primary,
+  },
+  anonymousCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  anonymousHint: {
+    fontSize: 12,
+    lineHeight: 17,
+    fontFamily: fonts.regular,
+    color: colors.secondary,
   },
   feedbackSubmitButton: {
     marginTop: 0,

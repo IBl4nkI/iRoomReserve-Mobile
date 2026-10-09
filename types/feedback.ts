@@ -1,5 +1,14 @@
 export type FeedbackSentimentLabel = 'positive' | 'neutral' | 'negative';
 
+export type FeedbackCategoryRatingKey =
+  | 'cleanliness'
+  | 'comfort'
+  | 'air_conditioning'
+  | 'equipment_projector'
+  | 'internet_connectivity';
+
+export type FeedbackCategoryRatings = Record<FeedbackCategoryRatingKey, number>;
+
 export interface FeedbackRecord {
   id: string;
   roomId: string;
@@ -12,6 +21,9 @@ export interface FeedbackRecord {
   text: string;
   message: string;
   rating: number;
+  categoryRatings?: Partial<FeedbackCategoryRatings>;
+  category_ratings?: Partial<FeedbackCategoryRatings>;
+  showSubmitterName?: boolean;
   compoundScore?: number;
   positiveScore?: number;
   neutralScore?: number;
@@ -46,4 +58,6 @@ export interface FeedbackCreateInput {
   userName: string;
   message: string;
   rating: number;
+  categoryRatings: FeedbackCategoryRatings;
+  showSubmitterName: boolean;
 }
