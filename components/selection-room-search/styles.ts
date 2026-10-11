@@ -622,7 +622,6 @@ const styles = StyleSheet.create({
   expandChevronRight: { right: 1, top: 4, transform: [{ rotate: "-45deg" }] },
   expandChevronLeftExpanded: { transform: [{ rotate: "-45deg" }] },
   expandChevronRightExpanded: { transform: [{ rotate: "45deg" }] },
-  roomLoader: { marginTop: 12 },
   expandedSection: { marginTop: 14 },
   detailCard: {
     borderRadius: 12,
@@ -640,6 +639,29 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.subtleBackground,
     padding: 12,
+  },
+  calendarLoadingWrap: {
+    position: "relative",
+  },
+  calendarLoadingContent: {
+    opacity: 1,
+  },
+  calendarLoadingContentDimmed: {
+    opacity: 0.38,
+  },
+  calendarLoadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 2,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.82)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  calendarLoadingText: {
+    marginTop: 8,
+    color: colors.primary,
+    fontFamily: fonts.bold,
+    fontSize: 13,
   },
   schedulePreviewTitle: {
     color: colors.primary,

@@ -276,10 +276,6 @@ export default function SelectionRoomResults({
                   </TouchableOpacity>
                 </View>
 
-                {isScheduleLoading ? (
-                  <ActivityIndicator color={colors.primary} style={styles.roomLoader} />
-                ) : null}
-
                 {expanded ? (
                   <View style={styles.expandedSection}>
                     <View style={styles.detailCard}>
@@ -325,26 +321,41 @@ export default function SelectionRoomResults({
                           <Text style={styles.calendarLegendText}>Unavailable</Text>
                         </View>
                       </View>
-                      <AvailabilityCalendar
-                        calendarMonthLabel={calendarMonthLabel}
-                        calendarWeeks={calendarWeeks}
-                        getCalendarDateVariant={(dateKey) => dateVariantByKey[dateKey]}
-                        isCalendarDateDisabled={(date) =>
-                          isPastDate(date) || date.getDay() === 0
-                        }
-                        isCalendarDateSelected={(dateKey) =>
-                          selectedSlots.some((slot) => slot.dateKey === dateKey)
-                        }
-                        onCalendarDateSelect={(dateKey) =>
-                          handleOpenDayScheduleModal(room.id, dateKey, selectedSlots)
-                        }
-                        onNextMonth={() =>
-                          setCalendarMonth((prev) => addMonths(prev, 1))
-                        }
-                        onPrevMonth={() =>
-                          setCalendarMonth((prev) => addMonths(prev, -1))
-                        }
-                      />
+                      <View style={styles.calendarLoadingWrap}>
+                        <View
+                          style={[
+                            styles.calendarLoadingContent,
+                            isScheduleLoading && styles.calendarLoadingContentDimmed,
+                          ]}
+                        >
+                          <AvailabilityCalendar
+                            calendarMonthLabel={calendarMonthLabel}
+                            calendarWeeks={calendarWeeks}
+                            getCalendarDateVariant={(dateKey) => dateVariantByKey[dateKey]}
+                            isCalendarDateDisabled={(date) =>
+                              isPastDate(date) || date.getDay() === 0
+                            }
+                            isCalendarDateSelected={(dateKey) =>
+                              selectedSlots.some((slot) => slot.dateKey === dateKey)
+                            }
+                            onCalendarDateSelect={(dateKey) =>
+                              handleOpenDayScheduleModal(room.id, dateKey, selectedSlots)
+                            }
+                            onNextMonth={() =>
+                              setCalendarMonth((prev) => addMonths(prev, 1))
+                            }
+                            onPrevMonth={() =>
+                              setCalendarMonth((prev) => addMonths(prev, 1))
+                            }
+                          />
+                        </View>
+                        {isScheduleLoading ? (
+                          <View style={styles.calendarLoadingOverlay}>
+                            <ActivityIndicator size="large" color={colors.primary} />
+                            <Text style={styles.calendarLoadingText}>Loading schedule...</Text>
+                          </View>
+                        ) : null}
+                      </View>
                       <DayScheduleModal
                         campus={room.campus as ReservationCampus | null}
                         dateKey={isModalOpenForRoom ? modalDateKey ?? "" : ""}
