@@ -81,6 +81,14 @@ function formatOverallRating(rating: number) {
   return Number.isInteger(rating) ? String(rating) : rating.toFixed(1);
 }
 
+function getSubmittedOverallRating(feedback: FeedbackRecord) {
+  const ratings = feedback.categoryRatings ?? feedback.category_ratings;
+  if (!ratings) return feedback.rating;
+
+  const calculatedRating = getOverallRating({ ...EMPTY_CATEGORY_RATINGS, ...ratings });
+  return calculatedRating || feedback.rating;
+}
+
 function renderStaticStars(rating: number) {
   return Array.from({ length: 5 }, (_, index) => (
     <Text
@@ -913,11 +921,27 @@ export default function FeedbackScreen() {
                           <View style={localStyles.submittedFeedbackGroupBody}>
                             {group.items.map(({ feedback, reservation }) => (
                               <View key={feedback.id} style={localStyles.submittedFeedbackCard}>
-                                <View style={localStyles.sectionHeaderRow}>
+                                <View style={localStyles.overallRatingRow}>
+                                  <Text style={localStyles.submittedRatingLabel}>Overall</Text>
                                   <View style={localStyles.staticStarRow}>
-                                    {renderStaticStars(feedback.rating)}
+                                    {renderStaticStars(Math.floor(getSubmittedOverallRating(feedback)))}
                                   </View>
-                                  <View style={localStyles.feedbackReservationCardBody} />
+                                  <Text style={localStyles.submittedRatingValue}>{formatOverallRating(getSubmittedOverallRating(feedback))}/5</Text>
+                                </View>
+                                <View style={localStyles.submittedCategoryRatings}>
+                                  {FEEDBACK_CATEGORIES.map(({ key, label }) => {
+                                    const categoryRating = feedback.categoryRatings?.[key]
+                                      ?? feedback.category_ratings?.[key]
+                                      ?? 0;
+                                    return (
+                                      <View key={key} style={localStyles.submittedCategoryRatingRow}>
+                                        <Text style={localStyles.submittedCategoryRatingLabel}>{label}</Text>
+                                        <View style={localStyles.categoryStaticStarRow}>
+                                          {renderStaticStars(categoryRating)}
+                                        </View>
+                                      </View>
+                                    );
+                                  })}
                                 </View>
 
                                 {reservation ? (
@@ -1393,6 +1417,38 @@ const localStyles = StyleSheet.create({
     backgroundColor: colors.surface,
     padding: 14,
   },
+  overallRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
+  },
+  submittedRatingLabel: {
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 13,
+  },
+  submittedRatingValue: {
+    color: colors.mutedText,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+  },
+  submittedCategoryRatings: {
+    gap: 5,
+    marginBottom: 10,
+  },
+  submittedCategoryRatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  submittedCategoryRatingLabel: {
+    flex: 1,
+    color: colors.mutedText,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+  },
   submittedFeedbackGroup: {
     borderRadius: 14,
     borderWidth: 1,
@@ -1442,8 +1498,10 @@ const localStyles = StyleSheet.create({
   staticStarRow: {
     flexDirection: 'row',
     gap: 2,
-    marginRight: 12,
-    marginBottom: -8,
+  },
+  categoryStaticStarRow: {
+    flexDirection: 'row',
+    gap: 2,
   },
   feedbackHistoryDetails: {
     marginTop: 4,
