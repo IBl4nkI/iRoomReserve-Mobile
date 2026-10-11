@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Switch, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import FilterBar from "@/components/FilterBar";
 import AvailabilityCalendar from "@/components/AvailabilityCalendar";
@@ -33,6 +33,7 @@ interface RoomSearchFiltersProps {
   filterBarLevelOptions: Partial<Record<FilterLevel, LevelOption[]>>;
   filterBarSelectedByLevel: Partial<Record<FilterLevel, string | null>>;
   filtersOpen: boolean;
+  updatingFilterSections: string[];
   getDayShortLabel: (dayOfWeek: number) => string;
   hasActiveFilters: boolean;
   isCalendarDateDisabled: (date: Date, dateKey: string) => boolean;
@@ -90,6 +91,15 @@ function ClockIcon() {
       <View style={styles.clockFace} />
       <View style={styles.clockHandVertical} />
       <View style={styles.clockHandHorizontal} />
+    </View>
+  );
+}
+
+function FilterUpdatingIndicator() {
+  return (
+    <View style={styles.filterUpdatingRow}>
+      <ActivityIndicator size="small" color={colors.primary} />
+      <Text style={styles.filterUpdatingText}>Updating filters...</Text>
     </View>
   );
 }
@@ -227,6 +237,7 @@ export default function RoomSearchFilters({
   filterBarLevelOptions,
   filterBarSelectedByLevel,
   filtersOpen,
+  updatingFilterSections,
   getDayShortLabel,
   hasActiveFilters,
   isCalendarDateDisabled,
@@ -267,6 +278,7 @@ export default function RoomSearchFilters({
 
   return (
     <View style={styles.filterCard}>
+      {updatingFilterSections.includes("location") ? <FilterUpdatingIndicator /> : null}
       <Text style={styles.filterSectionTitle}>Filter by Campus, Building, and Floor:</Text>
       <View style={styles.selectionFilterBarShell}>
         <FilterBar
@@ -279,6 +291,7 @@ export default function RoomSearchFilters({
         />
       </View>
 
+      {updatingFilterSections.includes("roomType") ? <FilterUpdatingIndicator /> : null}
       <Text style={styles.inputLabel}>Filter by Room Type:</Text>
       <View style={styles.checkboxGroup}>
         {roomTypeOptions.map((roomType) => {
@@ -298,6 +311,7 @@ export default function RoomSearchFilters({
         })}
       </View>
 
+      {updatingFilterSections.includes("capacity") ? <FilterUpdatingIndicator /> : null}
       <View style={styles.capacityRow}>
         <Text style={styles.capacityLabel}>Filter by Max. Capacity:</Text>
         <TextInput
@@ -310,6 +324,7 @@ export default function RoomSearchFilters({
         />
       </View>
 
+      {updatingFilterSections.includes("recurring") ? <FilterUpdatingIndicator /> : null}
       <View style={styles.toggleCard}>
         <View style={styles.toggleTextBlock}>
           <Text style={styles.toggleTitle}>Recurring Reservation</Text>
@@ -325,6 +340,7 @@ export default function RoomSearchFilters({
 
       {isRecurring ? (
         <>
+          {updatingFilterSections.includes("days") ? <FilterUpdatingIndicator /> : null}
           <Text style={styles.filterSectionTitle}>Select Days of the Week</Text>
           <View style={styles.weekdayCalendarRow}>
             {WEEKDAY_OPTIONS.map((dayOfWeek) => {
@@ -355,6 +371,7 @@ export default function RoomSearchFilters({
 
       <View style={styles.inputGrid}>
         <View style={styles.inputBlock}>
+          {updatingFilterSections.includes("reservationDate") ? <FilterUpdatingIndicator /> : null}
           <Text style={styles.inputLabel}>
             {isRecurring ? "Start Date" : "Add Reservation Date(s)"}
           </Text>
@@ -368,6 +385,7 @@ export default function RoomSearchFilters({
 
         {isRecurring ? (
           <View style={styles.inputBlock}>
+            {updatingFilterSections.includes("endDate") ? <FilterUpdatingIndicator /> : null}
             <Text style={styles.inputLabel}>End Date</Text>
             <SegmentedDateInput
               onBlur={onEndDateBlur}
@@ -422,6 +440,7 @@ export default function RoomSearchFilters({
 
       <View style={styles.inputGrid}>
         <View style={styles.inputBlock}>
+          {updatingFilterSections.includes("startTime") ? <FilterUpdatingIndicator /> : null}
           <Text style={styles.inputLabel}>Start Time</Text>
           <TouchableOpacity activeOpacity={0.9} onPress={onStartTimePress}>
             <View style={styles.inputWithAction}>
@@ -436,6 +455,7 @@ export default function RoomSearchFilters({
         </View>
 
         <View style={styles.inputBlock}>
+          {updatingFilterSections.includes("endTime") ? <FilterUpdatingIndicator /> : null}
           <Text style={styles.inputLabel}>End Time</Text>
           <TouchableOpacity activeOpacity={0.9} onPress={onEndTimePress}>
             <View style={styles.inputWithAction}>
@@ -460,6 +480,14 @@ export default function RoomSearchFilters({
       >
         <Text
           style={[
+            styles.resetIcon,
+            !hasActiveFilters && styles.resetButtonTextDisabled,
+          ]}
+        >
+          ↻
+        </Text>
+        <Text
+          style={[
             styles.resetButtonText,
             !hasActiveFilters && styles.resetButtonTextDisabled,
           ]}
@@ -480,6 +508,17 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: colors.subtleBackground,
     padding: 14,
+  },
+  filterUpdatingRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 12,
+  },
+  filterUpdatingText: {
+    color: colors.mutedText,
+    fontFamily: fonts.regular,
+    fontSize: 12,
   },
   filterSectionTitle: {
     color: colors.text,
@@ -738,6 +777,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
@@ -749,6 +790,12 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontFamily: fonts.bold,
     fontSize: 13,
+  },
+  resetIcon: {
+    color: colors.white,
+    fontSize: 19,
+    lineHeight: 20,
+    transform: [{ translateY: -2 }],
   },
   resetButtonTextDisabled: {
     color: colors.mutedText,

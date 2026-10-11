@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Alert, View } from "react-native";
 import { useRouter } from "expo-router";
 
@@ -95,6 +95,7 @@ export default function SelectionRoomSearch({
   const { clearFiltersFrom, getActiveFilterByLevel, pushFilter, selectFilter } = useSelectionFilters();
   const [query, setQuery] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [updatingFilterSections, setUpdatingFilterSections] = useState<string[]>([]);
   const [filterCampusSelection, setFilterCampusSelection] = useState<string | null>(null);
   const [filterBuildingSelection, setFilterBuildingSelection] = useState<string | null>(null);
   const [filterFloorSelection, setFilterFloorSelection] = useState<string | null>(null);
@@ -438,6 +439,39 @@ export default function SelectionRoomSearch({
     filterFloorOptions,
     filterFloorSelection,
   ]);
+  const filterStateSignature = JSON.stringify({
+    location: JSON.stringify([filterCampusId, filterBuildingId, filterFloorId, selectedCampusDraft]),
+    roomType: JSON.stringify(selectedRoomTypesDraft),
+    capacity: maxCapacityDraft,
+    recurring: String(isRecurringDraft),
+    days: JSON.stringify(selectedDaysDraft),
+    reservationDate: JSON.stringify([reservationDatesDraft, reservationDatesInputDraft, reservationDateDraft, reservationDateInputDraft]),
+    endDate: JSON.stringify([recurringEndDateDraft, recurringEndDateInputDraft]),
+    startTime: startTimeDraft,
+    endTime: endTimeDraft,
+  });
+  const previousFilterStateSignature = useRef(filterStateSignature);
+
+  useEffect(() => {
+    if (!filtersOpen) {
+      previousFilterStateSignature.current = filterStateSignature;
+      setUpdatingFilterSections([]);
+      return;
+    }
+
+    if (previousFilterStateSignature.current === filterStateSignature) return;
+    const previousSnapshot = JSON.parse(previousFilterStateSignature.current) as Record<string, string>;
+    const nextSnapshot = JSON.parse(filterStateSignature) as Record<string, string>;
+    const changedSections = Object.keys(nextSnapshot).filter(
+      (section) => previousSnapshot[section] !== nextSnapshot[section]
+    );
+    previousFilterStateSignature.current = filterStateSignature;
+    if (changedSections.length === 0) return;
+    setUpdatingFilterSections((current) => [...new Set([...current, ...changedSections])]);
+    const timeout = setTimeout(() => setUpdatingFilterSections([]), 500);
+    return () => clearTimeout(timeout);
+  }, [filterStateSignature, filtersOpen]);
+
   const effectiveResultsTitle = useMemo(() => {
     if (!filtersOpen) {
       return resultsTitle;
@@ -1314,6 +1348,7 @@ export default function SelectionRoomSearch({
           floor: filterFloorId,
         }}
         filtersOpen={filtersOpen}
+        updatingFilterSections={updatingFilterSections}
         getDayShortLabel={getDayShortLabel}
         hasActiveFilters={hasActiveFilters}
         isCalendarDateDisabled={(date, dateKey) =>

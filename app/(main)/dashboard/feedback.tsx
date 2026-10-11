@@ -112,6 +112,7 @@ export default function FeedbackScreen() {
   const [campusByBuildingId, setCampusByBuildingId] = React.useState<Record<string, ReservationCampus>>({});
   const [roomSearch, setRoomSearch] = React.useState('');
   const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [updatingFilterSections, setUpdatingFilterSections] = React.useState<string[]>([]);
   const [selectedCampuses, setSelectedCampuses] = React.useState<ReservationCampus[]>(['main', 'digi']);
   const [selectedRoomTypes, setSelectedRoomTypes] = React.useState<string[]>([]);
   const [maxCapacityInput, setMaxCapacityInput] = React.useState('30');
@@ -256,6 +257,31 @@ export default function FeedbackScreen() {
     setSelectedRoomTypes([]);
     setMaxCapacityInput('30');
   }, []);
+  const feedbackFilterSignature = JSON.stringify({
+    campus: JSON.stringify(selectedCampuses),
+    roomType: JSON.stringify(selectedRoomTypes),
+    capacity: maxCapacityInput,
+  });
+  const previousFeedbackFilterSignature = React.useRef(feedbackFilterSignature);
+  React.useEffect(() => {
+    if (!filtersOpen) {
+      previousFeedbackFilterSignature.current = feedbackFilterSignature;
+      setUpdatingFilterSections([]);
+      return;
+    }
+
+    if (previousFeedbackFilterSignature.current === feedbackFilterSignature) return;
+    const previousSnapshot = JSON.parse(previousFeedbackFilterSignature.current) as Record<string, string>;
+    const nextSnapshot = JSON.parse(feedbackFilterSignature) as Record<string, string>;
+    const changedSections = Object.keys(nextSnapshot).filter(
+      (section) => previousSnapshot[section] !== nextSnapshot[section]
+    );
+    previousFeedbackFilterSignature.current = feedbackFilterSignature;
+    if (changedSections.length === 0) return;
+    setUpdatingFilterSections((current) => [...new Set([...current, ...changedSections])]);
+    const timeout = setTimeout(() => setUpdatingFilterSections([]), 500);
+    return () => clearTimeout(timeout);
+  }, [feedbackFilterSignature, filtersOpen]);
   const matchesRoomFilters = React.useCallback((roomId: string, roomName: string, buildingName: string, campus?: ReservationCampus) => {
     const room = roomsById[roomId];
     const campusForRoom = campus ?? roomCampusById[roomId];
@@ -635,6 +661,12 @@ export default function FeedbackScreen() {
             />
             {filtersOpen ? (
               <View style={localStyles.filterPanel}>
+                {updatingFilterSections.includes('campus') ? (
+                  <View style={localStyles.filterUpdatingRow}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={localStyles.filterUpdatingText}>Updating filters...</Text>
+                  </View>
+                ) : null}
                 <Text style={localStyles.filterSectionTitle}>Filter by Campus:</Text>
                 <View style={localStyles.campusOptions}>
                   {([
@@ -650,6 +682,12 @@ export default function FeedbackScreen() {
                     );
                   })}
                 </View>
+                {updatingFilterSections.includes('roomType') ? (
+                  <View style={localStyles.filterUpdatingRow}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={localStyles.filterUpdatingText}>Updating filters...</Text>
+                  </View>
+                ) : null}
                 <Text style={localStyles.filterSectionTitle}>Filter by Room Type:</Text>
                 <View style={localStyles.roomTypeOptions}>
                   {availableRoomTypes.map((roomType) => {
@@ -662,6 +700,12 @@ export default function FeedbackScreen() {
                     );
                   })}
                 </View>
+                {updatingFilterSections.includes('capacity') ? (
+                  <View style={localStyles.filterUpdatingRow}>
+                    <ActivityIndicator size="small" color={colors.primary} />
+                    <Text style={localStyles.filterUpdatingText}>Updating filters...</Text>
+                  </View>
+                ) : null}
                 <View style={localStyles.capacityRow}>
                   <Text style={localStyles.capacityLabel}>Filter by Max. Capacity:</Text>
                   <TextInput keyboardType="number-pad" onChangeText={(value) => setMaxCapacityInput(value.replace(/\D/g, ''))} placeholder="30" placeholderTextColor={colors.mutedText} style={localStyles.capacityInput} value={maxCapacityInput} />
@@ -671,6 +715,7 @@ export default function FeedbackScreen() {
                   onPress={resetFilters}
                   style={[localStyles.resetButton, !hasActiveFilters && localStyles.resetButtonDisabled]}
                 >
+                  <Text style={[localStyles.resetIcon, !hasActiveFilters && localStyles.resetButtonTextDisabled]}>↻</Text>
                   <Text style={[localStyles.resetButtonText, !hasActiveFilters && localStyles.resetButtonTextDisabled]}>Reset Filters</Text>
                 </TouchableOpacity>
               </View>
@@ -1006,6 +1051,17 @@ const localStyles = StyleSheet.create({
     backgroundColor: colors.subtleBackground,
     padding: 14,
   },
+  filterUpdatingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  filterUpdatingText: {
+    color: colors.mutedText,
+    fontFamily: fonts.regular,
+    fontSize: 12,
+  },
   filterSectionTitle: {
     color: colors.text,
     fontFamily: fonts.bold,
@@ -1120,6 +1176,8 @@ const localStyles = StyleSheet.create({
     backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginTop: 12,
@@ -1132,6 +1190,12 @@ const localStyles = StyleSheet.create({
     color: colors.white,
     fontFamily: fonts.bold,
     fontSize: 13,
+  },
+  resetIcon: {
+    color: colors.white,
+    fontSize: 19,
+    lineHeight: 20,
+    transform: [{ translateY: -2 }],
   },
   resetButtonTextDisabled: {
     color: colors.mutedText,
