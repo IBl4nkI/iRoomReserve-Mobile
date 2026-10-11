@@ -253,8 +253,26 @@ export default function SelectionRoomResults({
                   <TouchableOpacity
                     style={styles.expandButton}
                     onPress={() => onToggleExpandedRoom(room.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`${expanded ? "Collapse" : "Expand"} ${room.name} details`}
+                    accessibilityState={{ expanded }}
                   >
-                    <Text style={styles.expandButtonText}>{expanded ? "^" : "v"}</Text>
+                    <View style={styles.expandChevron}>
+                      <View
+                        style={[
+                          styles.expandChevronStroke,
+                          styles.expandChevronLeft,
+                          expanded && styles.expandChevronLeftExpanded,
+                        ]}
+                      />
+                      <View
+                        style={[
+                          styles.expandChevronStroke,
+                          styles.expandChevronRight,
+                          expanded && styles.expandChevronRightExpanded,
+                        ]}
+                      />
+                    </View>
                   </TouchableOpacity>
                 </View>
 
