@@ -19,64 +19,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import DashboardTopNav from '@/components/dashboard/DashboardTopNav';
 import { dashboardStyles as styles } from '@/components/dashboard/styles';
+import RoomSearchBar from '@/components/selection-room-search/RoomSearchBar';
 import { colors, fonts } from '@/constants/theme';
 import { auth } from '@/lib/firebase';
 import { createFeedback, getFeedbackByUser } from '@/services/feedback.service';
+import { getBuildings } from '@/services/buildings.service';
 import { getReservationsByUser } from '@/services/reservations.service';
+import { getRoomsByBuilding, getRoomsByIds } from '@/services/rooms.service';
 import { formatTime12h } from '@/services/schedules.service';
 import type { FeedbackCategoryRatingKey, FeedbackCategoryRatings, FeedbackRecord } from '@/types/feedback';
-import type { ReservationRecord } from '@/types/reservation';
-
-type FirestoreTimestampLike = {
-  _nanoseconds?: number;
-  _seconds?: number;
-  seconds?: number;
-  nanoseconds?: number;
-} | null | undefined;
-
-function getTimestampDate(timestamp: FirestoreTimestampLike) {
-  const seconds =
-    typeof timestamp?.seconds === 'number'
-      ? timestamp.seconds
-      : typeof timestamp?._seconds === 'number'
-        ? timestamp._seconds
-        : null;
-
-  if (seconds === null) {
-    return null;
-  }
-
-  return new Date(seconds * 1000);
-}
-
-function formatTimestamp(timestamp: FirestoreTimestampLike) {
-  const date = getTimestampDate(timestamp);
-
-  if (!date) {
-    return 'Not available';
-  }
-
-  return date.toLocaleString('en-US', {
-    day: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  });
-}
-
-function formatTimestampTimeOnly(timestamp: FirestoreTimestampLike) {
-  const date = getTimestampDate(timestamp);
-
-  if (!date) {
-    return 'Not available';
-  }
-
-  return date.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
+import type { ReservationRecord, Room, ReservationCampus } from '@/types/reservation';
 
 function formatReservationDate(dateKey: string) {
   return new Date(`${dateKey}T00:00:00`).toLocaleDateString('en-US', {
@@ -84,26 +36,6 @@ function formatReservationDate(dateKey: string) {
     month: 'long',
     year: 'numeric',
   });
-}
-
-function formatReservationDates(
-  dates?: string[],
-  fallbackDate?: string,
-  isRecurringRequest?: boolean
-) {
-  const dateList = dates?.length ? dates : fallbackDate ? [fallbackDate] : [];
-
-  if (dateList.length === 0) {
-    return 'Not available';
-  }
-
-  if (isRecurringRequest && dateList.length > 1) {
-    return `${formatReservationDate(dateList[0])} - ${formatReservationDate(
-      dateList[dateList.length - 1]
-    )}`;
-  }
-
-  return dateList.map((date) => formatReservationDate(date)).join(' / ');
 }
 
 function sortReservations(left: ReservationRecord, right: ReservationRecord) {
@@ -168,6 +100,13 @@ export default function FeedbackScreen() {
   const params = useLocalSearchParams<{ reservationId?: string }>();
   const [reservations, setReservations] = React.useState<ReservationRecord[]>([]);
   const [feedbackList, setFeedbackList] = React.useState<FeedbackRecord[]>([]);
+  const [roomsById, setRoomsById] = React.useState<Record<string, Room>>({});
+  const [campusByBuildingId, setCampusByBuildingId] = React.useState<Record<string, ReservationCampus>>({});
+  const [roomSearch, setRoomSearch] = React.useState('');
+  const [filtersOpen, setFiltersOpen] = React.useState(false);
+  const [selectedCampuses, setSelectedCampuses] = React.useState<ReservationCampus[]>(['main', 'digi']);
+  const [selectedRoomTypes, setSelectedRoomTypes] = React.useState<string[]>([]);
+  const [maxCapacityInput, setMaxCapacityInput] = React.useState('30');
   const [showForm, setShowForm] = React.useState(false);
   const [selectedReservationId, setSelectedReservationId] = React.useState<string | null>(null);
   const [expandedSubmittedRoomId, setExpandedSubmittedRoomId] = React.useState<string | null>(
@@ -214,6 +153,24 @@ export default function FeedbackScreen() {
 
       setReservations(nextReservations.sort(sortReservations));
       setFeedbackList(nextFeedback);
+      try {
+        const buildings = await getBuildings();
+        const roomsByBuilding = await Promise.all(buildings.map((building) => getRoomsByBuilding(building.id)));
+        const allRooms = roomsByBuilding.flat();
+        setRoomsById(Object.fromEntries(allRooms.map((room) => [room.id, room])));
+        setCampusByBuildingId(Object.fromEntries(buildings.map((building) => [building.id, building.campus])));
+      } catch {
+        try {
+          const roomIds = [...new Set([
+          ...nextReservations.map((reservation) => reservation.roomId),
+          ...nextFeedback.map((feedback) => feedback.roomId),
+          ].filter(Boolean))];
+          const rooms = await getRoomsByIds(roomIds);
+          setRoomsById(Object.fromEntries(rooms.map((room) => [room.id, room])));
+        } catch {
+          setRoomsById({});
+        }
+      }
       setError(null);
     } catch (caughtError) {
       setError(
@@ -258,6 +215,56 @@ export default function FeedbackScreen() {
         (reservation) => !feedbackByReservationId.has(reservation.id)
       ),
     [completedReservations, feedbackByReservationId]
+  );
+
+  const availableRoomTypes = React.useMemo(() => [...new Set([
+    'Classroom', 'Glass Room', 'Conference Room', 'Specialized Room', 'Gymnasium', 'Open Area',
+    ...Object.values(roomsById).map((room) => room.roomType.trim()),
+  ].filter(Boolean))].sort((a, b) => a.localeCompare(b)), [roomsById]);
+  const roomCampusById = React.useMemo(() => {
+    const campusByRoomId = Object.fromEntries(Object.values(roomsById)
+      .filter((room) => campusByBuildingId[room.buildingId])
+      .map((room) => [room.id, campusByBuildingId[room.buildingId]]));
+    reservations.forEach((reservation) => { campusByRoomId[reservation.roomId] = reservation.campus; });
+    return campusByRoomId;
+  }, [campusByBuildingId, reservations, roomsById]);
+  const handleCampusToggle = React.useCallback((campus: ReservationCampus) => {
+    setSelectedCampuses((current) => current.includes(campus)
+      ? current.filter((value) => value !== campus)
+      : [...current, campus]);
+  }, []);
+  const handleRoomTypeToggle = React.useCallback((roomType: string) => {
+    setSelectedRoomTypes((current) => current.includes(roomType)
+      ? current.filter((value) => value !== roomType)
+      : [...current, roomType]);
+  }, []);
+  const hasActiveFilters = selectedCampuses.length !== 2
+    || !selectedCampuses.includes('main')
+    || !selectedCampuses.includes('digi')
+    || selectedRoomTypes.length > 0
+    || maxCapacityInput !== '30';
+  const resetFilters = React.useCallback(() => {
+    setSelectedCampuses(['main', 'digi']);
+    setSelectedRoomTypes([]);
+    setMaxCapacityInput('30');
+  }, []);
+  const matchesRoomFilters = React.useCallback((roomId: string, roomName: string, buildingName: string, campus?: ReservationCampus) => {
+    const room = roomsById[roomId];
+    const campusForRoom = campus ?? roomCampusById[roomId];
+    const search = roomSearch.trim().toLocaleLowerCase();
+    const campusName = campusForRoom === 'main' ? 'Main Campus' : campusForRoom === 'digi' ? 'Digital Campus' : '';
+    const matchesSearch = !search || `${roomName} ${campusName} ${buildingName} ${room?.floor ?? ''} ${room?.roomType ?? ''}`.toLocaleLowerCase().includes(search);
+    const matchesCampus = campusForRoom
+      ? selectedCampuses.includes(campusForRoom)
+      : selectedCampuses.length === 2;
+    const matchesType = selectedRoomTypes.length === 0 || selectedRoomTypes.includes(room?.roomType ?? '');
+    const maximumCapacity = Number(maxCapacityInput);
+    const matchesCapacity = !maxCapacityInput.trim() || !Number.isFinite(maximumCapacity) || !room || room.capacity >= maximumCapacity;
+    return matchesSearch && matchesCampus && matchesType && matchesCapacity;
+  }, [maxCapacityInput, roomCampusById, roomSearch, roomsById, selectedCampuses, selectedRoomTypes]);
+  const filteredPendingFeedbackReservations = React.useMemo(
+    () => pendingFeedbackReservations.filter((reservation) => matchesRoomFilters(reservation.roomId, reservation.roomName, reservation.buildingName, reservation.campus)),
+    [matchesRoomFilters, pendingFeedbackReservations]
   );
 
   React.useEffect(() => {
@@ -353,10 +360,10 @@ export default function FeedbackScreen() {
 
   const otherPendingReservations = React.useMemo(
     () =>
-      pendingFeedbackReservations.filter(
+      filteredPendingFeedbackReservations.filter(
         (reservation) => !showForm || reservation.id !== selectedReservation?.id
       ),
-    [pendingFeedbackReservations, selectedReservation, showForm]
+    [filteredPendingFeedbackReservations, selectedReservation, showForm]
   );
 
   const submittedFeedbackItems = React.useMemo(
@@ -415,6 +422,16 @@ export default function FeedbackScreen() {
       return right.latestDate.localeCompare(left.latestDate) || right.roomName.localeCompare(left.roomName);
     });
   }, [submittedFeedbackItems]);
+
+  const filteredSubmittedFeedbackGroups = React.useMemo(() => submittedFeedbackGroups.map((group) => ({
+    ...group,
+    items: group.items.filter(({ feedback, reservation }) => matchesRoomFilters(
+      feedback.roomId || reservation?.roomId || group.roomId,
+      feedback.roomName,
+      feedback.buildingName,
+      reservation?.campus
+    )),
+  })).filter((group) => group.items.length > 0), [matchesRoomFilters, submittedFeedbackGroups]);
 
   const submitFeedbackForReservation = React.useCallback(
     async (reservation: ReservationRecord, options?: { showSuccessAlert?: boolean }) => {
@@ -602,6 +619,54 @@ export default function FeedbackScreen() {
           </View>
         ) : (
           <>
+            <RoomSearchBar
+              filtersOpen={filtersOpen}
+              onToggleFilters={() => setFiltersOpen((current) => !current)}
+              onQueryChange={setRoomSearch}
+              query={roomSearch}
+            />
+            {filtersOpen ? (
+              <View style={localStyles.filterPanel}>
+                <Text style={localStyles.filterSectionTitle}>Filter by Campus:</Text>
+                <View style={localStyles.campusOptions}>
+                  {([
+                    { id: 'main', label: 'Main Campus' },
+                    { id: 'digi', label: 'Digital Campus' },
+                  ] as const).map(({ id, label }) => {
+                    const selected = selectedCampuses.includes(id);
+                    return (
+                      <Pressable key={id} style={[localStyles.campusOption, selected && localStyles.campusOptionSelected]} onPress={() => handleCampusToggle(id)}>
+                        <View style={[localStyles.roomTypeCheckbox, selected && localStyles.roomTypeCheckboxSelected]}>{selected ? <Text style={localStyles.roomTypeCheck}>✓</Text> : null}</View>
+                        <Text style={localStyles.roomTypeOptionText}>{label}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <Text style={localStyles.filterSectionTitle}>Filter by Room Type:</Text>
+                <View style={localStyles.roomTypeOptions}>
+                  {availableRoomTypes.map((roomType) => {
+                    const selected = selectedRoomTypes.includes(roomType);
+                    return (
+                      <Pressable key={roomType} style={[localStyles.roomTypeOption, selected && localStyles.roomTypeOptionSelected]} onPress={() => handleRoomTypeToggle(roomType)}>
+                        <View style={[localStyles.roomTypeCheckbox, selected && localStyles.roomTypeCheckboxSelected]}>{selected ? <Text style={localStyles.roomTypeCheck}>✓</Text> : null}</View>
+                        <Text style={localStyles.roomTypeOptionText}>{roomType}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <View style={localStyles.capacityRow}>
+                  <Text style={localStyles.capacityLabel}>Filter by Max. Capacity:</Text>
+                  <TextInput keyboardType="number-pad" onChangeText={(value) => setMaxCapacityInput(value.replace(/\D/g, ''))} placeholder="30" placeholderTextColor={colors.mutedText} style={localStyles.capacityInput} value={maxCapacityInput} />
+                </View>
+                <TouchableOpacity
+                  disabled={!hasActiveFilters}
+                  onPress={resetFilters}
+                  style={[localStyles.resetButton, !hasActiveFilters && localStyles.resetButtonDisabled]}
+                >
+                  <Text style={[localStyles.resetButtonText, !hasActiveFilters && localStyles.resetButtonTextDisabled]}>Reset Filters</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
             {showForm ? (
             <View ref={feedbackFormRef} style={[styles.card, localStyles.feedbackFormCard]}>
               <Text style={localStyles.feedbackCardTitle}>Rate Your Experience</Text>
@@ -614,20 +679,16 @@ export default function FeedbackScreen() {
                   <View style={localStyles.feedbackDetailsList}>
                     <Text style={localStyles.feedbackDetailListItem}>
                       Date:{' '}
-                      {formatReservationDates(
-                        selectedReservation.dates,
-                        selectedReservation.date,
-                        selectedReservation.isRecurringRequest
-                      )}
+                      {formatReservationDate(selectedReservation.date)}
                     </Text>
                     <Text style={localStyles.feedbackDetailListItem}>
                       Purpose:{' '}
                       {selectedReservation.purpose}
                     </Text>
                     <Text style={localStyles.feedbackDetailListItem}>
-                      Time Used:{' '}
-                      {formatTimestampTimeOnly(selectedReservation.checkedInAt)} -{' '}
-                      {formatTimestampTimeOnly(selectedReservation.completedAt)}
+                      Time:{' '}
+                      {formatTime12h(selectedReservation.startTime)} -{' '}
+                      {formatTime12h(selectedReservation.endTime)}
                     </Text>
                   </View>
 
@@ -793,15 +854,10 @@ export default function FeedbackScreen() {
                           {reservation.buildingName}
                         </Text>
                         <Text style={localStyles.feedbackReservationMeta}>
-                          {formatReservationDates(
-                            reservation.dates,
-                            reservation.date,
-                            reservation.isRecurringRequest
-                          )}
+                          Date: {formatReservationDate(reservation.date)}
                         </Text>
                         <Text style={localStyles.feedbackReservationMeta}>
-                          {formatTime12h(reservation.startTime)} -{' '}
-                          {formatTime12h(reservation.endTime)}
+                          Start time: {formatTime12h(reservation.startTime)} · End time: {formatTime12h(reservation.endTime)}
                         </Text>
                       </View>
                       <View style={localStyles.rateNowButton}>
@@ -818,16 +874,16 @@ export default function FeedbackScreen() {
                 <Text style={localStyles.feedbackCardTitle}>Submitted Feedback</Text>
                 <View style={localStyles.countBadge}>
                   <Text style={localStyles.countBadgeText}>
-                    {submittedFeedbackItems.length}
+                    {filteredSubmittedFeedbackGroups.reduce((count, group) => count + group.items.length, 0)}
                   </Text>
                 </View>
               </View>
 
-              {submittedFeedbackGroups.length === 0 ? (
-                <Text style={styles.emptyText}>No feedback submitted yet.</Text>
+              {filteredSubmittedFeedbackGroups.length === 0 ? (
+                <Text style={styles.emptyText}>No submitted feedback matches these filters.</Text>
               ) : (
                 <View style={localStyles.feedbackList}>
-                  {submittedFeedbackGroups.map((group) => {
+                  {filteredSubmittedFeedbackGroups.map((group) => {
                     const isExpanded = expandedSubmittedRoomId === group.roomId;
 
                     return (
@@ -867,18 +923,13 @@ export default function FeedbackScreen() {
                                 {reservation ? (
                                   <View style={localStyles.feedbackHistoryDetails}>
                                     <Text style={localStyles.feedbackReservationMeta}>
-                                      {formatReservationDates(
-                                        reservation.dates,
-                                        reservation.date,
-                                        reservation.isRecurringRequest
-                                      )}
+                                      Date: {formatReservationDate(reservation.date)}
                                     </Text>
                                     <Text style={localStyles.feedbackReservationMeta}>
                                       {reservation.purpose}
                                     </Text>
                                     <Text style={localStyles.feedbackReservationMeta}>
-                                      {formatTimestampTimeOnly(reservation.checkedInAt)} -{' '}
-                                      {formatTimestampTimeOnly(reservation.completedAt)}
+                                      Start time: {formatTime12h(reservation.startTime)} · End time: {formatTime12h(reservation.endTime)}
                                     </Text>
                                   </View>
                                 ) : null}
@@ -921,6 +972,145 @@ export default function FeedbackScreen() {
 const localStyles = StyleSheet.create({
   keyboardAvoidingContainer: {
     flex: 1,
+  },
+  filterPanel: {
+    marginTop: 12,
+    marginBottom: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.subtleBackground,
+    padding: 14,
+  },
+  filterSectionTitle: {
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 16,
+    marginBottom: 10,
+  },
+  campusOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: 10,
+    rowGap: 10,
+    marginBottom: 16,
+  },
+  campusOption: {
+    minWidth: '48%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  campusOptionSelected: {
+    borderColor: '#e7aaaa',
+    backgroundColor: '#fbf2f2',
+  },
+  roomTypeOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: 10,
+    rowGap: 10,
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  roomTypeOption: {
+    width: '48%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  roomTypeOptionSelected: {
+    borderColor: '#e7aaaa',
+    backgroundColor: '#fbf2f2',
+  },
+  roomTypeCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.surface,
+  },
+  roomTypeCheckboxSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+  roomTypeCheck: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 12,
+    lineHeight: 12,
+  },
+  roomTypeOptionText: {
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 11,
+    flex: 1,
+  },
+  capacityRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 4,
+  },
+  capacityLabel: {
+    color: colors.text,
+    fontFamily: fonts.bold,
+    fontSize: 14,
+    lineHeight: 18,
+    flexShrink: 0,
+  },
+  capacityInput: {
+    borderRadius: 8,
+    flex: 1,
+    height: 34,
+    minHeight: 34,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    paddingHorizontal: 12,
+    paddingVertical: 3,
+    textAlign: 'left',
+    color: colors.text,
+    fontFamily: fonts.regular,
+    fontSize: 14,
+  },
+  resetButton: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 12,
+  },
+  resetButtonDisabled: {
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  resetButtonText: {
+    color: colors.white,
+    fontFamily: fonts.bold,
+    fontSize: 13,
+  },
+  resetButtonTextDisabled: {
+    color: colors.mutedText,
   },
   feedbackFormCard: {
     marginBottom: 16,
