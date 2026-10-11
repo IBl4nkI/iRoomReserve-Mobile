@@ -186,6 +186,9 @@ export const dashboardStyles = StyleSheet.create({
     marginBottom: 6,
   },
   screenTitleCentered: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0,
     fontSize: 26,
     fontFamily: fonts.bold,
     color: colors.text,
@@ -206,6 +209,8 @@ export const dashboardStyles = StyleSheet.create({
     minHeight: 44,
   },
   inboxShortcutButton: {
+    flexShrink: 0,
+    marginLeft: 12,
     width: 40,
     height: 40,
     borderRadius: 12,
