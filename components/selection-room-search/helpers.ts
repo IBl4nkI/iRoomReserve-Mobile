@@ -164,6 +164,19 @@ export function applySelectedTimeslotPress<T extends SelectedTimeslot>(
   nextSlot: T
 ): T[] {
   const nextKey = getSelectedTimeslotKey(nextSlot);
+  const sameDaySlots = currentSlots.filter(
+    (currentSlot) => currentSlot.dateKey === nextSlot.dateKey
+  );
+
+  if (sameDaySlots.length > 1) {
+    return [
+      ...currentSlots.filter(
+        (currentSlot) => currentSlot.dateKey !== nextSlot.dateKey
+      ),
+      nextSlot,
+    ];
+  }
+
   const isSelected = currentSlots.some(
     (currentSlot) => getSelectedTimeslotKey(currentSlot) === nextKey
   );
@@ -172,10 +185,10 @@ export function applySelectedTimeslotPress<T extends SelectedTimeslot>(
     return normalizeSelectedTimeslots([...currentSlots, nextSlot]);
   }
 
-  const sameDaySlots = currentSlots
-    .filter((currentSlot) => currentSlot.dateKey === nextSlot.dateKey)
-    .sort((left, right) => left.startTime.localeCompare(right.startTime));
-  const hasLaterSlotOnSameDay = sameDaySlots.some(
+  const orderedSameDaySlots = sameDaySlots.sort((left, right) =>
+    left.startTime.localeCompare(right.startTime)
+  );
+  const hasLaterSlotOnSameDay = orderedSameDaySlots.some(
     (currentSlot) => currentSlot.startTime > nextSlot.startTime
   );
 

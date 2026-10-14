@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Modal,
@@ -240,6 +240,16 @@ export default function DayScheduleModal({
   const [initialSelectedKeysForDate, setInitialSelectedKeysForDate] = useState<string[]>(
     []
   );
+  const [visibleSlotBounds, setVisibleSlotBounds] = useState<{
+    topKey: string | null;
+    bottomKey: string | null;
+    isAtTop: boolean;
+    isAtBottom: boolean;
+  }>({ topKey: null, bottomKey: null, isAtTop: true, isAtBottom: false });
+  const slotLayoutsRef = useRef<Record<string, { y: number; height: number }>>({});
+  const scrollOffsetRef = useRef(0);
+  const viewportHeightRef = useRef(0);
+  const contentHeightRef = useRef<number | null>(null);
 
   const visibleSlots = useMemo(() => {
     if (!dateKey) {
@@ -270,6 +280,48 @@ export default function DayScheduleModal({
     roomId,
     schedules,
   ]);
+
+  function updateVisibleSlotBounds(offset: number, viewportHeight = viewportHeightRef.current) {
+    const slotsInViewport = visibleSlots.filter((slot) => {
+      const slotKey = `${dateKey}-${slot.startTime}-${slot.endTime}`;
+      const layout = slotLayoutsRef.current[slotKey];
+      return layout
+        ? layout.y + layout.height > offset + 1 && layout.y < offset + viewportHeight
+        : false;
+    });
+    const topSlot = slotsInViewport[0];
+    const bottomSlot = slotsInViewport[slotsInViewport.length - 1];
+    const nextBounds = {
+      topKey: topSlot ? `${dateKey}-${topSlot.startTime}-${topSlot.endTime}` : null,
+      bottomKey: bottomSlot
+        ? `${dateKey}-${bottomSlot.startTime}-${bottomSlot.endTime}`
+        : null,
+      isAtTop: offset <= 1,
+      isAtBottom:
+        contentHeightRef.current !== null &&
+        offset >=
+          Math.max(0, contentHeightRef.current - viewportHeight) - 1,
+    };
+
+    setVisibleSlotBounds((currentBounds) =>
+      currentBounds.topKey === nextBounds.topKey &&
+      currentBounds.bottomKey === nextBounds.bottomKey &&
+      currentBounds.isAtTop === nextBounds.isAtTop &&
+      currentBounds.isAtBottom === nextBounds.isAtBottom
+        ? currentBounds
+        : nextBounds
+    );
+  }
+
+  useEffect(() => {
+    scrollOffsetRef.current = 0;
+    setVisibleSlotBounds({
+      topKey: null,
+      bottomKey: null,
+      isAtTop: true,
+      isAtBottom: false,
+    });
+  }, [dateKey, visible]);
 
   useEffect(() => {
     if (!visible || !dateKey) {
@@ -307,14 +359,24 @@ export default function DayScheduleModal({
   }, [dateKey, selectedKeysForDate]);
   const selectedSlotContentByKey = useMemo(() => {
     const contentByKey: Record<string, string> = {};
-    const selectedSlots = visibleSlots.filter((slot) =>
-      selectedKeysForDate.includes(`${dateKey}-${slot.startTime}-${slot.endTime}`)
-    );
+    const selectedSlots = visibleSlots
+      .map((slot, index) => ({ slot, index }))
+      .filter(({ slot }) =>
+        selectedKeysForDate.includes(`${dateKey}-${slot.startTime}-${slot.endTime}`)
+      );
 
     if (selectedSlots.length === 0) {
       return contentByKey;
     }
 
+    const topVisibleIndex = visibleSlots.findIndex(
+      (slot) =>
+        `${dateKey}-${slot.startTime}-${slot.endTime}` === visibleSlotBounds.topKey
+    );
+    const bottomVisibleIndex = visibleSlots.findIndex(
+      (slot) =>
+        `${dateKey}-${slot.startTime}-${slot.endTime}` === visibleSlotBounds.bottomKey
+    );
     let groupStart = 0;
 
     while (groupStart < selectedSlots.length) {
@@ -322,31 +384,55 @@ export default function DayScheduleModal({
 
       while (
         groupEnd + 1 < selectedSlots.length &&
-        selectedSlots[groupEnd]?.endTime === selectedSlots[groupEnd + 1]?.startTime
+        selectedSlots[groupEnd]?.slot.endTime ===
+          selectedSlots[groupEnd + 1]?.slot.startTime
       ) {
         groupEnd += 1;
       }
 
       const group = selectedSlots.slice(groupStart, groupEnd + 1);
-      const firstSlot = group[0];
-      const lastSlot = group[group.length - 1];
+      const firstSlot = group[0].slot;
+      const lastSlot = group[group.length - 1].slot;
       const stateLabel = getStateLabel(lastSlot.state);
+      const firstGroupIndex = group[0].index;
+      const lastGroupIndex = group[group.length - 1].index;
+      const visibleGroup = group.filter(
+        ({ index }) => index >= topVisibleIndex && index <= bottomVisibleIndex
+      );
+      const startLabelIndex =
+        visibleSlotBounds.isAtTop
+          ? firstGroupIndex
+          : visibleGroup.length > 0
+            ? visibleGroup[
+                visibleGroup.length === 2 ? 0 : Math.min(1, visibleGroup.length - 1)
+              ].index
+            : firstGroupIndex;
+      const endLabelIndex =
+        visibleSlotBounds.isAtBottom
+          ? lastGroupIndex
+          : visibleGroup.length > 0
+            ? visibleGroup[
+                visibleGroup.length === 2 ? 1 : Math.max(0, visibleGroup.length - 2)
+              ].index
+            : lastGroupIndex;
+      const startLabelSlot = visibleSlots[startLabelIndex];
+      const endLabelSlot = visibleSlots[endLabelIndex];
+      const startLabelKey = `${dateKey}-${startLabelSlot.startTime}-${startLabelSlot.endTime}`;
+      const endLabelKey = `${dateKey}-${endLabelSlot.startTime}-${endLabelSlot.endTime}`;
 
-      if (group.length === 1) {
-        contentByKey[`${dateKey}-${firstSlot.startTime}-${firstSlot.endTime}`] =
-          `${formatFullTime(firstSlot.startTime)} - ${formatFullTime(firstSlot.endTime)} (${stateLabel})`;
+      contentByKey[startLabelKey] = `${formatFullTime(firstSlot.startTime)} -`;
+      const endLabel = `${formatFullTime(lastSlot.endTime)} (${stateLabel})`;
+      if (startLabelKey === endLabelKey) {
+        contentByKey[startLabelKey] = `${contentByKey[startLabelKey]} ${endLabel}`;
       } else {
-        contentByKey[`${dateKey}-${firstSlot.startTime}-${firstSlot.endTime}`] =
-          `${formatFullTime(firstSlot.startTime)} -`;
-        contentByKey[`${dateKey}-${lastSlot.startTime}-${lastSlot.endTime}`] =
-          `${formatFullTime(lastSlot.endTime)} (${stateLabel})`;
+        contentByKey[endLabelKey] = endLabel;
       }
 
       groupStart = groupEnd + 1;
     }
 
     return contentByKey;
-  }, [dateKey, selectedKeysForDate, visibleSlots]);
+  }, [dateKey, selectedKeysForDate, visibleSlotBounds, visibleSlots]);
 
   if (!dateKey) {
     return null;
@@ -436,6 +522,22 @@ export default function DayScheduleModal({
           <ScrollView
             style={styles.scrollArea}
             contentContainerStyle={styles.scrollContent}
+            onLayout={(event) => {
+              viewportHeightRef.current = event.nativeEvent.layout.height;
+              updateVisibleSlotBounds(scrollOffsetRef.current, viewportHeightRef.current);
+            }}
+            onContentSizeChange={(_width, height) => {
+              contentHeightRef.current = height;
+              updateVisibleSlotBounds(scrollOffsetRef.current);
+            }}
+            onScroll={(event) => {
+              const offset = event.nativeEvent.contentOffset.y;
+              scrollOffsetRef.current = offset;
+              contentHeightRef.current = event.nativeEvent.contentSize.height;
+              viewportHeightRef.current = event.nativeEvent.layoutMeasurement.height;
+              updateVisibleSlotBounds(offset);
+            }}
+            scrollEventThrottle={16}
             showsVerticalScrollIndicator={false}
           >
             {visibleSlots.length === 0 ? (
@@ -453,7 +555,15 @@ export default function DayScheduleModal({
                 const selectedContent = selectedSlotContentByKey[slotKey];
                 const showEndLabel = index < visibleSlots.length - 1;
                 return (
-                  <View key={slotKey} style={styles.slotSection}>
+                  <View
+                    key={slotKey}
+                    onLayout={(event) => {
+                      const { y, height } = event.nativeEvent.layout;
+                      slotLayoutsRef.current[slotKey] = { y, height };
+                      updateVisibleSlotBounds(scrollOffsetRef.current);
+                    }}
+                    style={styles.slotSection}
+                  >
                     <View style={styles.slotRow}>
                       <View style={styles.timeColumn} />
                       <TouchableOpacity
