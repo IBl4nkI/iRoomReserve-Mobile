@@ -305,16 +305,20 @@ export default function SelectionRoomResults({
                       <Text style={styles.schedulePreviewTitle}>View Schedules</Text>
                       <View style={styles.calendarLegendRow}>
                         <View style={styles.calendarLegendItem}>
+                          <View style={[styles.calendarLegendDot, styles.calendarLegendDotSelected]} />
+                          <Text style={styles.calendarLegendText}>Selected</Text>
+                        </View>
+                        <View style={styles.calendarLegendItem}>
                           <View style={[styles.calendarLegendDot, styles.calendarLegendDotAvailable]} />
                           <Text style={styles.calendarLegendText}>Available</Text>
                         </View>
                         <View style={styles.calendarLegendItem}>
                           <View style={[styles.calendarLegendDot, styles.calendarLegendDotPartiallyBooked]} />
-                          <Text style={styles.calendarLegendText}>Partially Booked / Pending</Text>
+                          <Text style={styles.calendarLegendText}>Partially Booked</Text>
                         </View>
                         <View style={styles.calendarLegendItem}>
                           <View style={[styles.calendarLegendDot, styles.calendarLegendDotReserved]} />
-                          <Text style={styles.calendarLegendText}>Reserved</Text>
+                          <Text style={styles.calendarLegendText}>Your Reservations</Text>
                         </View>
                         <View style={styles.calendarLegendItem}>
                           <View style={[styles.calendarLegendDot, styles.calendarLegendDotUnavailable]} />

@@ -696,6 +696,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#1d4ed8",
   },
   calendarLegendDotUnavailable: {
+    backgroundColor: colors.dangerBackground,
+    borderWidth: 1,
+    borderColor: colors.dangerText,
+  },
+  calendarLegendDotSelected: {
     backgroundColor: colors.dangerText,
   },
   calendarLegendText: {
