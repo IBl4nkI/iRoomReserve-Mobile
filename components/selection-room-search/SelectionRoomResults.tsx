@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { ActivityIndicator, Text, TouchableOpacity, View } from "react-native";
 
 import AvailabilityCalendar from "@/components/AvailabilityCalendar";
-import DayScheduleModal from "@/components/DayScheduleModal";
+import DayScheduleModal from "@/components/TimeslotsModal";
 import styles from "./styles";
 import { addMonths, getCalendarWeeks, getMonthLabel, getSelectedTimeslotKey, type SelectedTimeslot } from "./helpers";
 import { colors } from "@/constants/theme";

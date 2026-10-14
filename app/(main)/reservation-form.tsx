@@ -13,7 +13,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { useLocalSearchParams, useRouter } from "expo-router";
 
 import AvailabilityCalendar from "@/components/AvailabilityCalendar";
-import DayScheduleModal from "@/components/DayScheduleModal";
+import DayScheduleModal from "@/components/TimeslotsModal";
 import SelectionScreenLayout from "@/components/SelectionScreenLayout";
 import { useToast } from "@/components/ToastProvider";
 import RoomTimePickerModal from "@/components/selection-room-search/RoomTimePickerModal";

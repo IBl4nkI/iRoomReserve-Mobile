@@ -410,6 +410,29 @@ export default function DayScheduleModal({
             </TouchableOpacity>
           </View>
 
+          <View style={styles.legendRow}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, styles.legendDotSelected]} />
+              <Text style={styles.legendText}>Selected</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, styles.legendDotAvailable]} />
+              <Text style={styles.legendText}>Available</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, styles.legendDotPartiallyBooked]} />
+              <Text style={styles.legendText}>Pending Reservation</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, styles.legendDotReserved]} />
+              <Text style={styles.legendText}>Your Reservations</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, styles.legendDotUnavailable]} />
+              <Text style={styles.legendText}>Unavailable</Text>
+            </View>
+          </View>
+
           <ScrollView
             style={styles.scrollArea}
             contentContainerStyle={styles.scrollContent}
@@ -520,7 +543,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
-    marginBottom: 14,
+    marginBottom: 8,
   },
   headerLeft: {
     flexDirection: "column",
@@ -564,6 +587,23 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
     marginRight: 6,
+  },
+  legendDotSelected: {
+    backgroundColor: colors.primary,
+  },
+  legendDotAvailable: {
+    backgroundColor: colors.successText,
+  },
+  legendDotPartiallyBooked: {
+    backgroundColor: "#f59e0b",
+  },
+  legendDotReserved: {
+    backgroundColor: "#1d4ed8",
+  },
+  legendDotUnavailable: {
+    backgroundColor: colors.dangerBackground,
+    borderColor: colors.dangerText,
+    borderWidth: 1,
   },
   legendText: {
     color: colors.secondary,
