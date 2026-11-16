@@ -28,7 +28,7 @@ import {
 } from '@/services/reservations.service';
 import { formatTime12h } from '@/services/schedules.service';
 import type { ReservationRecord } from '@/types/reservation';
-import { closeAppMessage, getMessageRecipients, markAppMessageRead, onInboxMessages, onSentMessages, sendAppMessage, type AppMessage, type MessageRecipient } from '@/services/messages.service';
+import { getMessageRecipients, markAppMessageRead, onInboxMessages, onSentMessages, sendAppMessage, type AppMessage, type MessageRecipient } from '@/services/messages.service';
 
 type InboxTab = 'Unread' | 'Read' | 'Sent' | 'Closed' | 'All Messages';
 type InboxRowStatus = 'Approved' | 'Rejected' | 'Pending';
@@ -511,14 +511,15 @@ export default function InboxScreen() {
   const showMarkAllAsRead = activeTab === 'Unread' && unreadCount > 0;
   const showDeleteAllMail = false;
 
-  const handleMarkAsRead = React.useCallback(async (notificationId: string) => {
+  const handleMarkAsRead = React.useCallback(async (notificationId: string, isAppMessage = false) => {
     if (markingReadId) {
       return;
     }
 
     try {
       setMarkingReadId(notificationId);
-      await markNotificationRead(notificationId);
+      if (isAppMessage) await markAppMessageRead(notificationId);
+      else await markNotificationRead(notificationId);
     } finally {
       setMarkingReadId(null);
     }
@@ -719,10 +720,7 @@ export default function InboxScreen() {
                     });
                     return;
                   }
-                  setExpandedItemId((current) => {
-                      if (current !== item.id && item.message && !item.message.isRead && activeTab !== 'Sent' && activeTab !== 'Closed') void markAppMessageRead(item.id);
-                      return current === item.id ? null : item.id;
-                  });
+                  setExpandedItemId((current) => current === item.id ? null : item.id);
                 }}
                 style={[
                   styles.inboxNotificationRow,
@@ -770,7 +768,6 @@ export default function InboxScreen() {
                         <Text style={styles.inboxNotificationDetailText}>Subject: {item.message.subject}</Text>
                         <Text style={[styles.inboxNotificationDetailText, styles.inboxMessageBodyText]}>{item.message.body}</Text>
                         <Text style={styles.inboxNotificationDetailText}>{activeTab === 'Sent' || activeTab === 'Closed' ? `To: ${item.message.receiverName} · ${item.message.receiverRole}${item.message.receiverCampus ? ` · ${item.message.receiverCampus === 'digi' ? 'Digital Campus' : 'Main Campus'}` : ''}` : `From: ${item.message.senderName} · ${item.message.senderRole}${item.message.senderCampus ? ` · ${item.message.senderCampus === 'digi' ? 'Digital Campus' : 'Main Campus'}` : ''}`}</Text>
-                        {activeTab === 'Sent' && !item.message.closedBySender ? <Pressable style={[styles.inboxNotificationActionButton, { marginTop: 10 }]} onPress={() => void closeAppMessage(item.id)}><Text style={styles.inboxNotificationActionButtonText}>Close message</Text></Pressable> : null}
                       </> : null}
                       {!item.message ? <Text style={styles.inboxNotificationDetailText}>
                         Purpose: {item.purpose}
@@ -890,8 +887,7 @@ export default function InboxScreen() {
                           ]}
                           disabled={markingReadId === item.id}
                           onPress={() => {
-                            if (item.message) void markAppMessageRead(item.id);
-                            else void handleMarkAsRead(item.id);
+                            void handleMarkAsRead(item.id, Boolean(item.message));
                           }}
                         >
                           <Text style={styles.inboxNotificationActionButtonText}>
