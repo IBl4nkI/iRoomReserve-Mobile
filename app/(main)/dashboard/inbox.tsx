@@ -356,9 +356,9 @@ export default function InboxScreen() {
   const [customRange, setCustomRange] = React.useState<{ startDate: string; endDate: string } | null>(null);
   const [calendarOpen, setCalendarOpen] = React.useState(false);
   const [composeOpen, setComposeOpen] = React.useState(false);
+  const [loadingRecipients, setLoadingRecipients] = React.useState(false);
   const [recipients, setRecipients] = React.useState<MessageRecipient[]>([]);
   const [recipientDropdownOpen, setRecipientDropdownOpen] = React.useState(false);
-  const recipientDropdownHeight = 320;
   const [recipientDropdownTop, setRecipientDropdownTop] = React.useState(160);
   const [recipientId, setRecipientId] = React.useState('');
   const [recipientQuery, setRecipientQuery] = React.useState('');
@@ -516,6 +516,9 @@ export default function InboxScreen() {
     if (!query) return true;
     return `${person.name} ${person.role} ${person.campus ?? ''}`.toLowerCase().includes(query);
   });
+  const recipientDropdownHeight = filteredRecipients.length === 0
+    ? 48
+    : Math.min(filteredRecipients.length, 5) * 64 + 12;
 
   const handleMarkAsRead = React.useCallback(async (notificationId: string, isAppMessage = false) => {
     if (markingReadId) {
@@ -633,12 +636,19 @@ export default function InboxScreen() {
       <View style={styles.screenContent}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-start', gap: 12 }}>
           <Text style={styles.screenTitle}>Inbox</Text>
-          <TouchableOpacity onPress={async () => {
+          <TouchableOpacity disabled={loadingRecipients} onPress={async () => {
             const user = auth.currentUser;
-            if (!user) return;
-            const people = await getMessageRecipients(user.uid);
-            setRecipients(people); setRecipientId(''); setRecipientQuery(''); setRecipientDropdownOpen(false);
-            setSubject(''); setBody(''); setComposeOpen(true);
+            if (!user || loadingRecipients) return;
+            try {
+              setLoadingRecipients(true);
+              const people = await getMessageRecipients(user.uid);
+              setRecipients(people); setRecipientId(''); setRecipientQuery(''); setRecipientDropdownOpen(false);
+              setSubject(''); setBody(''); setComposeOpen(true);
+            } catch (error) {
+              Alert.alert('Unable to compose message', error instanceof Error ? error.message : 'Please try again.');
+            } finally {
+              setLoadingRecipients(false);
+            }
             }} style={[
               styles.filterTabButton,
               styles.filterTabButtonActive,
@@ -648,6 +658,7 @@ export default function InboxScreen() {
               <Text style={[styles.filterTabButtonTextActive,
                 { fontSize: 12 }]}>+ Compose</Text>
           </TouchableOpacity>
+            {loadingRecipients ? <ActivityIndicator size="small" color={colors.primary} /> : null}
         </View>
         <Text style={styles.screenSubtitle}>Messages and reservation updates in one place.</Text>
         <View style={{ position: 'relative', marginBottom: 0 }}>
@@ -937,12 +948,13 @@ export default function InboxScreen() {
                 onChangeText={(value) => { setRecipientQuery(value); setRecipientId(''); setRecipientDropdownOpen(true); }}
                 onFocus={() => setRecipientDropdownOpen(true)}
                 placeholder="Search recipients"
+                placeholderTextColor={colors.secondary}
                 autoCapitalize="none"
                 style={{ minHeight: 48, borderWidth: 1, borderColor: recipientDropdownOpen ? colors.primary : '#ddd', borderRadius: 12, paddingHorizontal: 14, backgroundColor: '#fff', color: colors.text }}
               />
             </View>
             <Text style={styles.mutedLabel}>Subject</Text>
-            <TextInput value={subject} onChangeText={setSubject} placeholder="Add a clear subject" style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 12, padding: 12 }} />
+            <TextInput value={subject} onChangeText={setSubject} placeholder="Add a clear subject" placeholderTextColor={colors.secondary} style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 12, padding: 12 }} />
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <Text style={styles.mutedLabel}>Message</Text>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
@@ -960,6 +972,7 @@ export default function InboxScreen() {
               onChangeText={setBody}
               onFocus={() => setTimeout(() => composeScrollRef.current?.scrollToEnd({ animated: true }), 150)}
               placeholder="Write your message..."
+              placeholderTextColor={colors.secondary}
               maxLength={500}
               multiline
               style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 12, padding: 12, minHeight: 120, textAlignVertical: 'top' }}
@@ -988,7 +1001,7 @@ export default function InboxScreen() {
               </TouchableOpacity>
             </View>
             </ScrollView>
-            {recipientDropdownOpen ? (
+            {recipientDropdownOpen && recipientQuery.trim().length > 0 ? (
               <ScrollView
                 style={{ position: 'absolute', top: recipientDropdownTop, left: 20, right: 20, height: recipientDropdownHeight, borderWidth: 1, borderColor: '#ddd', borderRadius: 12, padding: 6, backgroundColor: '#fff', zIndex: 30, elevation: 30 }}
                 scrollEnabled
