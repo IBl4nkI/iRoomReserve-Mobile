@@ -361,6 +361,7 @@ export default function InboxScreen() {
   const recipientDropdownHeight = 320;
   const [recipientDropdownTop, setRecipientDropdownTop] = React.useState(160);
   const [recipientId, setRecipientId] = React.useState('');
+  const [recipientQuery, setRecipientQuery] = React.useState('');
   const [subject, setSubject] = React.useState('');
   const [body, setBody] = React.useState('');
   const [sending, setSending] = React.useState(false);
@@ -510,6 +511,11 @@ export default function InboxScreen() {
   const showList = !loading && visibleItems.length > 0;
   const showMarkAllAsRead = activeTab === 'Unread' && unreadCount > 0;
   const showDeleteAllMail = false;
+  const filteredRecipients = recipients.filter((person) => {
+    const query = recipientQuery.trim().toLowerCase();
+    if (!query) return true;
+    return `${person.name} ${person.role} ${person.campus ?? ''}`.toLowerCase().includes(query);
+  });
 
   const handleMarkAsRead = React.useCallback(async (notificationId: string, isAppMessage = false) => {
     if (markingReadId) {
@@ -631,7 +637,7 @@ export default function InboxScreen() {
             const user = auth.currentUser;
             if (!user) return;
             const people = await getMessageRecipients(user.uid);
-            setRecipients(people); setRecipientId(''); setRecipientDropdownOpen(false);
+            setRecipients(people); setRecipientId(''); setRecipientQuery(''); setRecipientDropdownOpen(false);
             setSubject(''); setBody(''); setComposeOpen(true);
             }} style={[
               styles.filterTabButton,
@@ -925,22 +931,15 @@ export default function InboxScreen() {
               style={{ position: 'relative', zIndex: recipientDropdownOpen ? 20 : 1, elevation: recipientDropdownOpen ? 20 : 1, gap: 6 }}
             >
               <Text style={styles.mutedLabel}>To</Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={recipients.find((person) => person.uid === recipientId)?.name ?? 'Select a recipient'}
-                onPress={() => setRecipientDropdownOpen((open) => !open)}
-                style={{ minHeight: 48, borderWidth: 1, borderColor: recipientDropdownOpen ? colors.primary : '#ddd', borderRadius: 12, paddingHorizontal: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff' }}
-              >
-                <Text style={{ color: recipientId ? colors.text : colors.secondary }}>
-                  {(() => {
-                    const recipient = recipients.find((person) => person.uid === recipientId);
-                    return recipient
-                      ? `${recipient.name} — ${getRecipientRoleLabel(recipient.role)}${recipient.campus ? ` · ${recipient.campus === 'digi' ? 'Digital Campus' : 'Main Campus'}` : ''}`
-                      : 'Select a recipient';
-                  })()}
-                </Text>
-                <Text style={{ color: colors.secondary }}>{recipientDropdownOpen ? '⌃' : '⌄'}</Text>
-              </Pressable>
+              <TextInput
+                accessibilityLabel="To"
+                value={recipientQuery}
+                onChangeText={(value) => { setRecipientQuery(value); setRecipientId(''); setRecipientDropdownOpen(true); }}
+                onFocus={() => setRecipientDropdownOpen(true)}
+                placeholder="Search recipients"
+                autoCapitalize="none"
+                style={{ minHeight: 48, borderWidth: 1, borderColor: recipientDropdownOpen ? colors.primary : '#ddd', borderRadius: 12, paddingHorizontal: 14, backgroundColor: '#fff', color: colors.text }}
+              />
             </View>
             <Text style={styles.mutedLabel}>Subject</Text>
             <TextInput value={subject} onChangeText={setSubject} placeholder="Add a clear subject" style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 12, padding: 12 }} />
@@ -996,15 +995,17 @@ export default function InboxScreen() {
                 keyboardShouldPersistTaps="always"
                 showsVerticalScrollIndicator
               >
-                {recipients.map((person) => (
+                {filteredRecipients.map((person) => (
                   <TouchableOpacity
                     key={person.uid}
-                    onPress={() => { setRecipientId(person.uid); setRecipientDropdownOpen(false); }}
+                    onPress={() => { setRecipientId(person.uid); setRecipientQuery(person.name); setRecipientDropdownOpen(false); Keyboard.dismiss(); }}
                     style={{ padding: 10, borderRadius: 10, backgroundColor: recipientId === person.uid ? '#f3e8e8' : '#fff', marginBottom: 5 }}
                   >
-                    <Text>{person.name} — {getRecipientRoleLabel(person.role)}{person.campus ? ` · ${person.campus === 'digi' ? 'Digital Campus' : 'Main Campus'}` : ''}</Text>
+                    <Text style={{ color: colors.text, fontFamily: fonts.bold }}>{person.name}</Text>
+                    <Text style={{ color: colors.secondary, fontFamily: fonts.regular, fontSize: 12 }}>{getRecipientRoleLabel(person.role)}{person.campus ? ` · ${person.campus === 'digi' ? 'Digital Campus' : 'Main Campus'}` : ''}</Text>
                   </TouchableOpacity>
                 ))}
+                {filteredRecipients.length === 0 ? <Text style={{ padding: 10, color: colors.secondary }}>No matching recipients</Text> : null}
               </ScrollView>
             ) : null}
           </View>
