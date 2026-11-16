@@ -61,6 +61,21 @@ function FilterCheck() {
   return <Svg width={16} height={16} viewBox="0 0 16 16" accessibilityLabel="Selected"><Path d="m3 8.5 3.2 3.2L13 5" fill="none" stroke={colors.primary} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" /></Svg>;
 }
 
+function FilterDropdownChevron({ expanded }: { expanded: boolean }) {
+  return (
+    <Svg width={14} height={14} viewBox="0 0 16 16" accessibilityLabel={expanded ? 'Close options' : 'Open options'}>
+      <Path
+        d={expanded ? 'm4 10 4-4 4 4' : 'm4 6 4 4 4-4'}
+        fill="none"
+        stroke={colors.text}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
 function CalendarIcon() {
   return <Svg width={18} height={18} viewBox="0 0 18 18" accessibilityLabel="Calendar"><Path d="M5 2.5v3M13 2.5v3M3 7h12M4 4h10a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z" fill="none" stroke={colors.secondary} strokeWidth={1.3} strokeLinecap="round" strokeLinejoin="round" /></Svg>;
 }
@@ -633,7 +648,7 @@ export default function InboxScreen() {
           <View style={inboxFilterStyles.controls}>
             <View style={[inboxFilterStyles.anchor, activeDropdown === 'date' ? inboxFilterStyles.anchorActive : null]}>
               <TouchableOpacity style={inboxFilterStyles.button} onPress={() => setActiveDropdown(activeDropdown === 'date' ? null : 'date')} accessibilityRole="button" accessibilityLabel="Choose message date range">
-                <Text style={inboxFilterStyles.buttonText} numberOfLines={1}>{dateRange === 'last7' ? 'Last 7 days' : dateRange === 'last30' ? 'Last 30 days' : customRange ? `${customRange.startDate} - ${customRange.endDate}` : 'Pick dates'}</Text><Text style={inboxFilterStyles.buttonText}>v</Text>
+                <Text style={inboxFilterStyles.buttonText} numberOfLines={1}>{dateRange === 'last7' ? 'Last 7 days' : dateRange === 'last30' ? 'Last 30 days' : customRange ? `${customRange.startDate} - ${customRange.endDate}` : 'Pick dates'}</Text><FilterDropdownChevron expanded={activeDropdown === 'date'} />
               </TouchableOpacity>
               {activeDropdown === 'date' ? <View style={inboxFilterStyles.menu}>
                 {([['last7', 'Last 7 days'], ['last30', 'Last 30 days']] as const).map(([value, label], index) => <TouchableOpacity key={value} style={[inboxFilterStyles.option, index === 1 ? inboxFilterStyles.optionLast : null]} onPress={() => { setDateRange(value); setActiveDropdown(null); }}><Text style={[inboxFilterStyles.optionText, dateRange === value ? inboxFilterStyles.optionSelected : null]}>{label}</Text>{dateRange === value ? <FilterCheck /> : null}</TouchableOpacity>)}
@@ -642,7 +657,7 @@ export default function InboxScreen() {
             </View>
             <View style={[inboxFilterStyles.anchor, activeDropdown === 'messages' ? inboxFilterStyles.anchorActive : null]}>
               <TouchableOpacity style={inboxFilterStyles.button} onPress={() => setActiveDropdown(activeDropdown === 'messages' ? null : 'messages')} accessibilityRole="button" accessibilityLabel={`Message filter: ${activeTab}`}>
-                <Text style={inboxFilterStyles.buttonText} numberOfLines={1}>{activeTab}</Text><Text style={inboxFilterStyles.buttonText}>v</Text>
+                <Text style={inboxFilterStyles.buttonText} numberOfLines={1}>{activeTab}</Text><FilterDropdownChevron expanded={activeDropdown === 'messages'} />
               </TouchableOpacity>
               {activeDropdown === 'messages' ? <View style={inboxFilterStyles.menu}>
                 {(['Unread', 'Read', 'Sent', 'Closed', 'All Messages'] as InboxTab[]).map((tab, index, options) => <TouchableOpacity key={tab} style={[inboxFilterStyles.option, index === options.length - 1 ? inboxFilterStyles.optionLast : null]} onPress={() => { setActiveTab(tab); setActiveDropdown(null); }}><Text style={[inboxFilterStyles.optionText, activeTab === tab ? inboxFilterStyles.optionSelected : null]}>{tab}</Text>{activeTab === tab ? <FilterCheck /> : null}</TouchableOpacity>)}
@@ -753,7 +768,7 @@ export default function InboxScreen() {
                     <View style={styles.inboxNotificationExpanded}>
                       {item.message ? <>
                         <Text style={styles.inboxNotificationDetailText}>Subject: {item.message.subject}</Text>
-                        <Text style={styles.inboxNotificationDetailText}>{item.message.body}</Text>
+                        <Text style={[styles.inboxNotificationDetailText, styles.inboxMessageBodyText]}>{item.message.body}</Text>
                         <Text style={styles.inboxNotificationDetailText}>{activeTab === 'Sent' || activeTab === 'Closed' ? `To: ${item.message.receiverName} · ${item.message.receiverRole}${item.message.receiverCampus ? ` · ${item.message.receiverCampus === 'digi' ? 'Digital Campus' : 'Main Campus'}` : ''}` : `From: ${item.message.senderName} · ${item.message.senderRole}${item.message.senderCampus ? ` · ${item.message.senderCampus === 'digi' ? 'Digital Campus' : 'Main Campus'}` : ''}`}</Text>
                         {activeTab === 'Sent' && !item.message.closedBySender ? <Pressable style={[styles.inboxNotificationActionButton, { marginTop: 10 }]} onPress={() => void closeAppMessage(item.id)}><Text style={styles.inboxNotificationActionButtonText}>Close message</Text></Pressable> : null}
                       </> : null}

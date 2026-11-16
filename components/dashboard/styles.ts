@@ -25,19 +25,22 @@ export const dashboardStyles = StyleSheet.create({
   topBarRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    width: '100%',
   },
   topBarBrand: {
     fontSize: 22,
     fontFamily: fonts.bold,
     color: colors.primary,
+    flexShrink: 1,
+    minWidth: 0,
   },
   userBadgeRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
     marginLeft: 'auto',
-    marginRight: 10,
+    marginRight: 8,
+    flexShrink: 1,
+    minWidth: 0,
   },
   userInitialsCircle: {
     width: 38,
@@ -48,6 +51,7 @@ export const dashboardStyles = StyleSheet.create({
     backgroundColor: '#f4d9d9',
     borderWidth: 1,
     borderColor: '#d9a3a3',
+    marginRight: 8,
   },
   userInitialsText: {
     fontSize: 13,
@@ -56,7 +60,9 @@ export const dashboardStyles = StyleSheet.create({
   },
   userRolePill: {
     minHeight: 34,
-    paddingHorizontal: 14,
+    paddingHorizontal: 10,
+    maxWidth: 132,
+    flexShrink: 1,
     borderRadius: 999,
     alignItems: 'center',
     justifyContent: 'center',
@@ -68,9 +74,11 @@ export const dashboardStyles = StyleSheet.create({
     fontSize: 13,
     fontFamily: fonts.bold,
     color: '#2454c6',
+    flexShrink: 1,
   },
   burgerButton: {
     width: 44,
+    flexShrink: 0,
     height: 44,
     borderRadius: 12,
     backgroundColor: colors.surface,
@@ -776,6 +784,9 @@ export const dashboardStyles = StyleSheet.create({
     lineHeight: 19,
     fontFamily: fonts.regular,
     color: colors.secondary,
+  },
+  inboxMessageBodyText: {
+    marginVertical: 8,
   },
   inboxNotificationActionButton: {
     alignSelf: 'flex-start',

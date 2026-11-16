@@ -132,7 +132,7 @@ export default function DashboardTopNav() {
   return (
     <View style={[styles.stickyNavWrap, { paddingTop: insets.top + 10 }]}>
       <View style={styles.topBarRow}>
-        <Text style={styles.topBarBrand}>e-RoomReserve</Text>
+        <Text style={styles.topBarBrand} numberOfLines={1} ellipsizeMode="tail">e-RoomReserve</Text>
         <TouchableOpacity
           style={styles.userBadgeRow}
           onPress={() => {
@@ -145,7 +145,7 @@ export default function DashboardTopNav() {
             <Text style={styles.userInitialsText}>{userInitials}</Text>
           </View>
           <View style={styles.userRolePill}>
-            <Text style={styles.userRoleText}>{userRole}</Text>
+            <Text style={styles.userRoleText} numberOfLines={1} ellipsizeMode="tail">{userRole}</Text>
           </View>
         </TouchableOpacity>
         <TouchableOpacity
