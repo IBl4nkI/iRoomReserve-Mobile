@@ -80,6 +80,7 @@ export const dashboardStyles = StyleSheet.create({
     width: 44,
     flexShrink: 0,
     height: 44,
+    position: 'relative',
     borderRadius: 12,
     backgroundColor: colors.surface,
     borderWidth: 1,
@@ -96,6 +97,17 @@ export const dashboardStyles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: colors.text,
     marginVertical: 2,
+  },
+  navUnreadDot: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: '#dc2626',
+    borderWidth: 1,
+    borderColor: colors.surface,
   },
   dropdownMenu: {
     position: 'absolute',
@@ -133,6 +145,17 @@ export const dashboardStyles = StyleSheet.create({
     justifyContent: 'center',
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
+  },
+  menuRowContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  menuUnreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#dc2626',
   },
   menuRowButtonActive: {
     backgroundColor: colors.primary,

@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { getUserProfile, logout } from '@/lib/auth';
 import { auth } from '@/lib/firebase';
+import { onInboxMessages } from '@/services/messages.service';
 import { dashboardStyles as styles } from '@/components/dashboard/styles';
 
 const defaultNavItems = [
@@ -73,6 +74,7 @@ export default function DashboardTopNav() {
   const [userInitials, setUserInitials] = React.useState('IR');
   const [userRole, setUserRole] = React.useState('User');
   const [isUtilityStaff, setIsUtilityStaff] = React.useState(false);
+  const [hasUnreadMessages, setHasUnreadMessages] = React.useState(false);
   const currentPath = normalizeRoutePath(pathname);
 
   React.useEffect(() => {
@@ -104,6 +106,18 @@ export default function DashboardTopNav() {
     return () => {
       active = false;
     };
+  }, []);
+
+  React.useEffect(() => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      setHasUnreadMessages(false);
+      return;
+    }
+
+    return onInboxMessages(currentUser.uid, (messages) => {
+      setHasUnreadMessages(messages.some((message) => !message.isRead));
+    });
   }, []);
 
   const handleNavigate = (route: string) => {
@@ -151,10 +165,12 @@ export default function DashboardTopNav() {
         <TouchableOpacity
           style={[styles.burgerButton, menuOpen ? styles.burgerButtonActive : null]}
           onPress={() => setMenuOpen((current) => !current)}
+          accessibilityLabel={hasUnreadMessages ? 'Menu, unread messages' : 'Menu'}
         >
           <View style={styles.burgerLine} />
           <View style={styles.burgerLine} />
           <View style={styles.burgerLine} />
+          {hasUnreadMessages ? <View style={styles.navUnreadDot} /> : null}
         </TouchableOpacity>
       </View>
 
@@ -179,9 +195,12 @@ export default function DashboardTopNav() {
                   handleNavigate(item.route);
                 }}
               >
-                <Text style={[styles.menuRowText, isActive ? styles.menuRowTextActive : styles.menuRowTextInactive]}>
-                  {item.label}
-                </Text>
+                <View style={styles.menuRowContent}>
+                  <Text style={[styles.menuRowText, isActive ? styles.menuRowTextActive : styles.menuRowTextInactive]}>
+                    {item.label}
+                  </Text>
+                  {item.label === 'Inbox' && hasUnreadMessages ? <View style={styles.menuUnreadDot} /> : null}
+                </View>
                 </TouchableOpacity>
               );
             })}
