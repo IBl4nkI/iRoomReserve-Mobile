@@ -246,6 +246,11 @@ export default function SelectionRoomResults({
                     style={styles.roomInfoPressable}
                     onPress={() => onToggleExpandedRoom(room.id)}
                   >
+                    {room.status === "Unavailable" && (
+                      <Text style={styles.roomUnavailableNotice}>
+                        Currently unavailable for reservations
+                      </Text>
+                    )}
                     <Text style={styles.roomName}>{room.name}</Text>
                     <Text style={styles.roomMeta}>{room.buildingName}</Text>
                     <Text style={styles.roomMeta}>Floor: {room.floor}</Text>
@@ -371,6 +376,7 @@ export default function SelectionRoomResults({
                         }
                         saveButtonLabel="Save Selected Timeslots"
                         roomId={room.id}
+                        roomAvailable={room.status !== "Unavailable"}
                         schedules={schedules}
                         selectedSlotKeys={selectedSlotKeys}
                         userReservations={userReservations}

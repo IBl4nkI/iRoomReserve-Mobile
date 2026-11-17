@@ -36,6 +36,7 @@ interface DayScheduleModalProps {
   onSlotPress: (dateKey: string, slot: TimeSlotViewModel) => void;
   saveButtonLabel?: string;
   roomId: string;
+  roomAvailable?: boolean;
   schedules: Schedule[];
   selectedSlotKeys: string[];
   userReservations?: ReservationRecord[];
@@ -153,6 +154,7 @@ export default function DayScheduleModal({
   onSlotPress,
   saveButtonLabel,
   roomId,
+  roomAvailable = true,
   schedules,
   selectedSlotKeys,
   userReservations,
@@ -263,7 +265,11 @@ export default function DayScheduleModal({
       schedules,
       reservations,
       effectiveUserReservations
-    );
+    ).map((slot) => roomAvailable ? slot : ({
+      ...slot,
+      description: "Currently unavailable for reservations.",
+      state: "unavailable" as const,
+    }));
 
     return allSlots.filter((slot) =>
       slotDefinitions.some(
@@ -277,6 +283,7 @@ export default function DayScheduleModal({
     dateKey,
     effectiveUserReservations,
     reservations,
+    roomAvailable,
     roomId,
     schedules,
   ]);

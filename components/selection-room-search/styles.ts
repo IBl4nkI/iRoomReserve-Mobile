@@ -598,6 +598,7 @@ const styles = StyleSheet.create({
   roomHeader: { flexDirection: "row", alignItems: "center" },
   roomInfoPressable: { flex: 1, paddingRight: 12 },
   roomName: { color: colors.text, fontFamily: fonts.bold, fontSize: 18 },
+  roomUnavailableNotice: { color: "#dc2626", fontFamily: fonts.bold, fontSize: 11, marginBottom: 2 },
   roomMeta: { color: colors.secondary, fontFamily: fonts.regular, fontSize: 13, marginTop: 4 },
   expandButton: {
     marginRight: 6,
